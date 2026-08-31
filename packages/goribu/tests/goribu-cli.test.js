@@ -38,9 +38,9 @@ describe("goribu CLI", () => {
     expect(stderr).toMatch(/\[Goribu\] `goribu dev` does not accept arguments/);
   });
 
-  it("rejects trailing arguments to deploy without deploying", () => {
+  it("rejects unsupported deploy arguments without deploying", () => {
     const { status, stderr } = runCli(["deploy", "--definitely-not-a-real-option"]);
     expect(status).toBe(1);
-    expect(stderr).toMatch(/\[Goribu\] `goribu deploy` does not accept arguments/);
+    expect(stderr).toMatch(/`goribu deploy` accepts only the optional `--preview` flag/);
   });
 });
