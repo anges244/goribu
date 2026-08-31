@@ -48,7 +48,9 @@ function synthesizeWranglerConfig(appConfig) {
     name: appConfig.name,
     main: WORKER_FILENAME,
     compatibility_date: appConfig.compatibilityDate,
-    assets: { binding: ASSETS_BINDING },
+    // drop-trailing-slash matches the Worker's own canonicalization, so a static
+    // asset and a dynamically rendered route answer the same URL the same way.
+    assets: { binding: ASSETS_BINDING, html_handling: "drop-trailing-slash" },
   };
 
   const flags = appConfig.compatibilityFlags;

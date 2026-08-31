@@ -70,6 +70,19 @@ export function createApp(options) {
       }
 
       const url = new URL(request.url);
+
+      // Canonicalize the trailing slash before anything else, so one URL serves
+      // each route. The canonical form drops the trailing slash (the root "/" is
+      // the only path that keeps it); the static-asset handler is configured with
+      // the same drop-trailing-slash policy, so static and dynamic routes agree.
+      // 308 preserves the method and body, so the rule is safe for every request.
+      const canonical = canonicalPathname(url.pathname);
+      if (canonical !== null) {
+        const target = new URL(url);
+        target.pathname = canonical;
+        return Response.redirect(target.toString(), 308);
+      }
+
       const match = matchRoute({
         manifest,
         pathname: url.pathname,
@@ -127,6 +140,18 @@ export function createApp(options) {
         );
     }
   }
+}
+
+/**
+ * Return the canonical, trailing-slash-free form of a pathname, or null when the
+ * pathname is already canonical. Every trailing slash is dropped in one step so a
+ * request never chains through more than one redirect; the root "/" is preserved.
+ */
+function canonicalPathname(pathname) {
+  if (pathname === "/") return null;
+  const stripped = pathname.replace(/\/+$/, "");
+  const canonical = stripped === "" ? "/" : stripped;
+  return canonical === pathname ? null : canonical;
 }
 
 /**

@@ -62,6 +62,24 @@ describe("createApp().fetch", () => {
     expect(await response.text()).toContain("<h1>A post</h1>");
   });
 
+  it("redirects a trailing slash to the canonical path with 308", async () => {
+    const response = await build().fetch(get("/about/"));
+    expect(response.status).toBe(308);
+    expect(new URL(response.headers.get("location")).pathname).toBe("/about");
+  });
+
+  it("drops repeated trailing slashes and preserves the query in one redirect", async () => {
+    const response = await build().fetch(get("/posts/hello//?page=2"));
+    expect(response.status).toBe(308);
+    const location = new URL(response.headers.get("location"));
+    expect(location.pathname).toBe("/posts/hello");
+    expect(location.search).toBe("?page=2");
+  });
+
+  it("does not redirect the root path", async () => {
+    expect((await build().fetch(get("/"))).status).toBe(200);
+  });
+
   it("streams the built-in 404 page when no route matches", async () => {
     const response = await build().fetch(get("/missing"));
     expect(response.status).toBe(404);

@@ -39,7 +39,7 @@ describe("writeWranglerConfig", () => {
       name: "goribu-basic-app",
       main: "worker.js",
       compatibility_date: "2026-08-31",
-      assets: { binding: "ASSETS" },
+      assets: { binding: "ASSETS", html_handling: "drop-trailing-slash" },
     });
   });
 
