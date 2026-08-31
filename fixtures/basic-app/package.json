@@ -1,0 +1,8 @@
+{
+  "name": "basic-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "goribu": "workspace:*"
+  }
+}
