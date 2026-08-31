@@ -6,6 +6,7 @@
 // instruction rather than pretending to work.
 
 import { readFileSync } from "node:fs";
+import { runWranglerDeploy } from "../src/build/run-deploy.js";
 
 const COMMANDS = {
   dev: "Start the local development server.",
@@ -35,14 +36,6 @@ function printUsage(stream) {
   stream.write(`${lines.join("\n")}\n`);
 }
 
-function notImplemented(command) {
-  console.error(
-    `[Goribu] \`goribu ${command}\` is not available yet. It lands later in ` +
-      `the Block 1 build; run the framework build to that substep before using it.`,
-  );
-  process.exitCode = 1;
-}
-
 // Run the production build for the app in the current directory. Vite's builder
 // drives every environment the Goribu plugin configures, so one call emits both
 // the Worker bundle and the client bundle.
@@ -60,6 +53,19 @@ async function runDev() {
   const server = await createServer({ root: process.cwd() });
   await server.listen();
   server.printUrls();
+}
+
+// Build, then deploy through Wrangler. The build writes a deploy-redirect at
+// .wrangler/deploy/config.json that points Wrangler at the generated Worker
+// bundle and static assets, so `wrangler deploy` from the project root uploads
+// exactly what the build produced. Wrangler owns Cloudflare authentication and
+// prompts for it when needed.
+async function runDeploy() {
+  await runBuild();
+  const exitCode = await runWranglerDeploy({ projectRoot: process.cwd() });
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
+  }
 }
 
 function assertNoArguments(command, rest) {
@@ -102,8 +108,12 @@ function main(argv) {
     return;
   }
 
-  if (Object.hasOwn(COMMANDS, command)) {
-    notImplemented(command, rest);
+  if (command === "deploy") {
+    if (!assertNoArguments("deploy", rest)) return;
+    runDeploy().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
     return;
   }
 
