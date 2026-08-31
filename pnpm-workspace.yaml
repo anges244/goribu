@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+  - fixtures/*
+
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

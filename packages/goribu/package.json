@@ -1,0 +1,35 @@
+{
+  "name": "goribu",
+  "version": "0.0.0",
+  "description": "A full-stack React framework for Cloudflare Workers.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "default": "./src/index.js"
+    },
+    "./server": {
+      "default": "./src/server.js"
+    },
+    "./client": {
+      "default": "./src/client.js"
+    },
+    "./vite": {
+      "default": "./src/vite.js"
+    }
+  },
+  "bin": {
+    "goribu": "./bin/goribu.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "peerDependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}
