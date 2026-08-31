@@ -2,7 +2,7 @@
 // this from goribu.config.js and removes this file.
 {
   "name": "goribu-basic-app",
-  "main": "src/worker.js",
+  "main": ".goribu/worker.js",
   "compatibility_date": "2026-08-31",
   "assets": {
     "binding": "ASSETS"

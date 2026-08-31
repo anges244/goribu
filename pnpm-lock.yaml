@@ -26,6 +26,12 @@ importers:
       goribu:
         specifier: workspace:*
         version: link:../../packages/goribu
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
     devDependencies:
       vite:
         specifier: ^8.2.2
