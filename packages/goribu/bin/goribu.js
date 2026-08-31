@@ -43,6 +43,15 @@ function notImplemented(command) {
   process.exitCode = 1;
 }
 
+// Run the production build for the app in the current directory. Vite's builder
+// drives every environment the Goribu plugin configures, so one call emits both
+// the Worker bundle and the client bundle.
+async function runBuild() {
+  const { createBuilder } = await import("vite");
+  const builder = await createBuilder({ root: process.cwd() });
+  await builder.buildApp();
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
 
@@ -53,6 +62,21 @@ function main(argv) {
 
   if (command === "-v" || command === "--version") {
     process.stdout.write(`${readVersion()}\n`);
+    return;
+  }
+
+  if (command === "build") {
+    if (rest.length > 0) {
+      console.error(
+        `[Goribu] \`goribu build\` does not accept arguments, but received ${rest.map((argument) => JSON.stringify(argument)).join(", ")}. Remove them and run \`goribu build\` on its own.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    runBuild().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
     return;
   }
 

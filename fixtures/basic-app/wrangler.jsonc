@@ -1,0 +1,10 @@
+// Temporary hand-written Wrangler config. Block 1's later substep synthesizes
+// this from goribu.config.js and removes this file.
+{
+  "name": "goribu-basic-app",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-31",
+  "assets": {
+    "binding": "ASSETS"
+  }
+}

@@ -4,5 +4,8 @@
   "type": "module",
   "dependencies": {
     "goribu": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.2.2"
   }
 }
