@@ -56,6 +56,12 @@ describe("defineConfig", () => {
     expect(() => defineConfig(null)).toThrow(/requires a plain application configuration object/);
   });
 
+  it("rejects a Document field and points to _document.jsx", () => {
+    expect(() =>
+      defineConfig({ name: "app", compatibilityDate: "2024-01-01", Document: () => null }),
+    ).toThrow(/Document belongs in src\/routes\/_document\.jsx/);
+  });
+
   it("rejects getter-backed configuration fields", () => {
     const hostile = Object.defineProperty({ compatibilityDate: "2024-01-01" }, "name", {
       enumerable: true,

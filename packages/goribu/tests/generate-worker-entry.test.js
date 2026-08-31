@@ -12,6 +12,12 @@ function makeProject() {
   return root;
 }
 
+function writeRoute(root, relativePath, source = "export default function Page() { return null; }\n") {
+  const filePath = join(root, "src", "routes", relativePath);
+  mkdirSync(join(filePath, ".."), { recursive: true });
+  writeFileSync(filePath, source);
+}
+
 afterEach(() => {
   for (const root of created.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -19,30 +25,63 @@ afterEach(() => {
 });
 
 describe("writeWorkerEntry", () => {
-  it("generates .goribu/worker.js that streams the hardcoded page", () => {
+  it("generates a Worker that imports each route and hands the manifest to createApp", () => {
     const root = makeProject();
-    mkdirSync(join(root, "src"), { recursive: true });
-    writeFileSync(join(root, "src", "page.jsx"), "export default function Page() { return null; }\n");
+    writeRoute(root, "index.jsx");
+    writeRoute(root, "about.jsx");
+    writeRoute(root, "posts/[id].jsx");
 
     const { outputFile, source } = writeWorkerEntry({ projectRoot: root });
 
     expect(outputFile).toBe(join(root, ".goribu", "worker.js"));
     expect(existsSync(outputFile)).toBe(true);
     expect(readFileSync(outputFile, "utf8")).toBe(source);
-    expect(source).toContain('import { renderToReadableStream } from "react-dom/server.edge"');
-    expect(source).toContain('import Page from "../src/page.jsx"');
-    expect(source).toContain("renderToReadableStream(");
+
+    expect(source).toContain('import { createApp } from "goribu/server"');
+    expect(source).toContain('import * as module0 from "../src/routes/index.jsx"');
+    expect(source).toContain('import * as module2 from "../src/routes/posts/[id].jsx"');
+    expect(source).toContain('"pattern": "/posts/:id"');
+    expect(source).toContain('["src/routes/index.jsx", module0]');
+    expect(source).toContain("const errorPages = { notFound: null };");
+    expect(source).toContain("const documentId = null;");
+    expect(source).toContain(
+      "export default createApp({ manifest, modules, errorPages, documentId });",
+    );
+    // The absolute file path must never leak into the bundled manifest.
+    expect(source).not.toContain(root);
   });
 
-  it("fails closed with a teaching error when the page is missing", () => {
+  it("discovers the _404 and _document modules and wires their identities", () => {
     const root = makeProject();
-    expect(() => writeWorkerEntry({ projectRoot: root })).toThrow(/page\.jsx.*is missing/);
+    writeRoute(root, "index.jsx");
+    writeRoute(root, "_404.jsx");
+    writeRoute(root, "_document.jsx");
+
+    const { source } = writeWorkerEntry({ projectRoot: root });
+
+    expect(source).toContain('import * as module1 from "../src/routes/_404.jsx"');
+    expect(source).toContain('import * as module2 from "../src/routes/_document.jsx"');
+    expect(source).toContain('const errorPages = { notFound: "src/routes/_404.jsx" };');
+    expect(source).toContain('const documentId = "src/routes/_document.jsx";');
   });
 
-  it("fails closed when src/page.jsx is a directory, not a file", () => {
+  it("rejects a route that exports an HTTP handler, since handlers arrive later", () => {
     const root = makeProject();
-    mkdirSync(join(root, "src", "page.jsx"), { recursive: true });
-    expect(() => writeWorkerEntry({ projectRoot: root })).toThrow(/is not a regular file/);
+    writeRoute(root, "index.jsx");
+    writeRoute(
+      root,
+      "submit.jsx",
+      "export function POST() {}\nexport default function Page() { return null; }\n",
+    );
+
+    expect(() => writeWorkerEntry({ projectRoot: root })).toThrow(
+      /exports the HTTP handler\(s\) POST/,
+    );
+  });
+
+  it("fails closed with a teaching error when no routes are found", () => {
+    const root = makeProject();
+    expect(() => writeWorkerEntry({ projectRoot: root })).toThrow(/no routes were found/);
   });
 
   it("requires a project root", () => {

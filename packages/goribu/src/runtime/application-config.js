@@ -9,10 +9,11 @@ const COMPATIBILITY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Validate and brand Goribu's one author-owned application configuration object.
  *
- * The returned value is a frozen snapshot. In this block the config carries only
- * the deploy fields that Wrangler synthesis needs; runtime fields (Document,
- * responseHeaders, database) are added to this same validator as later blocks
- * land the code that consumes them.
+ * The returned value is a frozen snapshot. The config carries only Node-loadable
+ * data: the deploy fields Wrangler synthesis needs today, and runtime data fields
+ * (responseHeaders, database) added to this same validator as later blocks land
+ * their consumers. Render modules never live here — a `Document` field is rejected
+ * with a pointer to `src/routes/_document.jsx` (see docs/decisions.md).
  */
 export function defineConfig(config) {
   if (CONFIG_BRAND.has(config)) return config;
@@ -37,6 +38,14 @@ export function defineConfig(config) {
   const descriptors = Object.getOwnPropertyDescriptors(config);
   const normalized = {};
   for (const [field, descriptor] of Object.entries(descriptors)) {
+    // Config is Node-loadable data, so a render module can never live on it. The
+    // Document is part of the render graph and belongs in a file Vite compiles.
+    if (field === "Document") {
+      throw new TypeError(
+        "[Goribu] Document belongs in src/routes/_document.jsx, not goribu.config.js. " +
+          "Move your Document component there. goribu.config.js holds only Node-loadable data (no JSX, no React, no application modules).",
+      );
+    }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
         `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, and compatibilityFlags.`,
