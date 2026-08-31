@@ -29,6 +29,7 @@
     "src"
   ],
   "dependencies": {
+    "@babel/parser": "^7.29.2",
     "@cloudflare/vite-plugin": "^1.54.2",
     "wrangler": "^4.127.1"
   },
