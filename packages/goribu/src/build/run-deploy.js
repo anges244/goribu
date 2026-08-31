@@ -16,17 +16,14 @@ export function resolveWranglerBin() {
 }
 
 /**
- * Launch Wrangler for the built application.
+ * Launch `wrangler deploy` for the built application.
  *
  * The production build has already written the deploy-redirect that points
  * Wrangler at the generated Worker bundle and static assets; this only runs
- * Wrangler and reports how it finished. With `preview`, it runs
- * `wrangler versions upload`, which uploads a new version and prints a public
- * preview URL without changing what production serves; otherwise it runs
- * `wrangler deploy`. `spawn` and `resolveBin` are injectable so the launching
- * contract can be tested without a network or a real deploy.
+ * Wrangler and reports how it finished. `spawn` and `resolveBin` are injectable
+ * so the launching contract can be tested without a network or a real deploy.
  *
- * @param {{ projectRoot: string, preview?: boolean, spawn?: Function, resolveBin?: Function }} options
+ * @param {{ projectRoot: string, spawn?: Function, resolveBin?: Function }} options
  * @returns {Promise<number>} Wrangler's exit code (0 on success)
  */
 export async function runWranglerDeploy(options) {
@@ -37,12 +34,8 @@ export async function runWranglerDeploy(options) {
     );
   }
 
-  const preview = options?.preview === true;
   const spawn = options?.spawn ?? nodeSpawn;
   const resolveBin = options?.resolveBin ?? resolveWranglerBin;
-
-  const wranglerArgs = preview ? ["versions", "upload"] : ["deploy"];
-  const invocation = preview ? "goribu deploy --preview" : "goribu deploy";
 
   let wranglerBin;
   try {
@@ -56,7 +49,7 @@ export async function runWranglerDeploy(options) {
   }
 
   const { code, signal } = await new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(process.execPath, [wranglerBin, ...wranglerArgs], {
+    const child = spawn(process.execPath, [wranglerBin, "deploy"], {
       cwd: projectRoot,
       stdio: "inherit",
     });
@@ -71,7 +64,7 @@ export async function runWranglerDeploy(options) {
   if (signal) {
     throw new Error(
       `[Goribu] Wrangler was terminated by signal ${signal} before it finished. ` +
-        `The deploy did not complete; re-run \`${invocation}\`.`,
+        "The deploy did not complete; re-run `goribu deploy`.",
     );
   }
 

@@ -34,23 +34,9 @@ This builds the app, then runs `wrangler deploy`. The app is served from its
 from `goribu.config.js`. Re-running `goribu deploy` replaces what production
 serves.
 
-## Deploy a preview
-
-```
-goribu deploy --preview
-```
-
-This builds the app, then runs `wrangler versions upload`. It uploads a new
-version and prints a public **preview URL** for that version **without changing
-what production serves**. Use it to share a change, or to check a commit on a
-real URL before promoting it.
-
-Run it once per commit you want a URL for. Because it does not touch production,
-it is safe to run from any branch.
-
 ## What to expect
 
-- Both commands print Wrangler's own output, including the resulting URL.
+- `goribu deploy` prints Wrangler's own output, including the resulting URL.
 - A failed or interrupted deploy exits non-zero and does not report success.
 - The build output lives in `dist/`; the deploy target is resolved from the
   generated Wrangler configuration under `.goribu/`. Neither is committed.

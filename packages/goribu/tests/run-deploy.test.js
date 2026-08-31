@@ -36,20 +36,6 @@ describe("runWranglerDeploy", () => {
     });
   });
 
-  it("runs `versions upload` for a preview deploy", async () => {
-    const spawn = fakeSpawn((child) => child.emit("close", 0, null));
-
-    const code = await runWranglerDeploy({
-      projectRoot: "/app",
-      preview: true,
-      spawn,
-      resolveBin,
-    });
-
-    expect(code).toBe(0);
-    expect(spawn.calls[0].args).toEqual([FAKE_BIN, "versions", "upload"]);
-  });
-
   it("propagates a non-zero Wrangler exit code", async () => {
     const spawn = fakeSpawn((child) => child.emit("close", 2, null));
 

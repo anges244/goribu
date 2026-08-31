@@ -60,9 +60,9 @@ async function runDev() {
 // bundle and static assets, so `wrangler deploy` from the project root uploads
 // exactly what the build produced. Wrangler owns Cloudflare authentication and
 // prompts for it when needed.
-async function runDeploy({ preview }) {
+async function runDeploy() {
   await runBuild();
-  const exitCode = await runWranglerDeploy({ projectRoot: process.cwd(), preview });
+  const exitCode = await runWranglerDeploy({ projectRoot: process.cwd() });
   if (exitCode !== 0) {
     process.exitCode = exitCode;
   }
@@ -109,15 +109,8 @@ function main(argv) {
   }
 
   if (command === "deploy") {
-    const preview = rest.length === 1 && rest[0] === "--preview";
-    if (!preview && rest.length > 0) {
-      console.error(
-        `[Goribu] \`goribu deploy\` accepts only the optional \`--preview\` flag, but received ${rest.map((argument) => JSON.stringify(argument)).join(", ")}. Run \`goribu deploy\` to deploy to production, or \`goribu deploy --preview\` to upload a preview version.`,
-      );
-      process.exitCode = 1;
-      return;
-    }
-    runDeploy({ preview }).catch((error) => {
+    if (!assertNoArguments("deploy", rest)) return;
+    runDeploy().catch((error) => {
       console.error(error);
       process.exitCode = 1;
     });
