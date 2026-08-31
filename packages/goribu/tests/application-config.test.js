@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineConfig } from "goribu/server";
+import { isApplicationConfig } from "../src/runtime/application-config.js";
 
 describe("defineConfig", () => {
   it("accepts a full config and returns a frozen, branded snapshot", () => {
@@ -97,6 +98,16 @@ describe("defineConfig", () => {
       const config = defineConfig({ ...base, compatibilityFlags: flags });
       expect(config.compatibilityFlags).toEqual(["nodejs_compat"]);
       expect(config.compatibilityFlags.every((flag) => typeof flag === "string")).toBe(true);
+    });
+  });
+
+  describe("isApplicationConfig", () => {
+    it("recognizes a defineConfig result and rejects everything else", () => {
+      const config = defineConfig({ name: "app", compatibilityDate: "2026-08-31" });
+      expect(isApplicationConfig(config)).toBe(true);
+      expect(isApplicationConfig({ name: "app", compatibilityDate: "2026-08-31" })).toBe(false);
+      expect(isApplicationConfig(null)).toBe(false);
+      expect(isApplicationConfig("app")).toBe(false);
     });
   });
 });

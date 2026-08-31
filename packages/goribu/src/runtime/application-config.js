@@ -72,6 +72,17 @@ export function defineConfig(config) {
   return result;
 }
 
+/**
+ * Report whether a value is a config produced by `defineConfig`.
+ *
+ * The brand is a private WeakSet, so only values that passed validation here
+ * answer true. Build steps use this to fail closed when `goribu.config.js`
+ * default-exports something other than a `defineConfig(...)` result.
+ */
+export function isApplicationConfig(value) {
+  return CONFIG_BRAND.has(value);
+}
+
 function isRealCalendarDate(value) {
   if (!COMPATIBILITY_DATE_PATTERN.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
