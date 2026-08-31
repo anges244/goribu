@@ -52,6 +52,25 @@ async function runBuild() {
   await builder.buildApp();
 }
 
+// Start the local development server for the app in the current directory. Vite
+// serves the generated Worker through workerd (via the Cloudflare plugin) with
+// HMR; the server keeps the process alive until it is interrupted.
+async function runDev() {
+  const { createServer } = await import("vite");
+  const server = await createServer({ root: process.cwd() });
+  await server.listen();
+  server.printUrls();
+}
+
+function assertNoArguments(command, rest) {
+  if (rest.length === 0) return true;
+  console.error(
+    `[Goribu] \`goribu ${command}\` does not accept arguments, but received ${rest.map((argument) => JSON.stringify(argument)).join(", ")}. Remove them and run \`goribu ${command}\` on its own.`,
+  );
+  process.exitCode = 1;
+  return false;
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
 
@@ -65,14 +84,17 @@ function main(argv) {
     return;
   }
 
-  if (command === "build") {
-    if (rest.length > 0) {
-      console.error(
-        `[Goribu] \`goribu build\` does not accept arguments, but received ${rest.map((argument) => JSON.stringify(argument)).join(", ")}. Remove them and run \`goribu build\` on its own.`,
-      );
+  if (command === "dev") {
+    if (!assertNoArguments("dev", rest)) return;
+    runDev().catch((error) => {
+      console.error(error);
       process.exitCode = 1;
-      return;
-    }
+    });
+    return;
+  }
+
+  if (command === "build") {
+    if (!assertNoArguments("build", rest)) return;
     runBuild().catch((error) => {
       console.error(error);
       process.exitCode = 1;

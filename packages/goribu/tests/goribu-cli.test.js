@@ -31,4 +31,10 @@ describe("goribu CLI", () => {
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\] `goribu build` does not accept arguments/);
   });
+
+  it("rejects trailing arguments to dev without starting the server", () => {
+    const { status, stderr } = runCli(["dev", "--definitely-not-a-real-option"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/\[Goribu\] `goribu dev` does not accept arguments/);
+  });
 });
