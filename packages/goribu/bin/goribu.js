@@ -7,6 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { runWranglerDeploy } from "../src/build/run-deploy.js";
+import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 
 const COMMANDS = {
   dev: "Start the local development server.",
@@ -38,11 +39,16 @@ function printUsage(stream) {
 
 // Run the production build for the app in the current directory. Vite's builder
 // drives every environment the Goribu plugin configures, so one call emits both
-// the Worker bundle and the client bundle.
+// the Worker bundle and the client bundle. Once those exist, Goribu produces the
+// build-time static output: routes whose first response needs no Worker are
+// rendered by running the emitted Worker in workerd and asking it for each route,
+// then written into the client asset directory, so Static Assets serves them
+// without ever invoking the Worker at request time.
 async function runBuild() {
   const { createBuilder } = await import("vite");
   const builder = await createBuilder({ root: process.cwd() });
   await builder.buildApp();
+  await prerenderStaticRoutes({ projectRoot: process.cwd() });
 }
 
 // Start the local development server for the app in the current directory. Vite
