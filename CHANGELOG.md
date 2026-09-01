@@ -12,6 +12,13 @@ Unreleased.
 
 ### Added
 
+- Documentation site — the framework's docs are now a live Goribu app: a landing
+  page and a guided-tour docs set (getting started, the CLI, routing, rendering,
+  static routes, the JavaScript position, and deploying). Markdown is compiled to
+  React components at build time by the site's own Vite plugin; the framework
+  itself is unchanged. Live at
+  https://goribu-site.aggelos-gesoulis.workers.dev.
+
 - `goribu` CLI, the framework's front door, with `dev`, `build`, and `deploy`
   commands.
 - `goribu dev`: local development server (Vite plus workerd) serving the real

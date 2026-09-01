@@ -1,0 +1,14 @@
+{
+  "name": "goribu-site",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "goribu": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "marked": "^12.0.0",
+    "vite": "^8.2.2"
+  }
+}
