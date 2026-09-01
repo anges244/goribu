@@ -6,10 +6,12 @@ import { renderPage } from "./render-page.js";
  *
  * The application may supply a `_404` page at the top level of its routes
  * directory; when it does not, Goribu streams a plain built-in page. Either way
- * the page renders through the same document shell and the same empty-props rule
- * as any other page, and the response carries a 404 status.
+ * the page renders through the same document shell as any other page, and the
+ * response carries a 404 status. A route miss renders with empty props; a handler
+ * that returns res.notFound(props) supplies the props (and any extra headers) for
+ * the same _404 page.
  *
- * @param {{ NotFoundPage?: Function|null, Document: Function }} options
+ * @param {{ NotFoundPage?: Function|null, Document: Function, props?: object, headers?: object }} options
  * @returns {Promise<Response>}
  */
 export async function renderNotFound(options) {
@@ -26,6 +28,8 @@ export async function renderNotFound(options) {
     Page: NotFoundPage,
     Document: options?.Document,
     status: 404,
+    props: options?.props ?? {},
+    headers: options?.headers,
   });
 }
 

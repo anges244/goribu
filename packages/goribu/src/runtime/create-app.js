@@ -20,9 +20,11 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, and the body helpers) and returns res.json(),
- * res.text(), or res.redirect(). Worker bindings and req.waitUntil, folder
- * middleware, cookies, and the `_500` boundary are later substeps of this block.
+ * params, query, headers, and the body helpers) and returns any res.* intent:
+ * res.text(), res.json(), res.redirect(), res.render(props) to stream the route's
+ * own page with data, or res.notFound(props) for the _404 page. Worker bindings
+ * and req.waitUntil, folder middleware, cookies, and the `_500` boundary are
+ * later substeps of this block.
  *
  * @param {{
  *   manifest: object[],
@@ -184,7 +186,16 @@ export function createApp(options) {
     const req = createRequest(request, match.params);
     const res = createResponse({ canRender: match.route.hasDefaultExport });
     const result = await handler(req, res);
-    return finalizeHandlerResult(result, method, match.route.id);
+    return finalizeHandlerResult(result, {
+      method,
+      routeId: match.route.id,
+      Document,
+      NotFoundPage,
+      // Only a route with a default page reaches res.render(); createResponse
+      // enforces that, so resolve the component lazily — a res.json() result
+      // never loads it.
+      getPage: () => loadDefaultExport(modules, match.route.id, "route"),
+    });
   }
 }
 
@@ -202,9 +213,16 @@ function canonicalPathname(pathname) {
 
 /**
  * Turn a handler's response-builder result into a Web Response, or fail with a
- * message that teaches how to return a valid one.
+ * message that teaches how to return a valid one. Body-bearing and redirect
+ * intents become a Web Response directly; res.render(props) and res.notFound(props)
+ * stream the matched page (or the app's _404 page) through the same document shell
+ * a page match uses, carrying the handler's props, status, and extra headers.
+ *
+ * @param {object} result
+ * @param {{ method: string, routeId: string, Document: Function, NotFoundPage: Function|null, getPage: () => Function }} options
  */
-function finalizeHandlerResult(result, method, routeId) {
+async function finalizeHandlerResult(result, options) {
+  const { method, routeId } = options;
   if (!isResponseResult(result)) {
     const identity = `${method} handler for route ${JSON.stringify(routeId)}`;
     if (result === undefined) {
@@ -249,15 +267,35 @@ function finalizeHandlerResult(result, method, routeId) {
     });
   }
 
-  // res.render() and res.notFound() from a handler render a page (with props and
-  // the _404 boundary), which this substep does not wire yet. Fail closed with a
-  // pointer to the intents that work today rather than serving something wrong.
-  if (result.kind === "render" || result.kind === "not-found") {
-    const helper = result.kind === "not-found" ? "res.notFound()" : "res.render()";
-    throw new Error(
-      `[Goribu] A handler returned ${helper}, which Goribu cannot finalize yet. ` +
-        "Return res.json(), res.text(), or res.redirect() from a handler for now.",
-    );
+  // res.render(props) streams the matched route's own default page through the
+  // document shell with the handler's props, status, and headers — the same
+  // render path a page match uses, so a handler-rendered page is identical to an
+  // implicit-GET one apart from the data it carries.
+  if (result.kind === "render") {
+    if (BODYLESS_STATUSES.has(result.status)) {
+      throw new RangeError(
+        `[Goribu] Cannot render a page with status ${result.status} because that status cannot carry a response body. ` +
+          "Choose a body-bearing status before calling res.render(props).",
+      );
+    }
+    return renderPage({
+      Page: options.getPage(),
+      Document: options.Document,
+      props: result.props,
+      status: result.status,
+      headers: result.headers,
+    });
+  }
+
+  // res.notFound(props) renders the application's _404 page (or the built-in one)
+  // through the same boundary a route miss uses, always with a 404 status.
+  if (result.kind === "not-found") {
+    return renderNotFound({
+      NotFoundPage: options.NotFoundPage,
+      Document: options.Document,
+      props: result.props,
+      headers: result.headers,
+    });
   }
 
   throw new TypeError(

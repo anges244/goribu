@@ -6,17 +6,20 @@ import { renderToReadableStream } from "react-dom/server.edge";
  *
  * The page renders inside the application's document shell and its React body
  * starts flowing as soon as the shell is ready, rather than after the whole
- * document is buffered. This block renders pages with empty props: route params
- * and loaded data reach a page only through a request handler, which arrives in
- * a later block, so an implicit-GET page has nothing to receive yet.
+ * document is buffered. An implicit-GET page renders with empty props; a handler
+ * that returns res.render(props) supplies the props (and any extra response
+ * headers), which this module passes straight to the page component and the Web
+ * Response. Serializing those props into the page for browser hydration is the
+ * client runtime's job in a later block.
  *
- * @param {{ Page: Function, Document: Function, status?: number }} options
+ * @param {{ Page: Function, Document: Function, status?: number, props?: object, headers?: object }} options
  * @returns {Promise<Response>}
  */
 export async function renderPage(options) {
   const Page = options?.Page;
   const Document = options?.Document;
   const status = options?.status ?? 200;
+  const props = options?.props ?? {};
 
   if (typeof Page !== "function") {
     throw new TypeError(
@@ -31,7 +34,7 @@ export async function renderPage(options) {
     );
   }
 
-  const tree = h(Document, { children: h(Page, {}) });
+  const tree = h(Document, { children: h(Page, props) });
 
   let stream;
   try {
@@ -48,6 +51,31 @@ export async function renderPage(options) {
 
   return new Response(stream, {
     status,
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: buildHeaders(options?.headers),
   });
+}
+
+/**
+ * Build the response headers for a rendered page: any headers a handler chained
+ * before res.render(props), plus a text/html default only when the handler set no
+ * content-type of its own. Applying the handler headers first means a handler
+ * value overrides the default, so a route can send its own content-type; array
+ * values append so repeated headers survive.
+ */
+function buildHeaders(values) {
+  const headers = new Headers();
+
+  for (const [name, value] of Object.entries(values ?? {})) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(name, item);
+    } else {
+      headers.set(name, value);
+    }
+  }
+
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "text/html; charset=utf-8");
+  }
+
+  return headers;
 }

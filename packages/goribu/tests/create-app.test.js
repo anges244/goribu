@@ -300,6 +300,117 @@ describe("createApp().fetch — named handlers", () => {
     expect(await response.text()).toBe("handler wins");
   });
 
+  it("streams the route's own page when a GET handler returns res.render(props)", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "mixed",
+          {
+            default: ({ title }) => h("h1", null, title),
+            GET: (req, res) => res.render({ title: `Hello ${req.query.get("name")}` }),
+          },
+        ],
+      ]),
+    );
+    const response = await app.fetch(get("/mixed?name=Goribu"));
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(body).toContain("<h1>Hello Goribu</h1>");
+  });
+
+  it("carries a chained status and headers through res.render()", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "mixed",
+          {
+            default: () => h("p", null, "Created"),
+            GET: (req, res) =>
+              res.status(201).headers({ "x-created": "yes" }).render({}),
+          },
+        ],
+      ]),
+    );
+    const response = await app.fetch(get("/mixed"));
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("x-created")).toBe("yes");
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await response.text()).toContain("<p>Created</p>");
+  });
+
+  it("lets res.render() override the content type but keeps the HTML default for an empty array", async () => {
+    const build = (headers) =>
+      handlerApp(
+        new Map([
+          [
+            "mixed",
+            {
+              default: () => h("p", null, "x"),
+              GET: (req, res) => res.headers(headers).render({}),
+            },
+          ],
+        ]),
+      );
+
+    const overridden = await build({ "content-type": "text/html; charset=iso-8859-1" }).fetch(
+      get("/mixed"),
+    );
+    expect(overridden.headers.get("content-type")).toBe("text/html; charset=iso-8859-1");
+
+    const cleared = await build({ "content-type": [] }).fetch(get("/mixed"));
+    expect(cleared.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("renders the built-in _404 page with a 404 status for res.notFound()", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: (req, res) => res.notFound() }]]),
+    );
+    const response = await app.fetch(get("/hello"));
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await response.text()).toContain("could not be found");
+  });
+
+  it("renders a discovered _404 page for res.notFound(), passing props", async () => {
+    const app = createApp({
+      manifest: [HELLO_HANDLER, ITEM_HANDLER, MIXED],
+      modules: new Map([
+        ["hello", { GET: (req, res) => res.notFound({ reason: "no such item" }) }],
+        ["notfound", { default: ({ reason }) => h("h1", null, `Missing: ${reason ?? "?"}`) }],
+      ]),
+      errorPages: { notFound: "notfound" },
+      documentId: null,
+    });
+    const response = await app.fetch(get("/hello"));
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("<h1>Missing: no such item</h1>");
+  });
+
+  it("teaches when res.render() is used with a bodyless status", async () => {
+    const app = handlerApp(
+      new Map([
+        ["mixed", { default: () => h("p", null, "x"), GET: (req, res) => res.status(204).render({}) }],
+      ]),
+    );
+    await expect(app.fetch(get("/mixed"))).rejects.toThrow(
+      /status 204 because that status cannot carry a response body/,
+    );
+  });
+
+  it("teaches when a handler on a page-less route calls res.render()", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: (req, res) => res.render({}) }]]),
+    );
+    await expect(app.fetch(get("/hello"))).rejects.toThrow(
+      /requires the matched route to have a default page export/,
+    );
+  });
+
   it("teaches when a handler returns nothing", async () => {
     const app = handlerApp(new Map([["hello", { GET: () => {} }]]));
     await expect(app.fetch(get("/hello"))).rejects.toThrow(/did not return a response/);
