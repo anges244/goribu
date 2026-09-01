@@ -260,6 +260,94 @@ describe("createApp().fetch — named handlers", () => {
     expect(await response.json()).toEqual({ q: "hi", id: "abc" });
   });
 
+  it("flushes cookies queued by a handler onto its final response", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              req.cookies.set("session", "abc", { httpOnly: true });
+              return res.json({ ok: true });
+            },
+          },
+        ],
+      ]),
+    );
+    const response = await app.fetch(get("/hello"));
+
+    expect(response.headers.get("set-cookie")).toBe("session=abc; HttpOnly");
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
+  it("lets a handler read an incoming cookie", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "hello",
+          { GET: (req, res) => res.json({ theme: req.cookies.get("theme") }) },
+        ],
+      ]),
+    );
+    const response = await app.fetch(
+      new Request("https://example.com/hello", {
+        headers: { cookie: "theme=dark" },
+      }),
+    );
+
+    expect(await response.json()).toEqual({ theme: "dark" });
+  });
+
+  it("keeps Set-Cookie on an automatic HEAD response while dropping the body", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              req.cookies.set("session", "abc", { httpOnly: true });
+              return res.json({ ok: true });
+            },
+          },
+        ],
+      ]),
+    );
+    const response = await app.fetch(
+      new Request("https://example.com/hello", { method: "HEAD" }),
+    );
+
+    expect(response.headers.get("set-cookie")).toBe("session=abc; HttpOnly");
+    expect(await response.text()).toBe("");
+  });
+
+  it("does not add Set-Cookie when no handler runs", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              req.cookies.set("unexpected", "yes");
+              return res.json({ ok: true });
+            },
+          },
+        ],
+      ]),
+    );
+
+    const responses = await Promise.all([
+      app.fetch(new Request("https://example.com/hello", { method: "OPTIONS" })),
+      app.fetch(new Request("https://example.com/hello", { method: "PUT" })),
+      app.fetch(get("/hello/")),
+    ]);
+
+    expect(responses.map((response) => response.headers.get("set-cookie"))).toEqual([
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it("parses a POSTed JSON body through req.body()", async () => {
     const app = handlerApp(
       new Map([["hello", { POST: async (req, res) => res.json(await req.body()) }]]),

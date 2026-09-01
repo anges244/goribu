@@ -4,6 +4,8 @@ import { renderNotFound } from "../rendering/render-not-found.js";
 import { DefaultDocument } from "../rendering/document.js";
 import { createRequest } from "./create-request.js";
 import { createResponse, isResponseResult } from "./create-response.js";
+import { createCookieJar } from "./cookies/create-cookie-jar.js";
+import { appendSetCookies } from "./cookies/append-set-cookies.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
 
@@ -93,13 +95,15 @@ export function createApp(options) {
         return Response.redirect(target.toString(), 308);
       }
 
+      const cookieJar = createCookieJar(request);
       const match = matchRoute({
         manifest,
         pathname: url.pathname,
         method: request.method,
       });
 
-      const response = await resolveResponse(match, url, request);
+      const response = await resolveResponse(match, url, request, cookieJar);
+      const flushed = appendSetCookies(response, cookieJar.pending);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
       // headers but never carries a body. Normalizing here, rather than in the
@@ -107,20 +111,20 @@ export function createApp(options) {
       // later response path correct without each remembering the rule.
       if (request.method.toUpperCase() === "HEAD") {
         return new Response(null, {
-          status: response.status,
-          headers: response.headers,
+          status: flushed.status,
+          headers: flushed.headers,
         });
       }
-      return response;
+      return flushed;
     },
   });
 
-  function resolveResponse(match, url, request) {
+  function resolveResponse(match, url, request, cookieJar) {
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
       // finalize what it returns through the response builder.
       case "handler":
-        return dispatchHandler(match, match.method, request);
+        return dispatchHandler(match, match.method, request, cookieJar);
 
       case "page":
         return renderPage({
@@ -133,7 +137,7 @@ export function createApp(options) {
       // the route exports GET, otherwise the default page.
       case "automatic-head":
         if (match.target?.kind === "handler") {
-          return dispatchHandler(match, match.target.method, request);
+          return dispatchHandler(match, match.target.method, request, cookieJar);
         }
         return renderPage({
           Page: loadDefaultExport(modules, match.route.id, "route"),
@@ -164,10 +168,10 @@ export function createApp(options) {
 
   // Run one named method handler and finalize its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, and the body helpers) and the response builder. Worker bindings
-  // (req.env) and req.waitUntil arrive when createApp is given env/ctx in a
-  // later substep; cookies arrive with cookie transport.
-  async function dispatchHandler(match, method, request) {
+  // headers, the body helpers, and the request cookie jar) and the response
+  // builder. Worker bindings (req.env) and req.waitUntil arrive when createApp
+  // is given env/ctx in a later substep.
+  async function dispatchHandler(match, method, request, cookieJar) {
     if (!modules.has(match.route.id)) {
       throw new Error(
         `[Goribu] The route module "${match.route.id}" was matched but is not in the loaded module map. ` +
@@ -183,7 +187,7 @@ export function createApp(options) {
       );
     }
 
-    const req = createRequest(request, match.params);
+    const req = createRequest(request, match.params, { cookies: cookieJar });
     const res = createResponse({ canRender: match.route.hasDefaultExport });
     const result = await handler(req, res);
     return finalizeHandlerResult(result, {

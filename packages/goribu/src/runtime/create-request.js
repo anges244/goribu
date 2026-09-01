@@ -16,7 +16,7 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void }} [runtime]
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
@@ -41,6 +41,7 @@ export function createRequest(request, params, runtime) {
     query: url.searchParams,
     headers: request.headers,
     env: worker.env,
+    cookies: worker.cookies,
     waitUntil(promise) {
       assertWaitUntilPromise(promise);
       if (typeof worker.waitUntil !== "function") {
@@ -105,6 +106,19 @@ function assertRuntime(runtime) {
   if (runtime.waitUntil !== undefined && typeof runtime.waitUntil !== "function") {
     throw new TypeError(
       "[Goribu] createRequest(request, params, runtime) requires runtime.waitUntil to be the bound ctx.waitUntil function.",
+    );
+  }
+  if (
+    runtime.cookies !== undefined &&
+    (runtime.cookies === null ||
+      typeof runtime.cookies !== "object" ||
+      typeof runtime.cookies.get !== "function" ||
+      typeof runtime.cookies.set !== "function" ||
+      typeof runtime.cookies.delete !== "function" ||
+      !Array.isArray(runtime.cookies.pending))
+  ) {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params, runtime) requires runtime.cookies to be the request cookie jar. Pass createCookieJar(request) from the application boundary.",
     );
   }
   return runtime;

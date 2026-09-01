@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRequest } from "../src/runtime/create-request.js";
+import { createCookieJar } from "../src/runtime/cookies/create-cookie-jar.js";
 import { isHttpError } from "../src/runtime/http-error.js";
 
 const decoder = new TextDecoder();
@@ -38,6 +39,7 @@ describe("createRequest", () => {
     // req.d1 and req.postgres are intentionally absent until Block 6.
     expect(Object.keys(wrapped).sort()).toEqual([
       "body",
+      "cookies",
       "env",
       "headers",
       "method",
@@ -47,6 +49,20 @@ describe("createRequest", () => {
       "rawBody",
       "waitUntil",
     ]);
+  });
+
+  it("reads incoming cookies and queues outgoing cookies through req.cookies", () => {
+    const request = new Request("https://example.com/account", {
+      headers: { cookie: "theme=dark" },
+    });
+    const cookies = createCookieJar(request);
+    const wrapped = createRequest(request, {}, { cookies });
+
+    expect(wrapped.cookies).toBe(cookies);
+    expect(wrapped.cookies.get("theme")).toBe("dark");
+
+    wrapped.cookies.set("theme", "light", { sameSite: "Lax" });
+    expect(cookies.pending).toEqual(["theme=light; SameSite=Lax"]);
   });
 
   it("parses JSON objects and text using Content-Type parameters", async () => {
@@ -270,6 +286,11 @@ describe("createRequest", () => {
     );
     expect(() => withoutRuntime.waitUntil("not a promise")).toThrow(
       "[Goribu] req.waitUntil(promise) requires a Promise",
+    );
+    expect(() =>
+      createRequest(new Request("https://example.com"), {}, { cookies: {} }),
+    ).toThrow(
+      "[Goribu] createRequest(request, params, runtime) requires runtime.cookies to be the request cookie jar",
     );
 
     const request = new Request("https://example.com", {
