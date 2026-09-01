@@ -1,0 +1,261 @@
+import { createHttpError } from "./http-error.js";
+
+// Ported from the previous version, with the request-scoped database facades
+// (req.d1, req.postgres) left out: data bindings are Block 6, so they are added
+// back to this same surface when that block lands rather than carried early.
+const textDecoder = new TextDecoder();
+
+/**
+ * Wrap a Worker Web Request in Goribu's handler-facing request surface.
+ *
+ * Route matching supplies params separately because URL parsing cannot recover
+ * their names. The application boundary supplies Worker bindings and only the
+ * bound waitUntil capability, never the raw execution context. Body helpers share
+ * one lazy byte read so neither helper can consume the request stream out from
+ * under the other.
+ *
+ * @param {Request} request
+ * @param {Record<string, string>} params
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void }} [runtime]
+ */
+export function createRequest(request, params, runtime) {
+  assertInputs(request, params);
+  const worker = assertRuntime(runtime);
+
+  const url = new URL(request.url);
+  const safeParams = copyParams(params);
+  let rawBodyPromise;
+  let bodyPromise;
+
+  function readRawBodyOnce() {
+    if (!rawBodyPromise) {
+      rawBodyPromise = readRequestBytes(request);
+    }
+    return rawBodyPromise;
+  }
+
+  return {
+    method: request.method,
+    path: url.pathname,
+    params: safeParams,
+    query: url.searchParams,
+    headers: request.headers,
+    env: worker.env,
+    waitUntil(promise) {
+      assertWaitUntilPromise(promise);
+      if (typeof worker.waitUntil !== "function") {
+        throw new TypeError(
+          "[Goribu] req.waitUntil(promise) is unavailable because no Worker execution context was provided. Call the route through createApp().fetch(request, env, ctx) so Goribu can bind ctx.waitUntil.",
+        );
+      }
+      worker.waitUntil(promise);
+    },
+    rawBody: readRawBodyOnce,
+    body() {
+      if (!bodyPromise) {
+        bodyPromise = readRawBodyOnce().then((bytes) =>
+          parseBody(bytes, request.headers.get("content-type")),
+        );
+      }
+      return bodyPromise;
+    },
+  };
+}
+
+function assertInputs(request, params) {
+  if (!(request instanceof Request)) {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params) requires a Web Request as its first argument. " +
+        "Pass the Request received by the Worker fetch handler.",
+    );
+  }
+
+  if (params === null || typeof params !== "object" || Array.isArray(params)) {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params) requires matched route parameters as an object. " +
+        "Pass the params returned by Goribu's route matcher, or {} for a static route.",
+    );
+  }
+
+  for (const name of Object.keys(params)) {
+    if (typeof params[name] !== "string") {
+      throw new TypeError(
+        `[Goribu] Route parameter "${name}" must be a string. ` +
+          "Pass the params returned by Goribu's route matcher without changing their values.",
+      );
+    }
+  }
+}
+
+function assertRuntime(runtime) {
+  if (runtime === undefined) return {};
+  if (runtime === null || typeof runtime !== "object" || Array.isArray(runtime)) {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params, runtime) requires runtime to contain Worker env bindings and a bound waitUntil function. Pass the values prepared by createApp().",
+    );
+  }
+  if (
+    runtime.env !== undefined &&
+    (runtime.env === null || typeof runtime.env !== "object" || Array.isArray(runtime.env))
+  ) {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params, runtime) requires runtime.env to be the Worker bindings object received by fetch.",
+    );
+  }
+  if (runtime.waitUntil !== undefined && typeof runtime.waitUntil !== "function") {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params, runtime) requires runtime.waitUntil to be the bound ctx.waitUntil function.",
+    );
+  }
+  return runtime;
+}
+
+function assertWaitUntilPromise(promise) {
+  let then;
+  try {
+    then = promise?.then;
+  } catch (cause) {
+    throw new TypeError(
+      "[Goribu] req.waitUntil(promise) requires a Promise. Pass the asynchronous work returned by the background operation.",
+      { cause },
+    );
+  }
+
+  if (typeof then !== "function") {
+    throw new TypeError(
+      "[Goribu] req.waitUntil(promise) requires a Promise. Pass the asynchronous work returned by the background operation.",
+    );
+  }
+}
+
+/** Copy through property definitions so `__proto__` remains ordinary data. */
+function copyParams(params) {
+  const copied = {};
+
+  for (const name of Object.keys(params)) {
+    Object.defineProperty(copied, name, {
+      configurable: true,
+      enumerable: true,
+      value: params[name],
+      writable: true,
+    });
+  }
+
+  return copied;
+}
+
+async function readRequestBytes(request) {
+  if (request.bodyUsed) {
+    throw new TypeError(
+      "[Goribu] Cannot read the request body because the Web Request body was already consumed. " +
+        "Create the Goribu request wrapper before reading the Request body directly.",
+    );
+  }
+
+  try {
+    return new Uint8Array(await request.arrayBuffer());
+  } catch (cause) {
+    throw new Error(
+      "[Goribu] Could not read the Web Request body. " +
+        "Pass an unread Request with a valid body stream.",
+      { cause },
+    );
+  }
+}
+
+async function parseBody(bytes, contentType) {
+  // Empty payloads use the friendly object fallback before media-type parsing.
+  // This deliberately means empty text and multipart bodies also resolve to {}.
+  if (bytes.byteLength === 0) return {};
+
+  const mediaType = contentType
+    ?.split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+
+  if (mediaType === "application/json" || mediaType?.endsWith("+json")) {
+    return parseJson(bytes);
+  }
+
+  if (mediaType === "application/x-www-form-urlencoded") {
+    return parseUrlEncoded(bytes);
+  }
+
+  if (mediaType === "multipart/form-data") {
+    return parseMultipart(bytes, contentType);
+  }
+
+  if (mediaType?.startsWith("text/")) {
+    return textDecoder.decode(bytes);
+  }
+
+  // The locked friendly fallback for an absent or unsupported Content-Type.
+  // Exact bytes remain available through rawBody().
+  return {};
+}
+
+function parseJson(bytes) {
+  let value;
+
+  try {
+    value = JSON.parse(textDecoder.decode(bytes));
+  } catch (cause) {
+    throw createHttpError(
+      400,
+      "[Goribu] Could not parse the application/json request body. " +
+        "Send valid JSON, or use rawBody() when the payload is not JSON.",
+      { cause },
+    );
+  }
+
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw createHttpError(
+      400,
+      "[Goribu] The application/json request body must contain a JSON object. " +
+        "Wrap top-level arrays or primitive values in an object.",
+    );
+  }
+
+  return value;
+}
+
+function parseUrlEncoded(bytes) {
+  const searchParams = new URLSearchParams(textDecoder.decode(bytes));
+  const parsed = {};
+
+  for (const name of new Set(searchParams.keys())) {
+    const values = searchParams.getAll(name);
+    Object.defineProperty(parsed, name, {
+      configurable: true,
+      enumerable: true,
+      value: values.length === 1 ? values[0] : values,
+      writable: true,
+    });
+  }
+
+  return parsed;
+}
+
+async function parseMultipart(bytes, contentType) {
+  if (!/;\s*boundary\s*=\s*(?:"[^"]+"|[^;\s]+)/i.test(contentType)) {
+    throw createHttpError(
+      400,
+      "[Goribu] Could not parse the multipart/form-data request body because its Content-Type " +
+        "is missing a boundary. Let the client set Content-Type when sending FormData.",
+    );
+  }
+
+  try {
+    const response = new Response(bytes, {
+      headers: { "content-type": contentType },
+    });
+    return await response.formData();
+  } catch (cause) {
+    throw createHttpError(
+      400,
+      "[Goribu] Could not parse the multipart/form-data request body. " +
+        "Check that its boundary and multipart encoding are valid.",
+      { cause },
+    );
+  }
+}

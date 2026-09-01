@@ -2,6 +2,7 @@ import { matchRoute } from "../routing/match-route.js";
 import { renderPage } from "../rendering/render-page.js";
 import { renderNotFound } from "../rendering/render-not-found.js";
 import { DefaultDocument } from "../rendering/document.js";
+import { createRequest } from "./create-request.js";
 import { createResponse, isResponseResult } from "./create-response.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
@@ -18,10 +19,10 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * the discovered `_document` identity. This boundary closes over that
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
- * response builder. The full request surface (query, headers, form and JSON
- * bodies, cookies), folder middleware, and the `_500` boundary are later
- * substeps of this block; a handler here receives a provisional request and the
- * response builder, and returns res.json(), res.text(), or res.redirect().
+ * response builder. A handler receives Goribu's request surface (method, path,
+ * params, query, headers, and the body helpers) and returns res.json(),
+ * res.text(), or res.redirect(). Worker bindings and req.waitUntil, folder
+ * middleware, cookies, and the `_500` boundary are later substeps of this block.
  *
  * @param {{
  *   manifest: object[],
@@ -160,8 +161,10 @@ export function createApp(options) {
   }
 
   // Run one named method handler and finalize its response-builder result. The
-  // request passed to the handler is provisional for this substep; the full
-  // request surface (query, headers, form and JSON bodies, cookies) is next.
+  // handler receives Goribu's request surface (method, path, params, query,
+  // headers, and the body helpers) and the response builder. Worker bindings
+  // (req.env) and req.waitUntil arrive when createApp is given env/ctx in a
+  // later substep; cookies arrive with cookie transport.
   async function dispatchHandler(match, method, request) {
     if (!modules.has(match.route.id)) {
       throw new Error(
@@ -178,7 +181,7 @@ export function createApp(options) {
       );
     }
 
-    const req = createHandlerRequest(request, match.params);
+    const req = createRequest(request, match.params);
     const res = createResponse({ canRender: match.route.hasDefaultExport });
     const result = await handler(req, res);
     return finalizeHandlerResult(result, method, match.route.id);
@@ -195,24 +198,6 @@ function canonicalPathname(pathname) {
   const stripped = pathname.replace(/\/+$/, "");
   const canonical = stripped === "" ? "/" : stripped;
   return canonical === pathname ? null : canonical;
-}
-
-/**
- * Build the request value passed to a handler.
- *
- * This is the provisional surface for this substep: enough for a handler to see
- * its method, URL, and route params. The full request object — query, headers,
- * `formData`, `json`, and cookies — is ported in the next substep and replaces
- * this shape without changing how handlers are invoked.
- */
-function createHandlerRequest(request, params) {
-  return Object.freeze({
-    method: request.method,
-    url: request.url,
-    params: params ?? {},
-    headers: request.headers,
-    raw: request,
-  });
 }
 
 /**

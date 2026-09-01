@@ -242,6 +242,38 @@ describe("createApp().fetch — named handlers", () => {
     expect(await (await app.fetch(get("/items/42"))).json()).toEqual({ id: "42" });
   });
 
+  it("gives the handler the request surface: query and headers", async () => {
+    const app = handlerApp(
+      new Map([
+        [
+          "hello",
+          {
+            GET: (req, res) =>
+              res.json({ q: req.query.get("q"), id: req.headers.get("x-request-id") }),
+          },
+        ],
+      ]),
+    );
+    const response = await app.fetch(
+      new Request("https://example.com/hello?q=hi", { headers: { "x-request-id": "abc" } }),
+    );
+    expect(await response.json()).toEqual({ q: "hi", id: "abc" });
+  });
+
+  it("parses a POSTed JSON body through req.body()", async () => {
+    const app = handlerApp(
+      new Map([["hello", { POST: async (req, res) => res.json(await req.body()) }]]),
+    );
+    const response = await app.fetch(
+      new Request("https://example.com/hello", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "hi" }),
+      }),
+    );
+    expect(await response.json()).toEqual({ title: "hi" });
+  });
+
   it("answers automatic HEAD by running the GET handler and dropping the body", async () => {
     const app = handlerApp(
       new Map([["hello", { GET: (req, res) => res.json({ ok: true }) }]]),

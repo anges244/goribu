@@ -1,10 +1,15 @@
-// A route with named method handlers and no page component. GET returns JSON;
-// POST redirects. This exercises Block 4's handler dispatch and the response
-// builder (res.json, res.redirect) end to end.
+// A route with named method handlers and no page component. It exercises Block
+// 4's handler dispatch and request surface: GET reads a query param, POST parses
+// the request body (JSON or form-encoded) through req.body().
 export function GET(req, res) {
-  return res.json({ message: "Hello from a GET handler", method: req.method });
+  return res.json({
+    greeting: `Hello, ${req.query.get("name") ?? "world"}`,
+    method: req.method,
+    path: req.path,
+  });
 }
 
-export function POST(req, res) {
-  return res.redirect("/");
+export async function POST(req, res) {
+  const body = await req.body();
+  return res.json({ received: body });
 }
