@@ -65,7 +65,7 @@ describe("writeWorkerEntry", () => {
     expect(source).toContain('const documentId = "src/routes/_document.jsx";');
   });
 
-  it("rejects a route that exports an HTTP handler, since handlers arrive later", () => {
+  it("imports a route that exports HTTP handlers so the runtime can dispatch them", () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");
     writeRoute(
@@ -74,9 +74,12 @@ describe("writeWorkerEntry", () => {
       "export function POST() {}\nexport default function Page() { return null; }\n",
     );
 
-    expect(() => writeWorkerEntry({ projectRoot: root })).toThrow(
-      /exports the HTTP handler\(s\) POST/,
-    );
+    const { source } = writeWorkerEntry({ projectRoot: root });
+
+    // The handler route is imported like any other module, and its exported
+    // methods travel in the manifest so matchRoute can produce a handler match.
+    expect(source).toContain('from "../src/routes/submit.jsx"');
+    expect(source).toMatch(/"methods":\s*\[\s*"POST"\s*\]/);
   });
 
   it("fails closed with a teaching error when no routes are found", () => {

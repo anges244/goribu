@@ -2,8 +2,13 @@ import { matchRoute } from "../routing/match-route.js";
 import { renderPage } from "../rendering/render-page.js";
 import { renderNotFound } from "../rendering/render-not-found.js";
 import { DefaultDocument } from "../rendering/document.js";
+import { createResponse, isResponseResult } from "./create-response.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
+
+// Statuses that cannot carry a response body. A terminal helper that produced a
+// body for one of these is a handler mistake, caught here rather than shipped.
+const BODYLESS_STATUSES = new Set([204, 205, 304]);
 
 /**
  * Create Goribu's Cloudflare Worker entrypoint for a routed, rendered app.
@@ -11,10 +16,12 @@ const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
  * Build integration prepares every input: the route manifest, a map from each
  * route's source ID to its loaded module, the discovered `_404` identity, and
  * the discovered `_document` identity. This boundary closes over that
- * application-constant data and turns each Web Request into a matched, streamed
- * HTML response. Request handlers, middleware, cookies, and the `_500` boundary
- * are the request surface of a later block, so this block serves pages, the
- * not-found page, and the automatic method responses routing alone can answer.
+ * application-constant data and turns each Web Request into a matched response:
+ * a streamed page, or the result a named method handler returns through the
+ * response builder. The full request surface (query, headers, form and JSON
+ * bodies, cookies), folder middleware, and the `_500` boundary are later
+ * substeps of this block; a handler here receives a provisional request and the
+ * response builder, and returns res.json(), res.text(), or res.redirect().
  *
  * @param {{
  *   manifest: object[],
@@ -89,7 +96,7 @@ export function createApp(options) {
         method: request.method,
       });
 
-      const response = await resolveResponse(match, url);
+      const response = await resolveResponse(match, url, request);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
       // headers but never carries a body. Normalizing here, rather than in the
@@ -105,13 +112,26 @@ export function createApp(options) {
     },
   });
 
-  function resolveResponse(match, url) {
+  function resolveResponse(match, url, request) {
     switch (match.kind) {
-      // A matched HEAD arrives as "automatic-head"; it renders the same page as
-      // GET and the HEAD boundary above drops the body. Its target is always a
-      // page in this block because routes exporting handlers are rejected at build.
+      // A route that exports a handler for the request method: run it and
+      // finalize what it returns through the response builder.
+      case "handler":
+        return dispatchHandler(match, match.method, request);
+
       case "page":
+        return renderPage({
+          Page: loadDefaultExport(modules, match.route.id, "route"),
+          Document,
+        });
+
+      // A matched HEAD arrives as "automatic-head" and the HEAD boundary above
+      // drops the body. Its target is whatever GET would serve: a handler when
+      // the route exports GET, otherwise the default page.
       case "automatic-head":
+        if (match.target?.kind === "handler") {
+          return dispatchHandler(match, match.target.method, request);
+        }
         return renderPage({
           Page: loadDefaultExport(modules, match.route.id, "route"),
           Document,
@@ -133,12 +153,35 @@ export function createApp(options) {
         return renderNotFound({ NotFoundPage, Document });
 
       default:
-        // "handler" is unreachable: the build rejects routes that export HTTP
-        // handlers until the request surface lands. Fail closed if one appears.
         throw new TypeError(
-          `[Goribu] Unsupported route match "${match.kind}" for "${url.pathname}". Request handlers arrive in a later block.`,
+          `[Goribu] Unsupported route match "${match.kind}" for "${url.pathname}".`,
         );
     }
+  }
+
+  // Run one named method handler and finalize its response-builder result. The
+  // request passed to the handler is provisional for this substep; the full
+  // request surface (query, headers, form and JSON bodies, cookies) is next.
+  async function dispatchHandler(match, method, request) {
+    if (!modules.has(match.route.id)) {
+      throw new Error(
+        `[Goribu] The route module "${match.route.id}" was matched but is not in the loaded module map. ` +
+          "Rebuild so every manifest route has a loaded module.",
+      );
+    }
+
+    const handler = modules.get(match.route.id)?.[method];
+    if (typeof handler !== "function") {
+      throw new TypeError(
+        `[Goribu] Loaded route module "${match.route.id}" does not export a callable ${method} handler. ` +
+          `Export \`export function ${method}(req, res)\` from the route file.`,
+      );
+    }
+
+    const req = createHandlerRequest(request, match.params);
+    const res = createResponse({ canRender: match.route.hasDefaultExport });
+    const result = await handler(req, res);
+    return finalizeHandlerResult(result, method, match.route.id);
   }
 }
 
@@ -152,6 +195,106 @@ function canonicalPathname(pathname) {
   const stripped = pathname.replace(/\/+$/, "");
   const canonical = stripped === "" ? "/" : stripped;
   return canonical === pathname ? null : canonical;
+}
+
+/**
+ * Build the request value passed to a handler.
+ *
+ * This is the provisional surface for this substep: enough for a handler to see
+ * its method, URL, and route params. The full request object — query, headers,
+ * `formData`, `json`, and cookies — is ported in the next substep and replaces
+ * this shape without changing how handlers are invoked.
+ */
+function createHandlerRequest(request, params) {
+  return Object.freeze({
+    method: request.method,
+    url: request.url,
+    params: params ?? {},
+    headers: request.headers,
+    raw: request,
+  });
+}
+
+/**
+ * Turn a handler's response-builder result into a Web Response, or fail with a
+ * message that teaches how to return a valid one.
+ */
+function finalizeHandlerResult(result, method, routeId) {
+  if (!isResponseResult(result)) {
+    const identity = `${method} handler for route ${JSON.stringify(routeId)}`;
+    if (result === undefined) {
+      throw new TypeError(
+        `[Goribu] The ${identity} did not return a response. ` +
+          "Return a res.* result such as res.json(), res.text(), or res.redirect().",
+      );
+    }
+    if (result instanceof Response) {
+      throw new TypeError(
+        `[Goribu] The ${identity} returned a Web Response. ` +
+          "Return a res.* result instead so Goribu can apply framework behavior.",
+      );
+    }
+    throw new TypeError(
+      `[Goribu] The ${identity} returned a non-response value. ` +
+        "Return a genuine res.* result instead of a string, the response builder, or a plain object.",
+    );
+  }
+
+  if (
+    result.kind === "text" ||
+    result.kind === "json" ||
+    result.kind === "invalid"
+  ) {
+    if (BODYLESS_STATUSES.has(result.status)) {
+      throw new RangeError(
+        `[Goribu] Cannot send a ${result.kind} response with status ${result.status} because that status cannot carry a response body. ` +
+          "Choose a body-bearing status before calling the terminal response helper.",
+      );
+    }
+    return new Response(result.body, {
+      status: result.status,
+      headers: toWebHeaders(result.headers),
+    });
+  }
+
+  if (result.kind === "redirect") {
+    return new Response(null, {
+      status: result.status,
+      headers: toWebHeaders(result.headers),
+    });
+  }
+
+  // res.render() and res.notFound() from a handler render a page (with props and
+  // the _404 boundary), which this substep does not wire yet. Fail closed with a
+  // pointer to the intents that work today rather than serving something wrong.
+  if (result.kind === "render" || result.kind === "not-found") {
+    const helper = result.kind === "not-found" ? "res.notFound()" : "res.render()";
+    throw new Error(
+      `[Goribu] A handler returned ${helper}, which Goribu cannot finalize yet. ` +
+        "Return res.json(), res.text(), or res.redirect() from a handler for now.",
+    );
+  }
+
+  throw new TypeError(
+    `[Goribu] Cannot finalize unknown response result kind ${JSON.stringify(result.kind)}. ` +
+      "Return the result from a supported res.* terminal helper.",
+  );
+}
+
+/**
+ * Convert a response-builder headers snapshot (string or array-of-string values)
+ * into Web Headers, appending each entry of an array so repeated headers survive.
+ */
+function toWebHeaders(values) {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(values)) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(name, item);
+    } else {
+      headers.set(name, value);
+    }
+  }
+  return headers;
 }
 
 /**

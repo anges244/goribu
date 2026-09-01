@@ -23,6 +23,35 @@ const POST = {
   hasDefaultExport: true,
 };
 
+// Handler-route manifest entries. A route that exports method handlers carries
+// those method names; hasDefaultExport is false unless it also exports a page.
+const HELLO_HANDLER = {
+  id: "hello",
+  pattern: "/hello",
+  segments: [{ type: "static", value: "hello" }],
+  methods: ["GET", "POST"],
+  hasDefaultExport: false,
+};
+const ITEM_HANDLER = {
+  id: "item",
+  pattern: "/items/:id",
+  segments: [
+    { type: "static", value: "items" },
+    { type: "dynamic", name: "id" },
+  ],
+  methods: ["GET"],
+  hasDefaultExport: false,
+};
+// A route that exports both a default page and a GET handler: the explicit
+// handler answers GET, so the page never renders for it.
+const MIXED = {
+  id: "mixed",
+  pattern: "/mixed",
+  segments: [{ type: "static", value: "mixed" }],
+  methods: ["GET"],
+  hasDefaultExport: true,
+};
+
 function pageModule(text) {
   return { default: () => h("h1", null, text) };
 }
@@ -168,5 +197,89 @@ describe("createApp().fetch", () => {
       ]),
     });
     await expect(app.fetch(get("/"))).rejects.toThrow(/no default-exported React component/);
+  });
+});
+
+describe("createApp().fetch — named handlers", () => {
+  function handlerApp(modules) {
+    return createApp({
+      manifest: [HELLO_HANDLER, ITEM_HANDLER, MIXED],
+      modules,
+      errorPages: { notFound: null },
+      documentId: null,
+    });
+  }
+
+  const post = (path) =>
+    new Request(`https://example.com${path}`, { method: "POST" });
+
+  it("dispatches a GET handler and finalizes res.json()", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: (req, res) => res.json({ ok: true, method: req.method }) }]]),
+    );
+    const response = await app.fetch(get("/hello"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(await response.json()).toEqual({ ok: true, method: "GET" });
+  });
+
+  it("finalizes res.redirect() as a 303 to the location with no body", async () => {
+    const app = handlerApp(
+      new Map([["hello", { POST: (req, res) => res.redirect("/") }]]),
+    );
+    const response = await app.fetch(post("/hello"));
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/");
+    expect(await response.text()).toBe("");
+  });
+
+  it("passes dynamic route params to the handler", async () => {
+    const app = handlerApp(
+      new Map([["item", { GET: (req, res) => res.json({ id: req.params.id }) }]]),
+    );
+    expect(await (await app.fetch(get("/items/42"))).json()).toEqual({ id: "42" });
+  });
+
+  it("answers automatic HEAD by running the GET handler and dropping the body", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: (req, res) => res.json({ ok: true }) }]]),
+    );
+    const response = await app.fetch(
+      new Request("https://example.com/hello", { method: "HEAD" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(await response.text()).toBe("");
+  });
+
+  it("runs an explicit GET handler instead of the route's default page", async () => {
+    const app = handlerApp(
+      new Map([
+        ["mixed", { default: () => h("h1", null, "Page"), GET: (req, res) => res.text("handler wins") }],
+      ]),
+    );
+    const response = await app.fetch(get("/mixed"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await response.text()).toBe("handler wins");
+  });
+
+  it("teaches when a handler returns nothing", async () => {
+    const app = handlerApp(new Map([["hello", { GET: () => {} }]]));
+    await expect(app.fetch(get("/hello"))).rejects.toThrow(/did not return a response/);
+  });
+
+  it("teaches when a handler returns a raw Web Response", async () => {
+    const app = handlerApp(new Map([["hello", { GET: () => new Response("no") }]]));
+    await expect(app.fetch(get("/hello"))).rejects.toThrow(/returned a Web Response/);
+  });
+
+  it("teaches when a handler returns a non-response value", async () => {
+    const app = handlerApp(new Map([["hello", { GET: () => "just a string" }]]));
+    await expect(app.fetch(get("/hello"))).rejects.toThrow(/non-response value/);
   });
 });

@@ -14,9 +14,9 @@ const ROUTES_DIRECTORY = join("src", "routes");
  * The generator scans `src/routes`, builds the route manifest, discovers an
  * optional `_404` page, and emits a Worker that statically imports every route
  * module and hands the prepared data to `createApp`. Static imports keep the
- * routes in the Worker bundle; the runtime never touches the filesystem. Routes
- * that export HTTP handlers are rejected here because request handlers arrive in
- * a later block, so this Worker only renders pages.
+ * routes in the Worker bundle; the runtime never touches the filesystem. A route
+ * may default-export a page, export named HTTP method handlers, or both; the
+ * runtime dispatches whichever the matched request calls for.
  *
  * @param {{ projectRoot: string }} options
  * @returns {{ outputFile: string, source: string }}
@@ -41,8 +41,6 @@ export function writeWorkerEntry(options) {
         "Add at least one route file, for example src/routes/index.jsx that default-exports a React component.",
     );
   }
-  assertNoHandlerRoutes(manifest);
-
   const errorPages = scanErrorPages(routesDir);
   const notFoundId =
     errorPages.notFound === null ? null : routeId(errorPages.notFound, root);
@@ -73,22 +71,6 @@ export function writeWorkerEntry(options) {
   mkdirSync(workerDirectory, { recursive: true });
   writeFileSync(outputFile, source, "utf8");
   return Object.freeze({ outputFile, source });
-}
-
-/**
- * Reject routes that export HTTP handlers. Request handlers, and the request
- * surface they need, belong to a later block; failing here rather than at
- * runtime tells the author exactly which route is ahead of the framework.
- */
-function assertNoHandlerRoutes(manifest) {
-  for (const route of manifest) {
-    if (route.methods.length > 0) {
-      throw new Error(
-        `[Goribu] Route "${route.id}" exports the HTTP handler(s) ${route.methods.join(", ")}. ` +
-          "Request handlers arrive in a later block; for now a route file may only default-export a page component.",
-      );
-    }
-  }
 }
 
 /** Keep only the fields the runtime matcher reads. The absolute file path stays
