@@ -74,13 +74,14 @@ export default {
 };
 ```
 
-### `src/page.jsx`
+### `src/routes/index.jsx`
 
-The page, a default-exported React component. Every request renders it (routing
-arrives in Block 2).
+Your first route. Goribu routes by file: every file under `src/routes/` becomes
+a URL, and `index.jsx` is the site root (`/`). A route default-exports a React
+component.
 
 ```jsx
-export default function Page() {
+export default function IndexPage() {
   return (
     <main>
       <h1>Hello from Goribu</h1>
@@ -88,6 +89,9 @@ export default function Page() {
   );
 }
 ```
+
+Add more routes by adding files — `src/routes/about.jsx` serves `/about`,
+`src/routes/posts/[id].jsx` serves `/posts/:id`. See [routing.md](./routing.md).
 
 ### `src/client-entry.js`
 
