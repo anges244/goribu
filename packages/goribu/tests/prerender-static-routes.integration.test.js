@@ -71,6 +71,20 @@ describe("goribu build static output (workerd)", () => {
     expect(build.output).toContain("src/routes/posts/demo/_middleware.js");
   });
 
+  it("passes Worker bindings and a bound waitUntil capability to a fixture handler", async () => {
+    const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
+    await harness.listen();
+    const worker = harness.getWorker();
+    try {
+      const response = await worker.fetch("https://goribu.test/hello");
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ hasAssets: true });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("runs selected fixture middleware outermost-first in the emitted Worker", async () => {
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();

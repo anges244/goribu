@@ -71,11 +71,13 @@ function build(overrides = {}) {
 }
 
 const get = (path) => new Request(`https://example.com${path}`);
+const CTX = () => ({ waitUntil: () => {} });
+const dispatch = (app, request) => app.fetch(request, {}, CTX());
 
 async function developmentErrorBody(app, request) {
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
-    const response = await app.fetch(request);
+    const response = await dispatch(app, request);
     expect(response.status).toBe(500);
     expect(response.headers.get("content-type")).toBe(
       "text/plain; charset=utf-8",
@@ -88,7 +90,7 @@ async function developmentErrorBody(app, request) {
 
 describe("createApp().fetch", () => {
   it("renders a matched page as a streamed HTML document", async () => {
-    const response = await build().fetch(get("/"));
+    const response = await dispatch(build(), get("/"));
     const body = await response.text();
 
     expect(response.status).toBe(200);
@@ -100,19 +102,19 @@ describe("createApp().fetch", () => {
   });
 
   it("matches a dynamic segment and renders the same page for any value", async () => {
-    const response = await build().fetch(get("/posts/hello-world"));
+    const response = await dispatch(build(), get("/posts/hello-world"));
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("<h1>A post</h1>");
   });
 
   it("redirects a trailing slash to the canonical path with 308", async () => {
-    const response = await build().fetch(get("/about/"));
+    const response = await dispatch(build(), get("/about/"));
     expect(response.status).toBe(308);
     expect(new URL(response.headers.get("location")).pathname).toBe("/about");
   });
 
   it("drops repeated trailing slashes and preserves the query in one redirect", async () => {
-    const response = await build().fetch(get("/posts/hello//?page=2"));
+    const response = await dispatch(build(), get("/posts/hello//?page=2"));
     expect(response.status).toBe(308);
     const location = new URL(response.headers.get("location"));
     expect(location.pathname).toBe("/posts/hello");
@@ -120,11 +122,11 @@ describe("createApp().fetch", () => {
   });
 
   it("does not redirect the root path", async () => {
-    expect((await build().fetch(get("/"))).status).toBe(200);
+    expect((await dispatch(build(), get("/"))).status).toBe(200);
   });
 
   it("streams the built-in 404 page when no route matches", async () => {
-    const response = await build().fetch(get("/missing"));
+    const response = await dispatch(build(), get("/missing"));
     expect(response.status).toBe(404);
     expect(await response.text()).toContain("could not be found");
   });
@@ -139,7 +141,7 @@ describe("createApp().fetch", () => {
       ]),
       errorPages: { notFound: "notfound" },
     });
-    const response = await app.fetch(get("/missing"));
+    const response = await dispatch(app, get("/missing"));
     expect(response.status).toBe(404);
     expect(await response.text()).toContain("<h1>Custom missing</h1>");
   });
@@ -154,19 +156,20 @@ describe("createApp().fetch", () => {
       ]),
       documentId: "doc",
     });
-    const body = await (await app.fetch(get("/"))).text();
+    const body = await (await dispatch(app, get("/"))).text();
     expect(body).toContain('data-custom=""');
     expect(body).toContain("<h1>Home</h1>");
   });
 
   it("answers HEAD with the page status and no body", async () => {
-    const response = await build().fetch(new Request("https://example.com/", { method: "HEAD" }));
+    const response = await dispatch(build(), new Request("https://example.com/", { method: "HEAD" }));
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("");
   });
 
   it("answers HEAD for an unmatched route with a 404 status and no body", async () => {
-    const response = await build().fetch(
+    const response = await dispatch(
+      build(),
       new Request("https://example.com/missing", { method: "HEAD" }),
     );
     expect(response.status).toBe(404);
@@ -183,7 +186,8 @@ describe("createApp().fetch", () => {
       ]),
       errorPages: { notFound: "notfound" },
     });
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/missing", { method: "HEAD" }),
     );
     expect(response.status).toBe(404);
@@ -191,13 +195,13 @@ describe("createApp().fetch", () => {
   });
 
   it("answers automatic OPTIONS with 204 and an Allow header", async () => {
-    const response = await build().fetch(new Request("https://example.com/", { method: "OPTIONS" }));
+    const response = await dispatch(build(), new Request("https://example.com/", { method: "OPTIONS" }));
     expect(response.status).toBe(204);
     expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
   });
 
   it("answers an unsupported method with 405 and an Allow header", async () => {
-    const response = await build().fetch(new Request("https://example.com/", { method: "POST" }));
+    const response = await dispatch(build(), new Request("https://example.com/", { method: "POST" }));
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
   });
@@ -215,6 +219,155 @@ describe("createApp().fetch", () => {
       "[Goribu] The route module \"index\" has no default-exported React component. Export a React component as the file's default export.",
     );
   });
+});
+
+describe("createApp().fetch(request, env, ctx)", () => {
+  const ROOT_MIDDLEWARE = "src/routes/_middleware.js";
+
+  it("passes the exact env bindings object to middleware and the handler", async () => {
+    const bindings = { API_TOKEN: "secret" };
+    let middlewareRequest;
+    let handlerRequest;
+    const app = createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [
+          ROOT_MIDDLEWARE,
+          {
+            default: (req) => {
+              middlewareRequest = req;
+            },
+          },
+        ],
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              handlerRequest = req;
+              return res.json({ token: req.env.API_TOKEN });
+            },
+          },
+        ],
+      ]),
+      errorPages: { notFound: null },
+      documentId: null,
+      middlewareByRoute: new Map([
+        [
+          "hello",
+          [{ id: ROOT_MIDDLEWARE, relativePath: "_middleware.js" }],
+        ],
+      ]),
+    });
+
+    const response = await app.fetch(get("/hello"), bindings, CTX());
+
+    expect(middlewareRequest.env).toBe(bindings);
+    expect(handlerRequest.env).toBe(bindings);
+    expect(await response.json()).toEqual({ token: "secret" });
+  });
+
+  it("forwards req.waitUntil to the bound execution context and returns undefined", async () => {
+    const promise = Promise.resolve();
+    let waitUntilResult;
+    let ctx;
+    const waitUntil = vi.fn(function (received) {
+      expect(this).toBe(ctx);
+      expect(received).toBe(promise);
+    });
+    ctx = { waitUntil };
+    const app = createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              waitUntilResult = req.waitUntil(promise);
+              return res.json({ ok: true });
+            },
+          },
+        ],
+      ]),
+      errorPages: { notFound: null },
+      documentId: null,
+    });
+
+    const response = await app.fetch(get("/hello"), {}, ctx);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).toHaveBeenCalledOnce();
+    expect(waitUntilResult).toBeUndefined();
+  });
+
+  it("discloses the teaching error when req.waitUntil receives a non-promise", async () => {
+    const app = createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [
+          "hello",
+          {
+            GET: (req) => req.waitUntil("not a promise"),
+          },
+        ],
+      ]),
+      errorPages: { notFound: null },
+      documentId: null,
+      mode: "development",
+    });
+
+    await expect(developmentErrorBody(app, get("/hello"))).resolves.toContain(
+      "[Goribu] req.waitUntil(promise) requires a Promise. Pass the asynchronous work returned by the background operation.",
+    );
+  });
+
+  it("keeps the raw execution context private from routes", async () => {
+    let handlerRequest;
+    const app = createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              handlerRequest = req;
+              return res.json({ hasContext: "ctx" in req });
+            },
+          },
+        ],
+      ]),
+      errorPages: { notFound: null },
+      documentId: null,
+    });
+
+    const response = await dispatch(app, get("/hello"));
+
+    expect(handlerRequest).not.toHaveProperty("ctx");
+    expect(await response.json()).toEqual({ hasContext: false });
+  });
+
+  it("rejects a non-Request before the request error boundary", async () => {
+    await expect(build().fetch({}, {}, CTX())).rejects.toThrow(
+      "[Goribu] app.fetch(request, env, ctx) requires a Web Request as its first argument. Pass the Request received by the Cloudflare Worker fetch handler.",
+    );
+  });
+
+  it.each([[undefined], [null], [[]]])(
+    "rejects invalid env before the request error boundary: %j",
+    async (env) => {
+      await expect(build().fetch(get("/"), env, CTX())).rejects.toThrow(
+        "[Goribu] app.fetch(request, env, ctx) requires the Worker bindings object as its second argument. Pass env from the Cloudflare Worker fetch handler, using {} when no bindings are configured.",
+      );
+    },
+  );
+
+  it.each([undefined, null, {}, { waitUntil: null }])(
+    "rejects an invalid execution context before the request error boundary: %j",
+    async (ctx) => {
+      await expect(build().fetch(get("/"), {}, ctx)).rejects.toThrow(
+        "[Goribu] app.fetch(request, env, ctx) requires the Worker execution context with ctx.waitUntil as its third argument. Pass ctx from the Cloudflare Worker fetch handler.",
+      );
+    },
+  );
 });
 
 describe("createApp().fetch — error boundaries", () => {
@@ -241,7 +394,8 @@ describe("createApp().fetch — error boundaries", () => {
         documentId: null,
         mode: "production",
       });
-      const response = await app.fetch(
+      const response = await dispatch(
+        app,
         get("/hello?token=query-secret"),
       );
       const body = await response.text();
@@ -290,7 +444,7 @@ describe("createApp().fetch — error boundaries", () => {
         errorPages: { notFound: null, serverError: null },
         documentId: null,
       });
-      const response = await app.fetch(get("/hello"));
+      const response = await dispatch(app, get("/hello"));
       const body = await response.text();
 
       expect(response.status).toBe(500);
@@ -322,7 +476,7 @@ describe("createApp().fetch — error boundaries", () => {
         documentId: null,
         mode: "development",
       });
-      const response = await app.fetch(get("/hello?token=query-secret"));
+      const response = await dispatch(app, get("/hello?token=query-secret"));
       const body = await response.text();
 
       expect(response.status).toBe(500);
@@ -360,7 +514,8 @@ describe("createApp().fetch — error boundaries", () => {
           documentId: null,
           mode,
         });
-        const response = await app.fetch(
+        const response = await dispatch(
+          app,
           new Request("https://example.com/hello?token=query-secret", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -400,7 +555,7 @@ describe("createApp().fetch — error boundaries", () => {
         errorPages: { notFound: null, serverError: SERVER_ERROR },
         documentId: null,
       });
-      const response = await app.fetch(get("/hello"));
+      const response = await dispatch(app, get("/hello"));
       const body = await response.text();
       const firstLog = consoleError.mock.calls.find(
         ([message]) =>
@@ -456,7 +611,7 @@ describe("createApp().fetch — error boundaries", () => {
           ],
         ]),
       });
-      const response = await app.fetch(get("/hello"));
+      const response = await dispatch(app, get("/hello"));
 
       expect(response.status).toBe(500);
       expect(response.headers.get("set-cookie")).toBe(
@@ -536,7 +691,7 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(middlewareRequest).toBe(handlerRequest);
     expect(response.headers.get("x-root")).toBe("yes");
@@ -559,7 +714,7 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/login");
@@ -582,7 +737,7 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(get("/"));
+    const response = await dispatch(app, get("/"));
 
     expect(middleware).toHaveBeenCalledTimes(1);
     expect(Page).toHaveBeenCalledTimes(1);
@@ -612,7 +767,8 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/", { method: "HEAD" }),
     );
 
@@ -636,7 +792,7 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(get("/"));
+    const response = await dispatch(app, get("/"));
 
     expect(await response.text()).toBe("replaced");
     expect(Page).not.toHaveBeenCalled();
@@ -661,7 +817,7 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(response.headers.get("set-cookie")).toBe(
       "from-middleware=yes; HttpOnly",
@@ -715,7 +871,8 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/hello", { method: "HEAD" }),
     );
 
@@ -738,9 +895,9 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    await app.fetch(new Request("https://example.com/hello", { method: "OPTIONS" }));
-    await app.fetch(new Request("https://example.com/hello", { method: "PUT" }));
-    await app.fetch(get("/missing"));
+    await dispatch(app, new Request("https://example.com/hello", { method: "OPTIONS" }));
+    await dispatch(app, new Request("https://example.com/hello", { method: "PUT" }));
+    await dispatch(app, get("/missing"));
 
     expect(middleware).not.toHaveBeenCalled();
   });
@@ -760,7 +917,7 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    const response = await app.fetch(get("/"));
+    const response = await dispatch(app, get("/"));
 
     expect(middleware).not.toHaveBeenCalled();
     expect(Page).toHaveBeenCalledTimes(1);
@@ -786,7 +943,7 @@ describe("createApp().fetch — named handlers", () => {
     const app = handlerApp(
       new Map([["hello", { GET: (req, res) => res.json({ ok: true, method: req.method }) }]]),
     );
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
@@ -797,7 +954,7 @@ describe("createApp().fetch — named handlers", () => {
     const app = handlerApp(
       new Map([["hello", { POST: (req, res) => res.redirect("/") }]]),
     );
-    const response = await app.fetch(post("/hello"));
+    const response = await dispatch(app, post("/hello"));
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/");
@@ -808,7 +965,7 @@ describe("createApp().fetch — named handlers", () => {
     const app = handlerApp(
       new Map([["item", { GET: (req, res) => res.json({ id: req.params.id }) }]]),
     );
-    expect(await (await app.fetch(get("/items/42"))).json()).toEqual({ id: "42" });
+    expect(await (await dispatch(app, get("/items/42"))).json()).toEqual({ id: "42" });
   });
 
   it("gives the handler the request surface: query and headers", async () => {
@@ -823,7 +980,8 @@ describe("createApp().fetch — named handlers", () => {
         ],
       ]),
     );
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/hello?q=hi", { headers: { "x-request-id": "abc" } }),
     );
     expect(await response.json()).toEqual({ q: "hi", id: "abc" });
@@ -843,7 +1001,7 @@ describe("createApp().fetch — named handlers", () => {
         ],
       ]),
     );
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(response.headers.get("set-cookie")).toBe("session=abc; HttpOnly");
     expect(await response.json()).toEqual({ ok: true });
@@ -858,7 +1016,8 @@ describe("createApp().fetch — named handlers", () => {
         ],
       ]),
     );
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/hello", {
         headers: { cookie: "theme=dark" },
       }),
@@ -881,7 +1040,8 @@ describe("createApp().fetch — named handlers", () => {
         ],
       ]),
     );
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/hello", { method: "HEAD" }),
     );
 
@@ -905,9 +1065,9 @@ describe("createApp().fetch — named handlers", () => {
     );
 
     const responses = await Promise.all([
-      app.fetch(new Request("https://example.com/hello", { method: "OPTIONS" })),
-      app.fetch(new Request("https://example.com/hello", { method: "PUT" })),
-      app.fetch(get("/hello/")),
+      dispatch(app, new Request("https://example.com/hello", { method: "OPTIONS" })),
+      dispatch(app, new Request("https://example.com/hello", { method: "PUT" })),
+      dispatch(app, get("/hello/")),
     ]);
 
     expect(responses.map((response) => response.headers.get("set-cookie"))).toEqual([
@@ -921,7 +1081,8 @@ describe("createApp().fetch — named handlers", () => {
     const app = handlerApp(
       new Map([["hello", { POST: async (req, res) => res.json(await req.body()) }]]),
     );
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/hello", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -935,7 +1096,8 @@ describe("createApp().fetch — named handlers", () => {
     const app = handlerApp(
       new Map([["hello", { GET: (req, res) => res.json({ ok: true }) }]]),
     );
-    const response = await app.fetch(
+    const response = await dispatch(
+      app,
       new Request("https://example.com/hello", { method: "HEAD" }),
     );
 
@@ -950,7 +1112,7 @@ describe("createApp().fetch — named handlers", () => {
         ["mixed", { default: () => h("h1", null, "Page"), GET: (req, res) => res.text("handler wins") }],
       ]),
     );
-    const response = await app.fetch(get("/mixed"));
+    const response = await dispatch(app, get("/mixed"));
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
@@ -969,7 +1131,7 @@ describe("createApp().fetch — named handlers", () => {
         ],
       ]),
     );
-    const response = await app.fetch(get("/mixed?name=Goribu"));
+    const response = await dispatch(app, get("/mixed?name=Goribu"));
     const body = await response.text();
 
     expect(response.status).toBe(200);
@@ -990,7 +1152,7 @@ describe("createApp().fetch — named handlers", () => {
         ],
       ]),
     );
-    const response = await app.fetch(get("/mixed"));
+    const response = await dispatch(app, get("/mixed"));
 
     expect(response.status).toBe(201);
     expect(response.headers.get("x-created")).toBe("yes");
@@ -1012,12 +1174,13 @@ describe("createApp().fetch — named handlers", () => {
         ]),
       );
 
-    const overridden = await build({ "content-type": "text/html; charset=iso-8859-1" }).fetch(
+    const overridden = await dispatch(
+      build({ "content-type": "text/html; charset=iso-8859-1" }),
       get("/mixed"),
     );
     expect(overridden.headers.get("content-type")).toBe("text/html; charset=iso-8859-1");
 
-    const cleared = await build({ "content-type": [] }).fetch(get("/mixed"));
+    const cleared = await dispatch(build({ "content-type": [] }), get("/mixed"));
     expect(cleared.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
@@ -1025,7 +1188,7 @@ describe("createApp().fetch — named handlers", () => {
     const app = handlerApp(
       new Map([["hello", { GET: (req, res) => res.notFound() }]]),
     );
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(response.status).toBe(404);
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
@@ -1042,7 +1205,7 @@ describe("createApp().fetch — named handlers", () => {
       errorPages: { notFound: "notfound" },
       documentId: null,
     });
-    const response = await app.fetch(get("/hello"));
+    const response = await dispatch(app, get("/hello"));
 
     expect(response.status).toBe(404);
     expect(await response.text()).toContain("<h1>Missing: no such item</h1>");

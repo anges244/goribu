@@ -26,11 +26,10 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, and the body helpers) and returns any res.* intent:
- * res.text(), res.json(), res.redirect(), res.render(props) to stream the route's
- * own page with data, or res.notFound(props) for the _404 page. Worker bindings
- * and req.waitUntil, folder middleware, cookies, and the `_500` boundary are
- * later substeps of this block.
+ * params, query, headers, body helpers, Worker bindings, and a bound waitUntil
+ * capability) and returns any res.* intent: res.text(), res.json(),
+ * res.redirect(), res.render(props) to stream the route's own page with data, or
+ * res.notFound(props) for the _404 page.
  *
  * @param {{
  *   manifest: object[],
@@ -40,7 +39,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  *   middlewareByRoute?: Map<string, Array<{ id: string, relativePath: string }>>,
  *   mode?: "development"|"production",
  * }} options
- * @returns {{ fetch(request: Request): Promise<Response> }}
+ * @returns {{ fetch(request: Request, env: unknown, ctx: unknown): Promise<Response> }}
  */
 export function createApp(options) {
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
@@ -100,12 +99,8 @@ export function createApp(options) {
   const middlewareRunners = createMiddlewareRunners(middlewareByRoute, modules);
 
   return Object.freeze({
-    async fetch(request) {
-      if (!(request instanceof Request)) {
-        throw new TypeError(
-          "[Goribu] app.fetch(request) requires the Web Request received by the Cloudflare Worker fetch handler.",
-        );
-      }
+    async fetch(request, env, ctx) {
+      assertWorkerFetchInputs(request, env, ctx);
 
       const url = new URL(request.url);
 
@@ -122,6 +117,11 @@ export function createApp(options) {
       }
 
       const cookieJar = createCookieJar(request);
+      const runtime = {
+        env,
+        waitUntil: ctx.waitUntil.bind(ctx),
+        cookies: cookieJar,
+      };
       const match = matchRoute({
         manifest,
         pathname: url.pathname,
@@ -130,7 +130,7 @@ export function createApp(options) {
 
       let response;
       try {
-        response = await resolveResponse(match, url, request, cookieJar);
+        response = await resolveResponse(match, url, request, runtime);
       } catch (error) {
         response =
           mode === "development"
@@ -161,7 +161,7 @@ export function createApp(options) {
     },
   });
 
-  function resolveResponse(match, url, request, cookieJar) {
+  function resolveResponse(match, url, request, runtime) {
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
       // finalize what it returns through the response builder.
@@ -172,11 +172,11 @@ export function createApp(options) {
             match,
             { kind: "handler", method: match.method },
             request,
-            cookieJar,
+            runtime,
             runMiddleware,
           );
         }
-        return dispatchHandler(match, match.method, request, cookieJar);
+        return dispatchHandler(match, match.method, request, runtime);
       }
 
       case "page": {
@@ -186,7 +186,7 @@ export function createApp(options) {
             match,
             { kind: "page", method: "GET" },
             request,
-            cookieJar,
+            runtime,
             runMiddleware,
           );
         }
@@ -206,12 +206,12 @@ export function createApp(options) {
             match,
             { ...match.target, method: "GET" },
             request,
-            cookieJar,
+            runtime,
             runMiddleware,
           );
         }
         if (match.target?.kind === "handler") {
-          return dispatchHandler(match, match.target.method, request, cookieJar);
+          return dispatchHandler(match, match.target.method, request, runtime);
         }
         return renderPage({
           Page: loadDefaultExport(modules, match.route.id, "route"),
@@ -250,10 +250,10 @@ export function createApp(options) {
     match,
     target,
     request,
-    cookieJar,
+    runtime,
     runMiddleware,
   ) {
-    const req = createRequest(request, match.params, { cookies: cookieJar });
+    const req = createRequest(request, match.params, runtime);
     const res = createResponse({ canRender: match.route.hasDefaultExport });
     const result = await runMiddleware(req, res);
 
@@ -261,17 +261,16 @@ export function createApp(options) {
       return finalizeMatchedResult(result, match, target.method);
     }
     if (target.kind === "handler") {
-      return dispatchHandler(match, target.method, request, cookieJar, { req, res });
+      return dispatchHandler(match, target.method, request, runtime, { req, res });
     }
     return finalizeMatchedResult(res.render({}), match, target.method);
   }
 
   // Run one named method handler and finalize its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, the body helpers, and the request cookie jar) and the response
-  // builder. Worker bindings (req.env) and req.waitUntil arrive when createApp
-  // is given env/ctx in a later substep.
-  async function dispatchHandler(match, method, request, cookieJar, prepared) {
+  // headers, body helpers, cookies, Worker bindings, and waitUntil) and the
+  // response builder.
+  async function dispatchHandler(match, method, request, runtime, prepared) {
     if (!modules.has(match.route.id)) {
       throw new Error(
         `[Goribu] The route module "${match.route.id}" was matched but is not in the loaded module map. ` +
@@ -287,8 +286,7 @@ export function createApp(options) {
       );
     }
 
-    const req =
-      prepared?.req ?? createRequest(request, match.params, { cookies: cookieJar });
+    const req = prepared?.req ?? createRequest(request, match.params, runtime);
     const res =
       prepared?.res ?? createResponse({ canRender: match.route.hasDefaultExport });
     const result = await handler(req, res);
@@ -306,6 +304,28 @@ export function createApp(options) {
       // never loads it.
       getPage: () => loadDefaultExport(modules, match.route.id, "route"),
     });
+  }
+}
+
+function assertWorkerFetchInputs(request, env, ctx) {
+  if (!(request instanceof Request)) {
+    throw new TypeError(
+      "[Goribu] app.fetch(request, env, ctx) requires a Web Request as its first argument. Pass the Request received by the Cloudflare Worker fetch handler.",
+    );
+  }
+  if (env === null || typeof env !== "object" || Array.isArray(env)) {
+    throw new TypeError(
+      "[Goribu] app.fetch(request, env, ctx) requires the Worker bindings object as its second argument. Pass env from the Cloudflare Worker fetch handler, using {} when no bindings are configured.",
+    );
+  }
+  if (
+    ctx === null ||
+    typeof ctx !== "object" ||
+    typeof ctx.waitUntil !== "function"
+  ) {
+    throw new TypeError(
+      "[Goribu] app.fetch(request, env, ctx) requires the Worker execution context with ctx.waitUntil as its third argument. Pass ctx from the Cloudflare Worker fetch handler.",
+    );
   }
 }
 
