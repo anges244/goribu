@@ -36,6 +36,9 @@ that has no source in the tree.
   and explainable.
 - Do not install pnpm or npm dependencies. Provide the exact install command and
   wait for the maintainer to run it and confirm.
+- Do not deploy. Deployment is maintainer-owned: provide the exact deploy command
+  and wait for the maintainer to run it and confirm before performing live
+  verification.
 - Do not commit or create branches. Notify the maintainer when a coherent,
   passing commit boundary is reached and provide a suggested commit message.
 - Preserve unrelated maintainer work; never overwrite or revert it.

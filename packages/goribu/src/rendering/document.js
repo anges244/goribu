@@ -27,8 +27,8 @@ export function DefaultDocument({ children }) {
       "body",
       null,
       h("div", { id: "root" }, children),
-      // Block 5 substep 5 replaces this development URL with the hashed
-      // production entry resolved from the emitted client assets.
+      // Production render data replaces this development URL with the hashed
+      // entry resolved from the emitted client asset manifest.
       h(ClientEntry, { src: DEV_CLIENT_ENTRY }),
     ),
   );

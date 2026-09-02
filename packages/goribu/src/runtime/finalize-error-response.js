@@ -8,7 +8,7 @@ import { isHttpError } from "./http-error.js";
  * loaded error-page values. Development disclosure, cookies, final HEAD
  * normalization, dispatch wiring, and global response policy remain outside.
  *
- * @param {{ error: unknown, url: string, Page?: Function|null, Document: Function }} options
+ * @param {{ error: unknown, url: string, Page?: Function|null, Document: Function, clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function finalizeErrorResponse(options) {
@@ -30,6 +30,8 @@ export async function finalizeErrorResponse(options) {
       errorId,
       Page: options?.Page,
       Document: options?.Document,
+      clientAssetManifest: options?.clientAssetManifest,
+      clientAssetBase: options?.clientAssetBase,
     });
   } catch (renderError) {
     logError(`[Goribu] _500 rendering failed for error ${errorId}:`, renderError);

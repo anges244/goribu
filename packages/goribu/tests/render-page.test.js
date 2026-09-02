@@ -53,6 +53,39 @@ describe("renderPage hydration data", () => {
     expect(html).not.toContain("</script><script>globalThis.pwned");
   });
 
+  it("resolves the production entry and matched page preload through render data", async () => {
+    const response = await renderPage({
+      Page: () => h("h1", null, "Hydrated"),
+      Document: CustomDocument,
+      routeId: "src/routes/index.jsx",
+      clientAssetManifest: {
+        entry: {
+          file: "_goribu/assets/client-entry-hash.js",
+          imports: ["_goribu/assets/shared-hash.js"],
+        },
+        pages: {
+          "src/routes/index.jsx": {
+            file: "_goribu/assets/index-hash.js",
+            imports: ["_goribu/assets/shared-hash.js"],
+          },
+        },
+      },
+      clientAssetBase: "/app",
+    });
+    const html = await response.text();
+
+    expect(html).toContain(
+      '<script type="module" src="/app/_goribu/assets/client-entry-hash.js"></script>',
+    );
+    expect(html).toContain(
+      '<link rel="modulepreload" href="/app/_goribu/assets/index-hash.js"/>',
+    );
+    expect(html).toContain(
+      '<link rel="modulepreload" href="/app/_goribu/assets/shared-hash.js"/>',
+    );
+    expect(html).not.toContain('/src/client-entry.js');
+  });
+
   it("returns the streamed shell before suspended page work completes", async () => {
     let resolveContent;
     const content = new Promise((resolve) => {

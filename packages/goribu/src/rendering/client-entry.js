@@ -1,31 +1,40 @@
-import { Fragment, createElement as h } from "react";
+import { Fragment, createElement as h, useContext } from "react";
 import {
   InitialPropsScript,
   InitialRouteScript,
+  RenderDataContext,
 } from "./render-context.js";
 
 /**
  * Emit the complete initial browser boundary at the Document's chosen location:
  * matched route data, page props, then the external module entry.
  *
- * The explicit `src` is the development entry served by Vite. Block 5 substep 5
- * replaces it in production with the build-resolved hashed entry and emits the
- * matched page's module preloads without changing this public component.
+ * When the active render carries build-resolved client assets, Goribu names the
+ * hashed production entry and preloads the shared and matched-page chunks.
+ * Without resolved assets, `src` remains the development fallback.
  */
 export function ClientEntry(props) {
-  const src = props?.src;
+  const renderData = useContext(RenderDataContext);
+  const resolved = renderData?.clientAssets ?? null;
+  const src = resolved?.src ?? props?.src;
 
   if (typeof src !== "string" || src.length === 0) {
     throw new TypeError(
-      "[Goribu] <ClientEntry src> requires a non-empty client module URL. Pass the browser entry served by Goribu's Vite development server.",
+      "[Goribu] <ClientEntry src> requires a non-empty client module URL. Pass the browser entry emitted by Goribu's Vite build.",
     );
   }
 
-  return h(
-    Fragment,
-    null,
-    h(InitialRouteScript, { key: "route" }),
-    h(InitialPropsScript, { key: "props" }),
-    h("script", { key: "entry", type: "module", src }),
-  );
+  const children = [];
+  if (resolved !== null) {
+    for (const href of resolved.modulePreloads) {
+      children.push(
+        h("link", { key: `preload:${href}`, rel: "modulepreload", href }),
+      );
+    }
+  }
+  children.push(h(InitialRouteScript, { key: "route" }));
+  children.push(h(InitialPropsScript, { key: "props" }));
+  children.push(h("script", { key: "entry", type: "module", src }));
+
+  return h(Fragment, null, ...children);
 }

@@ -1,9 +1,12 @@
 import { Link } from "goribu";
+import { useState } from "react";
 
 // The landing page. Hand-written JSX rather than Markdown: the landing is chrome,
 // not prose. Like the docs pages it does no per-request work, so it is served as
 // a static asset.
 export default function LandingPage() {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <div className="landing">
       <header className="hero">
@@ -44,6 +47,26 @@ export default function LandingPage() {
             real examples in hand.
           </p>
         </div>
+      </section>
+
+      <section className="why-goribu" aria-labelledby="why-goribu-heading">
+        <button
+          className="why-goribu-toggle"
+          type="button"
+          aria-expanded={detailsOpen}
+          aria-controls="why-goribu-details"
+          onClick={() => setDetailsOpen((open) => !open)}
+        >
+          <span id="why-goribu-heading">Why Goribu?</span>
+          <span aria-hidden="true">{detailsOpen ? "−" : "+"}</span>
+        </button>
+        {detailsOpen ? (
+          <p id="why-goribu-details">
+            Cloudflare Workers already provide the runtime primitives an
+            application needs. Goribu keeps those primitives visible while React
+            owns rendering and interaction.
+          </p>
+        ) : null}
       </section>
     </div>
   );

@@ -22,7 +22,8 @@ import {
 } from "./finalize-form-result.js";
 import { acceptsFormMediaType } from "../forms/form-protocol.js";
 
-const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
+const CALLER =
+  "createApp({ manifest, modules, errorPages, documentId, clientAssetManifest, clientAssetBase })";
 
 // Statuses that cannot carry a response body. A terminal helper that produced a
 // body for one of these is a handler mistake, caught here rather than shipped.
@@ -49,6 +50,8 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  *   documentId: string|null,
  *   middlewareByRoute?: Map<string, Array<{ id: string, relativePath: string }>>,
  *   mode?: "development"|"production",
+ *   clientAssetManifest?: object|null,
+ *   clientAssetBase?: string,
  * }} options
  * @returns {{ fetch(request: Request, env: unknown, ctx: unknown): Promise<Response> }}
  */
@@ -95,6 +98,8 @@ export function createApp(options) {
   }
 
   const documentId = options.documentId ?? null;
+  const clientAssetManifest = options.clientAssetManifest ?? null;
+  const clientAssetBase = options.clientAssetBase;
   const Document =
     documentId === null
       ? DefaultDocument
@@ -195,6 +200,8 @@ export function createApp(options) {
                 url: url.pathname,
                 Page: ServerErrorPage,
                 Document,
+                clientAssetManifest,
+                clientAssetBase,
               });
       }
       // Every document POST can vary between its ordinary representation and a
@@ -332,7 +339,13 @@ export function createApp(options) {
       case "not-found":
         return navigation
           ? createNavigationReloadResponse()
-          : renderNotFound({ NotFoundPage, Document, location: url.href });
+          : renderNotFound({
+              NotFoundPage,
+              Document,
+              location: url.href,
+              clientAssetManifest,
+              clientAssetBase,
+            });
 
       default:
         throw new TypeError(
@@ -415,6 +428,8 @@ export function createApp(options) {
       location: url.href,
       navigation,
       form,
+      clientAssetManifest,
+      clientAssetBase,
       // Only a route with a default page reaches res.render(); createResponse
       // enforces that, so resolve the component lazily — a res.json() result
       // never loads it.
@@ -629,6 +644,8 @@ async function finalizeHandlerResult(result, options) {
       props: result.props,
       status: result.status,
       headers: result.headers,
+      clientAssetManifest: options.clientAssetManifest,
+      clientAssetBase: options.clientAssetBase,
     });
   }
 
@@ -641,6 +658,8 @@ async function finalizeHandlerResult(result, options) {
       location: options.location,
       props: result.props,
       headers: result.headers,
+      clientAssetManifest: options.clientAssetManifest,
+      clientAssetBase: options.clientAssetBase,
     });
   }
 

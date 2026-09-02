@@ -6,6 +6,7 @@ import {
   serializeRouteForScript,
 } from "./render-context.js";
 import { createLocatedPage } from "../navigation/location-context.js";
+import { resolveClientAssets } from "./resolve-client-assets.js";
 
 /**
  * Stream one matched route page into a Worker HTML Response.
@@ -18,7 +19,7 @@ import { createLocatedPage } from "../navigation/location-context.js";
  * channel for browser hydration. Matched pages also carry their canonical route
  * ID so the browser selects the same component from the generated loader map.
  *
- * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object }} options
+ * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object, clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function renderPage(options) {
@@ -47,6 +48,15 @@ export async function renderPage(options) {
   const renderData = Object.freeze({
     routeJson: hasRouteId ? serializeRouteForScript(options.routeId) : null,
     propsJson: serializePropsForScript(props),
+    clientAssets:
+      options?.clientAssetManifest === undefined ||
+      options?.clientAssetManifest === null
+        ? null
+        : resolveClientAssets({
+            manifest: options.clientAssetManifest,
+            routeId: hasRouteId ? options.routeId : null,
+            base: options.clientAssetBase,
+          }),
   });
   const tree = h(
     RenderDataContext.Provider,

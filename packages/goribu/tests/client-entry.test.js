@@ -12,7 +12,7 @@ import {
 
 describe("ClientEntry", () => {
   it("requires the development client module URL", () => {
-    expect(() => ClientEntry()).toThrow(
+    expect(() => renderToStaticMarkup(h(ClientEntry))).toThrow(
       /\[Goribu\].*<ClientEntry src> requires a non-empty client module URL/s,
     );
   });
@@ -43,5 +43,36 @@ describe("ClientEntry", () => {
     expect(propsIndex).toBeGreaterThan(routeIndex);
     expect(entryIndex).toBeGreaterThan(propsIndex);
     expect(html).toContain(JSON.stringify(props));
+  });
+
+  it("uses resolved production assets and emits module preloads", () => {
+    const html = renderToStaticMarkup(
+      h(
+        RenderDataContext.Provider,
+        {
+          value: Object.freeze({
+            routeJson: serializeRouteForScript("src/routes/index.jsx"),
+            propsJson: serializePropsForScript({}),
+            clientAssets: Object.freeze({
+              src: "/_goribu/assets/client-entry-hash.js",
+              modulePreloads: Object.freeze([
+                "/_goribu/assets/index-hash.js",
+                "/_goribu/assets/shared-hash.js",
+              ]),
+              styles: Object.freeze([]),
+            }),
+          }),
+        },
+        h(ClientEntry, { src: "/src/client-entry.js" }),
+      ),
+    );
+
+    expect(html).toContain(
+      '<link rel="modulepreload" href="/_goribu/assets/index-hash.js"/>',
+    );
+    expect(html).toContain(
+      '<script type="module" src="/_goribu/assets/client-entry-hash.js"></script>',
+    );
+    expect(html).not.toContain('/src/client-entry.js');
   });
 });

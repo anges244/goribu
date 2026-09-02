@@ -121,6 +121,39 @@ pre code {
   margin: 0;
 }
 
+.why-goribu {
+  max-width: 42rem;
+  margin: 4rem auto 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.why-goribu-toggle {
+  width: 100%;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  color: var(--fg);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.why-goribu-toggle:hover {
+  color: var(--accent);
+}
+
+.why-goribu p {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+}
+
 /* Docs layout -------------------------------------------------------------- */
 
 .layout {

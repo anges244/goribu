@@ -38,6 +38,9 @@ describe("writeWorkerEntry", () => {
     expect(readFileSync(outputFile, "utf8")).toBe(source);
 
     expect(source).toContain('import { createApp } from "goribu/server"');
+    expect(source).toContain(
+      'import { clientAssetBase, clientAssetManifest } from "virtual:goribu/client-assets"',
+    );
     expect(source).toContain('import * as module0 from "../src/routes/index.jsx"');
     expect(source).toContain('import * as module2 from "../src/routes/posts/[id].jsx"');
     expect(source).toContain('"pattern": "/posts/:id"');
@@ -49,7 +52,7 @@ describe("writeWorkerEntry", () => {
     expect(source).toContain('const mode = "production";');
     expect(source).toContain("const middlewareByRoute = new Map([]);");
     expect(source).toContain(
-      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode });",
+      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase });",
     );
     // The absolute file path must never leak into the bundled manifest.
     expect(source).not.toContain(root);

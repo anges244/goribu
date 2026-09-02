@@ -27,6 +27,25 @@ function goribuPlugin() {
   return goribu().find((candidate) => candidate?.name === "goribu");
 }
 
+function clientAssetsPlugin() {
+  return goribu().find(
+    (candidate) => candidate?.name === "goribu:client-assets",
+  );
+}
+
+function writeMinimalProject(root) {
+  mkdirSync(join(root, "src", "routes"), { recursive: true });
+  writeFileSync(
+    join(root, "src", "routes", "index.jsx"),
+    "export default function Page() { return null; }\n",
+  );
+  writeFileSync(
+    join(root, "goribu.config.js"),
+    `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
+      'export default defineConfig({ name: "test-app", compatibilityDate: "2026-08-31" });\n',
+  );
+}
+
 afterEach(() => {
   for (const root of created.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -38,7 +57,7 @@ describe("goribu()", () => {
     expect(() => goribu({})).toThrow(/does not accept options/);
   });
 
-  it("returns build, client-boundary, and client-page-manifest plugins", () => {
+  it("returns build, client-boundary, page-manifest, and client-assets plugins", () => {
     const plugins = goribu();
     expect(Array.isArray(plugins)).toBe(true);
     expect(plugins.some((plugin) => plugin?.name === "goribu")).toBe(true);
@@ -48,6 +67,73 @@ describe("goribu()", () => {
     expect(
       plugins.some((plugin) => plugin?.name === "goribu:client-page-manifest"),
     ).toBe(true);
+    expect(
+      plugins.some((plugin) => plugin?.name === "goribu:client-assets"),
+    ).toBe(true);
+  });
+
+  it("builds the client before every Worker environment", async () => {
+    const root = makeProject();
+    writeMinimalProject(root);
+    const configured = await goribuPlugin().config(
+      { root },
+      { command: "build" },
+    );
+    const client = { name: "client" };
+    const workerA = { name: "worker-a" };
+    const workerB = { name: "worker-b" };
+    const order = [];
+
+    await configured.builder.buildApp({
+      environments: { workerA, client, workerB },
+      async build(environment) {
+        order.push(environment.name);
+      },
+    });
+
+    expect(order[0]).toBe("client");
+    expect(new Set(order.slice(1))).toEqual(new Set(["worker-a", "worker-b"]));
+  });
+
+  it("fails closed when production Worker assets are requested before client capture", () => {
+    const root = makeProject();
+    writeMinimalProject(root);
+    const plugin = clientAssetsPlugin();
+    plugin.config({ root }, { command: "build" });
+    plugin.configResolved({ command: "build", base: "/" });
+    const id = plugin.resolveId("virtual:goribu/client-assets");
+
+    expect(plugin.sharedDuringBuild).toBe(true);
+    expect(() => plugin.load(id)).toThrow(
+      /client asset manifest before the production client build captured it.*goribu build/s,
+    );
+  });
+
+  it("serves one captured manifest and the normalized Vite base to the Worker", () => {
+    const root = makeProject();
+    writeMinimalProject(root);
+    const plugin = clientAssetsPlugin();
+    plugin.config({ root, base: "/docs" }, { command: "build" });
+    plugin.configResolved({ command: "build", base: "/docs/" });
+    plugin.generateBundle.call(
+      { environment: { name: "client" } },
+      {},
+      {
+        "_goribu/assets/client-entry-hash.js": {
+          type: "chunk",
+          fileName: "_goribu/assets/client-entry-hash.js",
+          isEntry: true,
+          imports: [],
+          viteMetadata: { importedCss: new Set() },
+        },
+      },
+    );
+
+    const source = plugin.load(plugin.resolveId("virtual:goribu/client-assets"));
+    expect(source).toContain(
+      '"file":"_goribu/assets/client-entry-hash.js"',
+    );
+    expect(source).toContain('export const clientAssetBase = "/docs/";');
   });
 
   const emitHeadersFor = (environmentName) => {
@@ -76,16 +162,7 @@ describe("goribu()", () => {
     ["build", "production"],
   ])("bakes Vite command %s into the generated %s Worker", async (command, mode) => {
     const root = makeProject();
-    mkdirSync(join(root, "src", "routes"), { recursive: true });
-    writeFileSync(
-      join(root, "src", "routes", "index.jsx"),
-      "export default function Page() { return null; }\n",
-    );
-    writeFileSync(
-      join(root, "goribu.config.js"),
-      `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
-        'export default defineConfig({ name: "mode-app", compatibilityDate: "2026-08-31" });\n',
-    );
+    writeMinimalProject(root);
 
     await goribuPlugin().config({ root }, { command });
 

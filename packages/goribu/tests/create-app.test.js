@@ -22,6 +22,18 @@ const POST = {
   methods: [],
   hasDefaultExport: true,
 };
+const CLIENT_ASSET_MANIFEST = {
+  entry: {
+    file: "_goribu/assets/client-entry-hash.js",
+    imports: ["_goribu/assets/shared-hash.js"],
+  },
+  pages: {
+    index: {
+      file: "_goribu/assets/index-hash.js",
+      imports: ["_goribu/assets/shared-hash.js"],
+    },
+  },
+};
 
 // Handler-route manifest entries. A route that exports method handlers carries
 // those method names; hasDefaultExport is false unless it also exports a page.
@@ -99,6 +111,27 @@ describe("createApp().fetch", () => {
     expect(body).toContain("<html>");
     expect(body).toContain('<div id="root">');
     expect(body).toContain("<h1>Home</h1>");
+  });
+
+  it("threads production assets through matched pages and entry-only 404 renders", async () => {
+    const app = build({
+      clientAssetManifest: CLIENT_ASSET_MANIFEST,
+      clientAssetBase: "/app",
+    });
+    const page = await (await dispatch(app, get("/"))).text();
+    const missing = await (await dispatch(app, get("/missing"))).text();
+
+    expect(page).toContain(
+      'src="/app/_goribu/assets/client-entry-hash.js"',
+    );
+    expect(page).toContain('href="/app/_goribu/assets/index-hash.js"');
+    expect(page).not.toContain('/src/client-entry.js');
+    expect(missing).toContain(
+      'src="/app/_goribu/assets/client-entry-hash.js"',
+    );
+    expect(missing).toContain('href="/app/_goribu/assets/shared-hash.js"');
+    expect(missing).not.toContain('href="/app/_goribu/assets/index-hash.js"');
+    expect(missing).not.toContain('/src/client-entry.js');
   });
 
   it("matches a dynamic segment and renders the same page for any value", async () => {
@@ -393,6 +426,7 @@ describe("createApp().fetch — error boundaries", () => {
         errorPages: { notFound: null, serverError: SERVER_ERROR },
         documentId: null,
         mode: "production",
+        clientAssetManifest: CLIENT_ASSET_MANIFEST,
       });
       const response = await dispatch(
         app,
@@ -406,6 +440,8 @@ describe("createApp().fetch — error boundaries", () => {
         errorId: expect.any(String),
       });
       expect(body).toContain(`Reference ${pageProps.errorId} at /hello`);
+      expect(body).toContain('src="/_goribu/assets/client-entry-hash.js"');
+      expect(body).not.toContain('/src/client-entry.js');
       expect(body).not.toContain(failure.message);
       expect(body).not.toContain("query-secret");
       expect(consoleError).toHaveBeenCalledWith(

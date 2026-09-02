@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { generateManifest } from "../routing/generate-manifest.js";
+import { createClientAssetManifestPlugin } from "./create-client-asset-manifest-plugin.js";
 import { createClientBoundaryPlugin } from "./create-client-boundary-plugin.js";
 import { createClientPageManifestPlugin } from "./create-client-page-manifest-plugin.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
@@ -10,6 +11,8 @@ import { loadApplicationConfig } from "./load-application-config.js";
 
 const CLIENT_ENTRY = "src/client-entry.js";
 const GENERATED_WRANGLER_CONFIG = ".goribu/wrangler.json";
+const CLIENT_ASSETS_MODULE = "virtual:goribu/client-assets";
+const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
 
 // Goribu's content-hashed client build is written under the reserved `/_goribu/`
 // namespace. The immutable header targets only this namespace, never app-authored
@@ -47,6 +50,7 @@ export function goribu(options) {
     createGoribuPlugin(),
     createConfiguredClientBoundaryPlugin(),
     createConfiguredClientPageManifestPlugin(),
+    createConfiguredClientAssetsPlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
   ];
 }
@@ -68,6 +72,9 @@ function createGoribuPlugin() {
       const appConfig = await loadApplicationConfig({ projectRoot: root });
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
+        builder: {
+          buildApp: buildClientBeforeWorkers,
+        },
         environments: {
           client: {
             build: {
@@ -108,6 +115,24 @@ function createGoribuPlugin() {
       }
     },
   };
+}
+
+async function buildClientBeforeWorkers(builder) {
+  // Cloudflare's default orchestration builds Workers first. Goribu's Worker
+  // embeds the completed browser graph, so the client must finish before any
+  // Worker environment can request the virtual asset module.
+  const client = builder.environments.client;
+  if (!client) {
+    throw new Error(
+      '[Goribu] The production build has no "client" environment. Keep Goribu\'s client environment enabled so its asset manifest can be captured before the Worker is bundled.',
+    );
+  }
+
+  await builder.build(client);
+  const workers = Object.values(builder.environments).filter(
+    (environment) => environment !== client,
+  );
+  await Promise.all(workers.map((environment) => builder.build(environment)));
 }
 
 /**
@@ -205,6 +230,84 @@ function requireClientPageManifest(pageManifest) {
   if (pageManifest) return pageManifest;
   throw new Error(
     "[Goribu] The client page manifest ran before Vite configured the application root. Run it through goribu() so browser page loaders use the current src/routes manifest.",
+  );
+}
+
+/**
+ * Capture the production browser graph, then expose it to the later Worker build
+ * through a virtual module. This plugin instance is deliberately shared across
+ * build environments: the client generateBundle hook writes the closure state
+ * that the Worker load hook reads after buildClientBeforeWorkers has completed.
+ */
+function createConfiguredClientAssetsPlugin() {
+  let assetManifestPlugin;
+  let clientAssetManifest = null;
+  let clientAssetBase = "/";
+  let production = false;
+
+  return {
+    name: "goribu:client-assets",
+    enforce: "post",
+    sharedDuringBuild: true,
+
+    config(config, environment = {}) {
+      const root = config.root ? resolve(config.root) : process.cwd();
+      const manifest = generateManifest({
+        projectRoot: root,
+        routesDir: resolve(root, "src/routes"),
+      });
+      production = environment.command === "build";
+      clientAssetBase = config.base ?? "/";
+      clientAssetManifest = null;
+      assetManifestPlugin = createClientAssetManifestPlugin({
+        manifest,
+        onManifest(manifestValue) {
+          clientAssetManifest = manifestValue;
+        },
+      });
+    },
+
+    configResolved(config) {
+      production = config.command === "build";
+      clientAssetBase = config.base;
+    },
+
+    resolveId(source) {
+      return source === CLIENT_ASSETS_MODULE
+        ? RESOLVED_CLIENT_ASSETS_MODULE
+        : null;
+    },
+
+    load(id) {
+      if (id !== RESOLVED_CLIENT_ASSETS_MODULE) return null;
+      if (production && clientAssetManifest === null) {
+        throw new Error(
+          "[Goribu] The Worker build requested the client asset manifest before the production client build captured it. Rebuild the Worker and client outputs together through `goribu build`; the client environment must complete before Worker bundling begins.",
+        );
+      }
+
+      return [
+        `export const clientAssetManifest = ${JSON.stringify(clientAssetManifest)};`,
+        `export const clientAssetBase = ${JSON.stringify(clientAssetBase)};`,
+      ].join("\n");
+    },
+
+    generateBundle(outputOptions, bundle, isWrite) {
+      if (this.environment?.name !== "client") return;
+      return requireClientAssetManifestPlugin(assetManifestPlugin).generateBundle.call(
+        this,
+        outputOptions,
+        bundle,
+        isWrite,
+      );
+    },
+  };
+}
+
+function requireClientAssetManifestPlugin(plugin) {
+  if (plugin) return plugin;
+  throw new Error(
+    "[Goribu] The client asset manifest ran before Vite configured the application root. Run it through goribu() so production browser assets use the current route manifest.",
   );
 }
 
