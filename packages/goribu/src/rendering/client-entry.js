@@ -26,6 +26,8 @@ export function ClientEntry(props) {
 
   const children = [];
   if (resolved !== null) {
+    // Graph-owned styles stay inert until the Document stylesheet helper owns
+    // their placement in the next substep.
     for (const href of resolved.modulePreloads) {
       children.push(
         h("link", { key: `preload:${href}`, rel: "modulepreload", href }),
