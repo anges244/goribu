@@ -1,5 +1,10 @@
 import { createElement as h } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
+import {
+  RenderDataContext,
+  serializePropsForScript,
+  serializeRouteForScript,
+} from "./render-context.js";
 
 /**
  * Stream one matched route page into a Worker HTML Response.
@@ -8,11 +13,11 @@ import { renderToReadableStream } from "react-dom/server.edge";
  * starts flowing as soon as the shell is ready, rather than after the whole
  * document is buffered. An implicit-GET page renders with empty props; a handler
  * that returns res.render(props) supplies the props (and any extra response
- * headers), which this module passes straight to the page component and the Web
- * Response. Serializing those props into the page for browser hydration is the
- * client runtime's job in a later block.
+ * headers), which this module passes to both the page component and an inert JSON
+ * channel for browser hydration. Matched pages also carry their canonical route
+ * ID so the browser selects the same component from the generated loader map.
  *
- * @param {{ Page: Function, Document: Function, status?: number, props?: object, headers?: object }} options
+ * @param {{ Page: Function, Document: Function, routeId?: string, status?: number, props?: object, headers?: object }} options
  * @returns {Promise<Response>}
  */
 export async function renderPage(options) {
@@ -20,6 +25,10 @@ export async function renderPage(options) {
   const Document = options?.Document;
   const status = options?.status ?? 200;
   const props = options?.props ?? {};
+  const hasRouteId =
+    options !== null &&
+    typeof options === "object" &&
+    Object.hasOwn(options, "routeId");
 
   if (typeof Page !== "function") {
     throw new TypeError(
@@ -34,7 +43,15 @@ export async function renderPage(options) {
     );
   }
 
-  const tree = h(Document, { children: h(Page, props) });
+  const renderData = Object.freeze({
+    routeJson: hasRouteId ? serializeRouteForScript(options.routeId) : null,
+    propsJson: serializePropsForScript(props),
+  });
+  const tree = h(
+    RenderDataContext.Provider,
+    { value: renderData },
+    h(Document, { children: h(Page, props) }),
+  );
 
   let stream;
   try {

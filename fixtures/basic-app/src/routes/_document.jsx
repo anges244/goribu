@@ -1,3 +1,5 @@
+import { ClientEntry } from "goribu";
+
 // A custom document shell. The application owns the html, head, and body here;
 // Goribu renders each route's page as `children` inside it.
 export default function Document({ children }) {
@@ -10,6 +12,7 @@ export default function Document({ children }) {
       </head>
       <body>
         <div id="root">{children}</div>
+        <ClientEntry src="/src/client-entry.js" />
       </body>
     </html>
   );

@@ -193,6 +193,7 @@ export function createApp(options) {
         return renderPage({
           Page: loadDefaultExport(modules, match.route.id, "route"),
           Document,
+          routeId: match.route.id,
         });
       }
 
@@ -216,6 +217,7 @@ export function createApp(options) {
         return renderPage({
           Page: loadDefaultExport(modules, match.route.id, "route"),
           Document,
+          routeId: match.route.id,
         });
       }
 
@@ -464,6 +466,7 @@ async function finalizeHandlerResult(result, options) {
     return renderPage({
       Page: options.getPage(),
       Document: options.Document,
+      routeId: options.routeId,
       props: result.props,
       status: result.status,
       headers: result.headers,
