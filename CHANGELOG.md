@@ -12,6 +12,30 @@ Unreleased.
 
 ### Added
 
+- Route handlers — a route can export named HTTP method functions (`GET`, `POST`,
+  …) that run instead of rendering. Each handler receives a request surface
+  (`req.method`, `req.path`, `req.params`, `req.query`, `req.headers`,
+  content-type-aware `req.body()` and raw `req.rawBody()`) and a response builder
+  (`res.text`, `res.json`, `res.redirect` — `303` by default, `res.render`,
+  `res.notFound`, chained `res.status`/`res.headers`). A route may export a page,
+  handlers, or both.
+- Cookies — `req.cookies` reads incoming cookies and queues outgoing ones
+  (`get`/`set`/`delete`), flushed as `Set-Cookie` on the final response. No
+  security defaults are assumed.
+- Folder-scoped middleware — a `_middleware` file applies to its directory and
+  everything beneath it, running outermost-first (a default function or a flat
+  array) with no `next`: return nothing to continue, or a `res.*` result to stop.
+  A route with middleware is served by the Worker rather than statically output.
+- Error boundaries — a thrown request is caught at the edge: development discloses
+  the error, production renders an optional `src/routes/_500.jsx` with a logged
+  correlation ID and no raw detail. A malformed request body is answered with a
+  safe `400`, not a `500`.
+- Worker bindings and background work — the app is invoked as
+  `fetch(request, env, ctx)`; routes receive `req.env` (the raw bindings) and a
+  bound `req.waitUntil`, while the execution context stays private.
+- Server-only module boundary — files named `*.server.*` may be imported by route
+  handlers but are kept out of the client bundle, enforced by a build-time guard
+  and a fail-closed bundle audit.
 - Documentation site — the framework's docs are now a live Goribu app: a landing
   page and a guided-tour docs set (getting started, the CLI, routing, rendering,
   static routes, the JavaScript position, and deploying). Markdown is compiled to

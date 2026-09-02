@@ -87,4 +87,4 @@ without one, Goribu streams a plain built-in page.
 - [Static routes](/docs/static-routes) — rendering a route once at build time
   instead of on every request.
 
-**Next:** [Static routes](/docs/static-routes).
+**Next:** [Handlers](/docs/handlers).

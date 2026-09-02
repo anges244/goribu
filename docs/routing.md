@@ -42,9 +42,8 @@ src/routes/posts/[id].jsx      matches  /posts/anything   (one segment)
 A parameter name may contain letters, digits, and underscores, and each `[param]`
 in one route must have a distinct name.
 
-Reading the captured value needs a request handler, which arrives in a later
-block. Until then a dynamic page renders the same for every value — the route
-matches, but there is nothing yet to hand it the `id`.
+A request handler reads the captured value from `req.params` — for
+`posts/[id].jsx`, `req.params.id`. See [handlers.md](./handlers.md).
 
 **Not supported (by design):** catch-all (`[...param]`) and optional segments.
 Goribu rejects them at build time with a message telling you what is allowed.
@@ -77,13 +76,11 @@ files:
 
 ## What a route must export
 
-A route file must default-export a React component. A file under `src/routes/`
-that exports neither a page nor a handler is a build error, so a file can never
-sit on a live URL with nothing to answer it.
-
-HTTP handlers (named `GET`, `POST`, and so on) are part of a later block; a route
-that exports one is rejected at build for now, with a message saying so. In this
-block a route is a page.
+A route file must export **something that answers** — a default-exported React
+component (the page), one or more named HTTP handlers (`GET`, `POST`, …), or both.
+A file under `src/routes/` that exports neither is a build error, so a file can
+never sit on a live URL with nothing to answer it. Handlers are covered in
+[handlers.md](./handlers.md).
 
 ## What routing answers on its own
 
