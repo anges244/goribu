@@ -44,8 +44,9 @@ describe("writeWorkerEntry", () => {
     expect(source).toContain('["src/routes/index.jsx", module0]');
     expect(source).toContain("const errorPages = { notFound: null };");
     expect(source).toContain("const documentId = null;");
+    expect(source).toContain("const middlewareByRoute = new Map([]);");
     expect(source).toContain(
-      "export default createApp({ manifest, modules, errorPages, documentId });",
+      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute });",
     );
     // The absolute file path must never leak into the bundled manifest.
     expect(source).not.toContain(root);
@@ -80,6 +81,57 @@ describe("writeWorkerEntry", () => {
     // methods travel in the manifest so matchRoute can produce a handler match.
     expect(source).toContain('from "../src/routes/submit.jsx"');
     expect(source).toMatch(/"methods":\s*\[\s*"POST"\s*\]/);
+  });
+
+  it("selects ancestor middleware outermost-first and imports shared modules once", () => {
+    const root = makeProject();
+    writeRoute(root, "index.jsx");
+    writeRoute(root, "posts/[id].jsx");
+    writeRoute(root, "_middleware.js", "export default function root() {}\n");
+    writeRoute(
+      root,
+      "posts/_middleware.js",
+      "export default function posts() {}\n",
+    );
+
+    const { source } = writeWorkerEntry({ projectRoot: root });
+
+    expect(
+      source.match(/from "\.\.\/src\/routes\/_middleware\.js";/g),
+    ).toHaveLength(1);
+    expect(
+      source.match(/from "\.\.\/src\/routes\/posts\/_middleware\.js";/g),
+    ).toHaveLength(1);
+    expect(source).toContain(
+      `const middlewareByRoute = new Map(${JSON.stringify(
+        [
+          [
+            "src/routes/index.jsx",
+            [
+              {
+                id: "src/routes/_middleware.js",
+                relativePath: "_middleware.js",
+              },
+            ],
+          ],
+          [
+            "src/routes/posts/[id].jsx",
+            [
+              {
+                id: "src/routes/_middleware.js",
+                relativePath: "_middleware.js",
+              },
+              {
+                id: "src/routes/posts/_middleware.js",
+                relativePath: "posts/_middleware.js",
+              },
+            ],
+          ],
+        ],
+        null,
+        2,
+      )});`,
+    );
   });
 
   it("fails closed with a teaching error when no routes are found", () => {

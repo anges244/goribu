@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { generateManifest } from "../routing/generate-manifest.js";
 import { matchRoute } from "../routing/match-route.js";
 import { planStaticRoutes } from "./plan-static-routes.js";
+import { selectMiddlewareByRoute } from "./select-middleware-by-route.js";
 
 const ROUTES_DIRECTORY = join("src", "routes");
 const DEPLOY_REDIRECT = join(".wrangler", "deploy", "config.json");
@@ -55,7 +56,16 @@ export async function prerenderStaticRoutes(options) {
   const routesDir = join(root, ROUTES_DIRECTORY);
 
   const manifest = generateManifest({ routesDir, projectRoot: root });
-  const { staticRoutes, downgraded } = planStaticRoutes(manifest);
+  const middlewareByRoute = selectMiddlewareByRoute({
+    routesDir,
+    manifest,
+    projectRoot: root,
+  });
+  const routesWithMiddleware = new Set(middlewareByRoute.keys());
+  const { staticRoutes, downgraded } = planStaticRoutes(manifest, {
+    routesWithMiddleware,
+    middlewareByRoute,
+  });
 
   const { configPath, clientDir } = locateBuildOutputs(root);
 

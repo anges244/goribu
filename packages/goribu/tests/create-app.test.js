@@ -1,5 +1,5 @@
 import { createElement as h } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/runtime/create-app.js";
 
 // Minimal manifest entries in the shape generateManifest() produces. Matching
@@ -197,6 +197,290 @@ describe("createApp().fetch", () => {
       ]),
     });
     await expect(app.fetch(get("/"))).rejects.toThrow(/no default-exported React component/);
+  });
+});
+
+describe("createApp().fetch — middleware", () => {
+  const ROOT_MIDDLEWARE = "src/routes/_middleware.js";
+  const HELLO_MIDDLEWARE = "src/routes/hello/_middleware.js";
+
+  function descriptor(id) {
+    return { id, relativePath: id.replace("src/routes/", "") };
+  }
+
+  function middlewareApp({ manifest, modules, middlewareByRoute }) {
+    return createApp({
+      manifest,
+      modules,
+      errorPages: { notFound: null },
+      documentId: null,
+      middlewareByRoute,
+    });
+  }
+
+  it("runs outer modules and array exports in order before a handler with one shared req/res", async () => {
+    let middlewareRequest;
+    let handlerRequest;
+    const app = middlewareApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [
+          ROOT_MIDDLEWARE,
+          {
+            default: [
+              (req, res) => {
+                middlewareRequest = req;
+                req.trace = ["root:first"];
+                res.headers({ "x-root": "yes" });
+              },
+              (req) => {
+                req.trace.push("root:second");
+              },
+            ],
+          },
+        ],
+        [
+          HELLO_MIDDLEWARE,
+          {
+            default: (req, res) => {
+              req.trace.push("hello");
+              res.headers({ "x-hello": "yes" });
+            },
+          },
+        ],
+        [
+          "hello",
+          {
+            GET: (req, res) => {
+              handlerRequest = req;
+              req.trace.push("handler");
+              return res.json({ trace: req.trace });
+            },
+          },
+        ],
+      ]),
+      middlewareByRoute: new Map([
+        [
+          "hello",
+          [descriptor(ROOT_MIDDLEWARE), descriptor(HELLO_MIDDLEWARE)],
+        ],
+      ]),
+    });
+
+    const response = await app.fetch(get("/hello"));
+
+    expect(middlewareRequest).toBe(handlerRequest);
+    expect(response.headers.get("x-root")).toBe("yes");
+    expect(response.headers.get("x-hello")).toBe("yes");
+    expect(await response.json()).toEqual({
+      trace: ["root:first", "root:second", "hello", "handler"],
+    });
+  });
+
+  it("short-circuits before the handler when middleware returns a response intent", async () => {
+    const handler = vi.fn((req, res) => res.text("handler"));
+    const app = middlewareApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: (req, res) => res.redirect("/login") }],
+        ["hello", { GET: handler }],
+      ]),
+      middlewareByRoute: new Map([
+        ["hello", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(get("/hello"));
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("continues through undefined middleware and renders an implicit page with accumulated response state", async () => {
+    const middleware = vi.fn((req, res) => {
+      res.status(202).headers({ "x-middleware-page": "yes" });
+    });
+    const Page = vi.fn(() => h("h1", null, "Page after middleware"));
+    const app = middlewareApp({
+      manifest: [INDEX],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: middleware }],
+        ["index", { default: Page }],
+      ]),
+      middlewareByRoute: new Map([
+        ["index", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(get("/"));
+
+    expect(middleware).toHaveBeenCalledTimes(1);
+    expect(Page).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(202);
+    expect(response.headers.get("x-middleware-page")).toBe("yes");
+    expect(await response.text()).toContain("<h1>Page after middleware</h1>");
+  });
+
+  it("preserves middleware status, headers, and cookies for automatic HEAD targeting a page", async () => {
+    const Page = vi.fn(() => h("h1", null, "HEAD page"));
+    const app = middlewareApp({
+      manifest: [INDEX],
+      modules: new Map([
+        [
+          ROOT_MIDDLEWARE,
+          {
+            default: (req, res) => {
+              req.cookies.set("head-page", "yes");
+              res.status(202).headers({ "x-head-page": "yes" });
+            },
+          },
+        ],
+        ["index", { default: Page }],
+      ]),
+      middlewareByRoute: new Map([
+        ["index", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(
+      new Request("https://example.com/", { method: "HEAD" }),
+    );
+
+    expect(Page).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(202);
+    expect(response.headers.get("x-head-page")).toBe("yes");
+    expect(response.headers.get("set-cookie")).toBe("head-page=yes");
+    expect(await response.text()).toBe("");
+  });
+
+  it("lets middleware replace a page with a response intent", async () => {
+    const Page = vi.fn(() => h("h1", null, "Never rendered"));
+    const app = middlewareApp({
+      manifest: [INDEX],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: (req, res) => res.text("replaced") }],
+        ["index", { default: Page }],
+      ]),
+      middlewareByRoute: new Map([
+        ["index", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(get("/"));
+
+    expect(await response.text()).toBe("replaced");
+    expect(Page).not.toHaveBeenCalled();
+  });
+
+  it("flushes cookies queued by middleware onto the final response", async () => {
+    const app = middlewareApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [
+          ROOT_MIDDLEWARE,
+          {
+            default: (req) => {
+              req.cookies.set("from-middleware", "yes", { httpOnly: true });
+            },
+          },
+        ],
+        ["hello", { GET: (req, res) => res.json({ ok: true }) }],
+      ]),
+      middlewareByRoute: new Map([
+        ["hello", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(get("/hello"));
+
+    expect(response.headers.get("set-cookie")).toBe(
+      "from-middleware=yes; HttpOnly",
+    );
+  });
+
+  it.each([
+    ["a raw Web Response", () => new Response("raw"), "returned a Web Response"],
+    ["a non-response value", () => "wrong", "returned a non-response value"],
+  ])("rejects middleware returning %s with a teaching error", async (label, result, message) => {
+    const app = middlewareApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: result }],
+        ["hello", { GET: (req, res) => res.text("handler") }],
+      ]),
+      middlewareByRoute: new Map([
+        ["hello", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    await expect(app.fetch(get("/hello"))).rejects.toThrow(message);
+  });
+
+  it("runs target middleware for automatic HEAD and preserves its cookies", async () => {
+    const middleware = vi.fn((req) => req.cookies.set("head", "yes"));
+    const handler = vi.fn((req, res) => res.text("GET body"));
+    const app = middlewareApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: middleware }],
+        ["hello", { GET: handler }],
+      ]),
+      middlewareByRoute: new Map([
+        ["hello", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(
+      new Request("https://example.com/hello", { method: "HEAD" }),
+    );
+
+    expect(middleware).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(response.headers.get("set-cookie")).toBe("head=yes");
+    expect(await response.text()).toBe("");
+  });
+
+  it("does not run middleware for automatic OPTIONS, 405, or a route miss", async () => {
+    const middleware = vi.fn();
+    const app = middlewareApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: middleware }],
+        ["hello", { GET: (req, res) => res.text("handler") }],
+      ]),
+      middlewareByRoute: new Map([
+        ["hello", [descriptor(ROOT_MIDDLEWARE)]],
+      ]),
+    });
+
+    await app.fetch(new Request("https://example.com/hello", { method: "OPTIONS" }));
+    await app.fetch(new Request("https://example.com/hello", { method: "PUT" }));
+    await app.fetch(get("/missing"));
+
+    expect(middleware).not.toHaveBeenCalled();
+  });
+
+  it("keeps a route with no selected middleware on its existing page path", async () => {
+    const middleware = vi.fn();
+    const Page = vi.fn(() => h("h1", null, "No middleware"));
+    const app = middlewareApp({
+      manifest: [INDEX, HELLO_HANDLER],
+      modules: new Map([
+        [HELLO_MIDDLEWARE, { default: middleware }],
+        ["index", { default: Page }],
+        ["hello", { GET: (req, res) => res.text("handler") }],
+      ]),
+      middlewareByRoute: new Map([
+        ["hello", [descriptor(HELLO_MIDDLEWARE)]],
+      ]),
+    });
+
+    const response = await app.fetch(get("/"));
+
+    expect(middleware).not.toHaveBeenCalled();
+    expect(Page).toHaveBeenCalledTimes(1);
+    expect(await response.text()).toContain("<h1>No middleware</h1>");
   });
 });
 

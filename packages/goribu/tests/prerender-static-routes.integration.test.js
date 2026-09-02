@@ -57,9 +57,57 @@ describe("goribu build static output (workerd)", () => {
     expect(build.output).toContain("Statically output 2 route(s)");
   });
 
-  it("leaves the dynamic route to the Worker with no asset and a loud downgrade", () => {
+  it("keeps middleware-free pages static and middleware routes on the Worker", () => {
+    expect(existsSync(join(clientDir, "index.html"))).toBe(true);
+    expect(existsSync(join(clientDir, "about.html"))).toBe(true);
     expect(existsSync(join(clientDir, "posts"))).toBe(false);
-    expect(build.output).toContain('Route "src/routes/posts/[id].jsx" (/posts/:id) is a prerender candidate');
+    expect(build.output).toContain(
+      'Route "src/routes/posts/[id].jsx" (/posts/:id) is a prerender candidate',
+    );
+    expect(build.output).toContain(
+      'Route "src/routes/posts/demo/index.jsx" (/posts/demo) is a prerender candidate',
+    );
+    expect(build.output).toContain("src/routes/posts/_middleware.js");
+    expect(build.output).toContain("src/routes/posts/demo/_middleware.js");
+  });
+
+  it("runs selected fixture middleware outermost-first in the emitted Worker", async () => {
+    const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
+    await harness.listen();
+    const worker = harness.getWorker();
+    try {
+      const page = await worker.fetch("https://goribu.test/posts/demo");
+      expect(page.status).toBe(200);
+      expect(page.headers.get("x-posts-middleware")).toBe("yes");
+      expect(page.headers.get("x-demo-middleware")).toBe("yes");
+      expect(page.headers.get("x-middleware-order")).toBe(
+        "posts,posts-gate,demo",
+      );
+      expect(await page.text()).toContain("<h1>Middleware demo</h1>");
+
+      const response = await worker.fetch(
+        "https://goribu.test/posts/demo/middleware",
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-posts-middleware")).toBe("yes");
+      expect(response.headers.get("x-demo-middleware")).toBe("yes");
+      expect(response.headers.get("x-handler")).toBe("yes");
+      expect(await response.json()).toEqual({
+        middleware: ["posts", "posts-gate", "demo"],
+      });
+
+      const stopped = await worker.fetch(
+        "https://goribu.test/posts/demo/middleware?middleware=demo",
+        { redirect: "manual" },
+      );
+      expect(stopped.status).toBe(303);
+      expect(stopped.headers.get("location")).toBe("/login");
+      expect(stopped.headers.get("x-posts-middleware")).toBe("yes");
+      expect(stopped.headers.get("x-demo-middleware")).toBe("yes");
+      expect(stopped.headers.get("x-handler")).toBeNull();
+    } finally {
+      await harness.close();
+    }
   });
 
   it("matches the static HTML byte-for-byte with what the Worker serves in workerd", async () => {

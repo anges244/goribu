@@ -24,6 +24,22 @@ function dynamicSegment(name) {
   return { type: "dynamic", name };
 }
 
+function middlewareOptions(routeId, ...middlewareIds) {
+  const middlewareByRoute = new Map([
+    [
+      routeId,
+      middlewareIds.map((id) => ({
+        id,
+        relativePath: id.replace("src/routes/", ""),
+      })),
+    ],
+  ]);
+  return {
+    routesWithMiddleware: new Set(middlewareByRoute.keys()),
+    middlewareByRoute,
+  };
+}
+
 describe("assetPathForRoute", () => {
   it("maps the root route to index.html", () => {
     expect(assetPathForRoute(route({ segments: [] }))).toBe("index.html");
@@ -96,6 +112,57 @@ describe("planStaticRoutes", () => {
         forced: false,
       },
     ]);
+  });
+
+  it("downgrades a static page with named middleware while keeping a middleware-free page static", () => {
+    const middlewareRoute = route({
+      id: "src/routes/dashboard.jsx",
+      pattern: "/dashboard",
+      segments: [staticSegment("dashboard")],
+    });
+    const { staticRoutes, downgraded } = planStaticRoutes(
+      [route({}), middlewareRoute],
+      middlewareOptions(
+        middlewareRoute.id,
+        "src/routes/_middleware.js",
+        "src/routes/dashboard/_middleware.js",
+      ),
+    );
+
+    expect(staticRoutes.map((candidate) => candidate.id)).toEqual([
+      "src/routes/index.jsx",
+    ]);
+    expect(downgraded).toEqual([
+      expect.objectContaining({
+        id: middlewareRoute.id,
+        reason: expect.stringContaining("src/routes/_middleware.js"),
+      }),
+    ]);
+    expect(downgraded[0].reason).toContain(
+      "src/routes/dashboard/_middleware.js",
+    );
+    expect(downgraded[0].reason).toContain("must run on every request");
+  });
+
+  it("fails when a middleware route explicitly forces prerendering", () => {
+    const middlewareRoute = route({
+      id: "src/routes/dashboard.jsx",
+      pattern: "/dashboard",
+      segments: [staticSegment("dashboard")],
+      prerenderOverride: true,
+    });
+
+    expect(() =>
+      planStaticRoutes(
+        [middlewareRoute],
+        middlewareOptions(
+          middlewareRoute.id,
+          "src/routes/dashboard/_middleware.js",
+        ),
+      ),
+    ).toThrow(
+      /export const prerender = true.*src\/routes\/dashboard\/_middleware\.js.*must run on every request/s,
+    );
   });
 
   it("marks an explicitly forced static route as forced", () => {

@@ -8,10 +8,11 @@
  * `export const prerender = true` — AND every URL segment is static, so its one
  * URL is known at build time.
  *
- * A candidate with a dynamic segment has no enumerable URL, so it is downgraded
- * to Worker rendering and the caller announces the reason out loud. When such a
- * route explicitly forced prerendering, the mismatch is the author's mistake and
- * fails the build rather than being downgraded silently.
+ * A candidate with selected middleware needs the Worker at request time, and a
+ * candidate with a dynamic segment has no enumerable URL. Either condition
+ * downgrades the route with a named reason. When the route explicitly forced
+ * prerendering, the mismatch is the author's mistake and fails the build rather
+ * than being downgraded silently.
  *
  * @param {Array<{
  *   id: string,
@@ -20,17 +21,51 @@
  *   prerenderEligible: boolean,
  *   prerenderOverride: boolean | null,
  * }>} manifest
+ * @param {{
+ *   routesWithMiddleware?: Set<string>,
+ *   middlewareByRoute?: Map<string, Array<{ id: string, relativePath: string }>>,
+ * }} [options]
  * @returns {{
  *   staticRoutes: Array<{ id: string, pattern: string, pathname: string, assetPath: string, forced: boolean }>,
  *   downgraded: Array<{ id: string, pattern: string, reason: string }>,
  * }}
  */
-export function planStaticRoutes(manifest) {
+export function planStaticRoutes(manifest, options = {}) {
+  const routesWithMiddleware = options.routesWithMiddleware ?? new Set();
+  const middlewareByRoute = options.middlewareByRoute ?? new Map();
+  if (!(routesWithMiddleware instanceof Set) || !(middlewareByRoute instanceof Map)) {
+    throw new TypeError(
+      "[Goribu] planStaticRoutes(manifest, options) requires routesWithMiddleware to be a Set and middlewareByRoute to be the shared build-selected Map.",
+    );
+  }
+
   const staticRoutes = [];
   const downgraded = [];
 
   for (const route of manifest) {
     if (!route.prerenderEligible) continue;
+
+    if (routesWithMiddleware.has(route.id)) {
+      const selected = middlewareByRoute.get(route.id);
+      if (!Array.isArray(selected) || selected.length === 0) {
+        throw new Error(
+          `[Goribu] Static-route planning knows ${JSON.stringify(route.id)} has middleware, but its shared middleware selection is missing. ` +
+            "Regenerate middleware selection before planning static output.",
+        );
+      }
+
+      const reason = middlewareReason(selected);
+      if (route.prerenderOverride === true) {
+        throw new Error(
+          `[Goribu] Route "${route.id}" (${route.pattern}) sets \`export const prerender = true\`, ` +
+            `but ${reason}. Remove the prerender export so the middleware can run on every request, ` +
+            "or remove the middleware from this route's directory ancestry.",
+        );
+      }
+
+      downgraded.push({ id: route.id, pattern: route.pattern, reason });
+      continue;
+    }
 
     const dynamic = route.segments.filter((segment) => segment.type === "dynamic");
     if (dynamic.length === 0) {
@@ -66,6 +101,15 @@ export function planStaticRoutes(manifest) {
   }
 
   return { staticRoutes, downgraded };
+}
+
+function middlewareReason(selected) {
+  const files = selected.map((descriptor) => JSON.stringify(descriptor.id));
+  const named =
+    files.length === 1
+      ? `selected middleware ${files[0]}`
+      : `selected middleware modules ${files.join(", ")}`;
+  return `it has ${named} that must run on every request`;
 }
 
 /**

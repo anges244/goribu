@@ -6,6 +6,8 @@ import { createRequest } from "./create-request.js";
 import { createResponse, isResponseResult } from "./create-response.js";
 import { createCookieJar } from "./cookies/create-cookie-jar.js";
 import { appendSetCookies } from "./cookies/append-set-cookies.js";
+import { flattenMiddlewareModules } from "./flatten-middleware-modules.js";
+import { composeMiddleware } from "./compose-middleware.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
 
@@ -33,6 +35,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  *   modules: Map<string, object>,
  *   errorPages: { notFound: string|null },
  *   documentId: string|null,
+ *   middlewareByRoute?: Map<string, Array<{ id: string, relativePath: string }>>,
  * }} options
  * @returns {{ fetch(request: Request): Promise<Response> }}
  */
@@ -64,6 +67,13 @@ export function createApp(options) {
     );
   }
 
+  const middlewareByRoute = options.middlewareByRoute ?? new Map();
+  if (!(middlewareByRoute instanceof Map)) {
+    throw new TypeError(
+      `[Goribu] ${CALLER} requires middlewareByRoute to be the build-prepared Map from route IDs to ordered middleware descriptors.`,
+    );
+  }
+
   const documentId = options.documentId ?? null;
   const Document =
     documentId === null
@@ -72,6 +82,7 @@ export function createApp(options) {
   const notFoundId = errorPages.notFound ?? null;
   const NotFoundPage =
     notFoundId === null ? null : loadDefaultExport(modules, notFoundId, "_404 page");
+  const middlewareRunners = createMiddlewareRunners(middlewareByRoute, modules);
 
   return Object.freeze({
     async fetch(request) {
@@ -123,19 +134,51 @@ export function createApp(options) {
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
       // finalize what it returns through the response builder.
-      case "handler":
+      case "handler": {
+        const runMiddleware = middlewareRunners.get(match.route.id);
+        if (runMiddleware) {
+          return dispatchWithMiddleware(
+            match,
+            { kind: "handler", method: match.method },
+            request,
+            cookieJar,
+            runMiddleware,
+          );
+        }
         return dispatchHandler(match, match.method, request, cookieJar);
+      }
 
-      case "page":
+      case "page": {
+        const runMiddleware = middlewareRunners.get(match.route.id);
+        if (runMiddleware) {
+          return dispatchWithMiddleware(
+            match,
+            { kind: "page", method: "GET" },
+            request,
+            cookieJar,
+            runMiddleware,
+          );
+        }
         return renderPage({
           Page: loadDefaultExport(modules, match.route.id, "route"),
           Document,
         });
+      }
 
       // A matched HEAD arrives as "automatic-head" and the HEAD boundary above
       // drops the body. Its target is whatever GET would serve: a handler when
       // the route exports GET, otherwise the default page.
-      case "automatic-head":
+      case "automatic-head": {
+        const runMiddleware = middlewareRunners.get(match.route.id);
+        if (runMiddleware) {
+          return dispatchWithMiddleware(
+            match,
+            { ...match.target, method: "GET" },
+            request,
+            cookieJar,
+            runMiddleware,
+          );
+        }
         if (match.target?.kind === "handler") {
           return dispatchHandler(match, match.target.method, request, cookieJar);
         }
@@ -143,6 +186,7 @@ export function createApp(options) {
           Page: loadDefaultExport(modules, match.route.id, "route"),
           Document,
         });
+      }
 
       case "automatic-options":
         return new Response(null, {
@@ -166,12 +210,37 @@ export function createApp(options) {
     }
   }
 
+  // Run selected middleware with the same request and response objects the
+  // handler receives if the chain continues. A terminal middleware intent uses
+  // the same finalization path as a handler; an implicit page finalizes
+  // res.render({}) so status and headers accumulated by continuing middleware
+  // reach the streamed response.
+  async function dispatchWithMiddleware(
+    match,
+    target,
+    request,
+    cookieJar,
+    runMiddleware,
+  ) {
+    const req = createRequest(request, match.params, { cookies: cookieJar });
+    const res = createResponse({ canRender: match.route.hasDefaultExport });
+    const result = await runMiddleware(req, res);
+
+    if (isResponseResult(result)) {
+      return finalizeMatchedResult(result, match, target.method);
+    }
+    if (target.kind === "handler") {
+      return dispatchHandler(match, target.method, request, cookieJar, { req, res });
+    }
+    return finalizeMatchedResult(res.render({}), match, target.method);
+  }
+
   // Run one named method handler and finalize its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
   // headers, the body helpers, and the request cookie jar) and the response
   // builder. Worker bindings (req.env) and req.waitUntil arrive when createApp
   // is given env/ctx in a later substep.
-  async function dispatchHandler(match, method, request, cookieJar) {
+  async function dispatchHandler(match, method, request, cookieJar, prepared) {
     if (!modules.has(match.route.id)) {
       throw new Error(
         `[Goribu] The route module "${match.route.id}" was matched but is not in the loaded module map. ` +
@@ -187,9 +256,15 @@ export function createApp(options) {
       );
     }
 
-    const req = createRequest(request, match.params, { cookies: cookieJar });
-    const res = createResponse({ canRender: match.route.hasDefaultExport });
+    const req =
+      prepared?.req ?? createRequest(request, match.params, { cookies: cookieJar });
+    const res =
+      prepared?.res ?? createResponse({ canRender: match.route.hasDefaultExport });
     const result = await handler(req, res);
+    return finalizeMatchedResult(result, match, method);
+  }
+
+  function finalizeMatchedResult(result, match, method) {
     return finalizeHandlerResult(result, {
       method,
       routeId: match.route.id,
@@ -201,6 +276,59 @@ export function createApp(options) {
       getPage: () => loadDefaultExport(modules, match.route.id, "route"),
     });
   }
+}
+
+/**
+ * Bind build-selected middleware descriptors to loaded modules and compose one
+ * reusable runner per route. Empty selections deliberately produce no runner so
+ * routes without middleware keep their existing dispatch and render paths.
+ */
+function createMiddlewareRunners(middlewareByRoute, modules) {
+  const runners = new Map();
+
+  for (const [routeId, descriptors] of middlewareByRoute) {
+    if (typeof routeId !== "string" || routeId.length === 0 || !Array.isArray(descriptors)) {
+      throw new TypeError(
+        "[Goribu] middlewareByRoute must map each route ID to its ordered middleware descriptor array. Rebuild the Worker entry so Goribu can prepare middleware selection.",
+      );
+    }
+
+    const bindings = descriptors.map((descriptor, index) => {
+      if (
+        descriptor === null ||
+        typeof descriptor !== "object" ||
+        typeof descriptor.id !== "string" ||
+        descriptor.id.length === 0 ||
+        typeof descriptor.relativePath !== "string" ||
+        descriptor.relativePath.length === 0
+      ) {
+        throw new TypeError(
+          `[Goribu] Middleware descriptor at index ${index} for route ${JSON.stringify(routeId)} is invalid. ` +
+            "Rebuild the Worker entry so each descriptor has an id and relativePath.",
+        );
+      }
+      if (!modules.has(descriptor.id)) {
+        throw new Error(
+          `[Goribu] Middleware module ${JSON.stringify(descriptor.id)} selected for route ${JSON.stringify(routeId)} is not in the loaded module map. ` +
+            "Rebuild so every selected middleware module is imported.",
+        );
+      }
+
+      return {
+        source: {
+          filePath: descriptor.relativePath,
+          relativePath: descriptor.relativePath,
+        },
+        module: modules.get(descriptor.id),
+      };
+    });
+    const middleware = flattenMiddlewareModules(bindings);
+    if (middleware.length > 0) {
+      runners.set(routeId, composeMiddleware(middleware));
+    }
+  }
+
+  return runners;
 }
 
 /**

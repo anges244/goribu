@@ -181,6 +181,42 @@ describe("prerenderStaticRoutes", () => {
     expect(state.stopped).toBe(true);
   });
 
+  it("uses shared middleware selection to downgrade only the affected static page", async () => {
+    const root = makeProject();
+    writeRoute(root, "index.jsx");
+    writeRoute(root, "dashboard/index.jsx");
+    writeRoute(
+      root,
+      "dashboard/_middleware.js",
+      "export default function middleware() {}\n",
+    );
+    const clientDir = writeBuildOutputs(root);
+    const fetched = [];
+    const { startWorker } = fakeStartWorker((pathname) => {
+      fetched.push(pathname);
+      return htmlResponse("<!DOCTYPE html>ok");
+    });
+    const log = makeLog();
+
+    const { prerendered, downgraded } = await prerenderStaticRoutes({
+      projectRoot: root,
+      log,
+      startWorker,
+    });
+
+    expect(prerendered.map((route) => route.assetPath)).toEqual(["index.html"]);
+    expect(existsSync(join(clientDir, "dashboard.html"))).toBe(false);
+    expect(fetched).toEqual(["/"]);
+    expect(downgraded).toEqual([
+      expect.objectContaining({
+        id: "src/routes/dashboard/index.jsx",
+        reason: expect.stringContaining(
+          "src/routes/dashboard/_middleware.js",
+        ),
+      }),
+    ]);
+  });
+
   it("structurally downgrades a dynamic route without fetching it", async () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");
