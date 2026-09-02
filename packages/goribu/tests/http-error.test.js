@@ -28,6 +28,17 @@ describe("internal HTTP errors", () => {
     expect(() => {
       error.status = 401;
     }).toThrow(TypeError);
+
+    const hostile = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("property trap must not run");
+        },
+      },
+    );
+    expect(() => isHttpError(hostile)).not.toThrow();
+    expect(isHttpError(hostile)).toBe(false);
   });
 
   it("fails closed for non-client statuses and unsafe messages", () => {

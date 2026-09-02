@@ -42,28 +42,47 @@ describe("writeWorkerEntry", () => {
     expect(source).toContain('import * as module2 from "../src/routes/posts/[id].jsx"');
     expect(source).toContain('"pattern": "/posts/:id"');
     expect(source).toContain('["src/routes/index.jsx", module0]');
-    expect(source).toContain("const errorPages = { notFound: null };");
+    expect(source).toContain(
+      "const errorPages = { notFound: null, serverError: null };",
+    );
     expect(source).toContain("const documentId = null;");
+    expect(source).toContain('const mode = "production";');
     expect(source).toContain("const middlewareByRoute = new Map([]);");
     expect(source).toContain(
-      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute });",
+      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode });",
     );
     // The absolute file path must never leak into the bundled manifest.
     expect(source).not.toContain(root);
   });
 
-  it("discovers the _404 and _document modules and wires their identities", () => {
+  it("discovers the _404, _500, and _document modules and wires their identities", () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");
     writeRoute(root, "_404.jsx");
+    writeRoute(root, "_500.jsx");
     writeRoute(root, "_document.jsx");
 
     const { source } = writeWorkerEntry({ projectRoot: root });
 
     expect(source).toContain('import * as module1 from "../src/routes/_404.jsx"');
-    expect(source).toContain('import * as module2 from "../src/routes/_document.jsx"');
-    expect(source).toContain('const errorPages = { notFound: "src/routes/_404.jsx" };');
+    expect(source).toContain('import * as module2 from "../src/routes/_500.jsx"');
+    expect(source).toContain('import * as module3 from "../src/routes/_document.jsx"');
+    expect(source).toContain(
+      'const errorPages = { notFound: "src/routes/_404.jsx", serverError: "src/routes/_500.jsx" };',
+    );
     expect(source).toContain('const documentId = "src/routes/_document.jsx";');
+  });
+
+  it("emits an explicitly selected development mode", () => {
+    const root = makeProject();
+    writeRoute(root, "index.jsx");
+
+    const { source } = writeWorkerEntry({
+      projectRoot: root,
+      mode: "development",
+    });
+
+    expect(source).toContain('const mode = "development";');
   });
 
   it("imports a route that exports HTTP handlers so the runtime can dispatch them", () => {

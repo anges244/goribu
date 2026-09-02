@@ -1,4 +1,4 @@
-const HTTP_ERROR = Symbol("goribu.http-error");
+const HTTP_ERRORS = new WeakSet();
 
 /**
  * Create a private framework-originated client HTTP error.
@@ -37,13 +37,15 @@ export function createHttpError(status, message, options) {
   Object.defineProperties(error, {
     name: { configurable: true, value: "HttpError" },
     status: { enumerable: true, value: status },
-    [HTTP_ERROR]: { value: true },
   });
+  HTTP_ERRORS.add(error);
 
   return error;
 }
 
 /** Return whether a value is a genuine internal client HTTP error. */
 export function isHttpError(value) {
-  return Boolean(value) && value[HTTP_ERROR] === true;
+  return (
+    (typeof value === "object" && value !== null) || typeof value === "function"
+  ) && HTTP_ERRORS.has(value);
 }

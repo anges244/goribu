@@ -110,6 +110,49 @@ describe("goribu build static output (workerd)", () => {
     }
   });
 
+  it("uses the production _500 boundary and preserves safe HttpError responses", async () => {
+    const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
+    await harness.listen();
+    const worker = harness.getWorker();
+    try {
+      const failed = await worker.fetch("https://goribu.test/boom");
+      const html = await failed.text();
+      const errorId = html.match(/Error reference: <code>([^<]+)<\/code>/)?.[1];
+
+      expect(failed.status).toBe(500);
+      expect(failed.headers.get("content-type")).toBe(
+        "text/html; charset=utf-8",
+      );
+      expect(errorId).toEqual(expect.any(String));
+      expect(errorId.length).toBeGreaterThan(0);
+      expect(html).not.toContain("fixture boom secret");
+      expect(html).not.toContain("at GET");
+
+      // The emitted Worker is production-mode. Development stack disclosure is
+      // covered in create-app.test.js instead of being expected from this build.
+      const clientError = await worker.fetch(
+        "https://goribu.test/boom?http=1",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{ broken",
+        },
+      );
+      const message = await clientError.text();
+
+      expect(clientError.status).toBe(400);
+      expect(clientError.headers.get("content-type")).toBe(
+        "text/plain; charset=utf-8",
+      );
+      expect(message).toContain(
+        "[Goribu] Could not parse the application/json request body. Send valid JSON",
+      );
+      expect(message).not.toContain("SyntaxError");
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("matches the static HTML byte-for-byte with what the Worker serves in workerd", async () => {
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();

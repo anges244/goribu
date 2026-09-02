@@ -8,6 +8,8 @@ import { createCookieJar } from "./cookies/create-cookie-jar.js";
 import { appendSetCookies } from "./cookies/append-set-cookies.js";
 import { flattenMiddlewareModules } from "./flatten-middleware-modules.js";
 import { composeMiddleware } from "./compose-middleware.js";
+import { finalizeDevelopmentErrorResponse } from "./finalize-development-error-response.js";
+import { finalizeErrorResponse } from "./finalize-error-response.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
 
@@ -33,9 +35,10 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * @param {{
  *   manifest: object[],
  *   modules: Map<string, object>,
- *   errorPages: { notFound: string|null },
+ *   errorPages: { notFound: string|null, serverError?: string|null },
  *   documentId: string|null,
  *   middlewareByRoute?: Map<string, Array<{ id: string, relativePath: string }>>,
+ *   mode?: "development"|"production",
  * }} options
  * @returns {{ fetch(request: Request): Promise<Response> }}
  */
@@ -63,7 +66,14 @@ export function createApp(options) {
   const errorPages = options.errorPages;
   if (errorPages === null || typeof errorPages !== "object" || Array.isArray(errorPages)) {
     throw new TypeError(
-      `[Goribu] ${CALLER} requires errorPages to be the discovered { notFound } identities.`,
+      `[Goribu] ${CALLER} requires errorPages to be the discovered { notFound, serverError } identities.`,
+    );
+  }
+
+  const mode = options.mode ?? "production";
+  if (mode !== "development" && mode !== "production") {
+    throw new TypeError(
+      `[Goribu] ${CALLER} requires mode to be "development" or "production". Pass the mode baked into the generated Worker.`,
     );
   }
 
@@ -82,6 +92,11 @@ export function createApp(options) {
   const notFoundId = errorPages.notFound ?? null;
   const NotFoundPage =
     notFoundId === null ? null : loadDefaultExport(modules, notFoundId, "_404 page");
+  const serverErrorId = errorPages.serverError ?? null;
+  const ServerErrorPage =
+    serverErrorId === null
+      ? null
+      : loadDefaultExport(modules, serverErrorId, "_500 page");
   const middlewareRunners = createMiddlewareRunners(middlewareByRoute, modules);
 
   return Object.freeze({
@@ -113,7 +128,23 @@ export function createApp(options) {
         method: request.method,
       });
 
-      const response = await resolveResponse(match, url, request, cookieJar);
+      let response;
+      try {
+        response = await resolveResponse(match, url, request, cookieJar);
+      } catch (error) {
+        response =
+          mode === "development"
+            ? finalizeDevelopmentErrorResponse({
+                error,
+                url: url.pathname,
+              })
+            : await finalizeErrorResponse({
+                error,
+                url: url.pathname,
+                Page: ServerErrorPage,
+                Document,
+              });
+      }
       const flushed = appendSetCookies(response, cookieJar.pending);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and

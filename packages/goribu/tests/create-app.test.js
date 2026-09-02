@@ -72,6 +72,20 @@ function build(overrides = {}) {
 
 const get = (path) => new Request(`https://example.com${path}`);
 
+async function developmentErrorBody(app, request) {
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const response = await app.fetch(request);
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toBe(
+      "text/plain; charset=utf-8",
+    );
+    return await response.text();
+  } finally {
+    consoleError.mockRestore();
+  }
+}
+
 describe("createApp().fetch", () => {
   it("renders a matched page as a streamed HTML document", async () => {
     const response = await build().fetch(get("/"));
@@ -188,15 +202,269 @@ describe("createApp().fetch", () => {
     expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
   });
 
-  it("fails closed when a matched route module has no default export", async () => {
+  it("discloses the teaching error when a matched route module has no default export", async () => {
     const app = build({
+      mode: "development",
       modules: new Map([
         ["index", {}],
         ["about", pageModule("About")],
         ["post", pageModule("A post")],
       ]),
     });
-    await expect(app.fetch(get("/"))).rejects.toThrow(/no default-exported React component/);
+    await expect(developmentErrorBody(app, get("/"))).resolves.toContain(
+      "[Goribu] The route module \"index\" has no default-exported React component. Export a React component as the file's default export.",
+    );
+  });
+});
+
+describe("createApp().fetch — error boundaries", () => {
+  const SERVER_ERROR = "src/routes/_500.jsx";
+  const ERROR_MIDDLEWARE = "src/routes/_middleware.js";
+
+  it("renders and logs one correlated production _500 without disclosing the error or query", async () => {
+    const failure = new Error("database password leaked");
+    let pageProps;
+    function ServerErrorPage(props) {
+      pageProps = props;
+      return h("main", null, `Reference ${props.errorId} at ${props.url}`);
+    }
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const app = createApp({
+        manifest: [HELLO_HANDLER],
+        modules: new Map([
+          ["hello", { GET: () => { throw failure; } }],
+          [SERVER_ERROR, { default: ServerErrorPage }],
+        ]),
+        errorPages: { notFound: null, serverError: SERVER_ERROR },
+        documentId: null,
+        mode: "production",
+      });
+      const response = await app.fetch(
+        get("/hello?token=query-secret"),
+      );
+      const body = await response.text();
+
+      expect(response.status).toBe(500);
+      expect(pageProps).toEqual({
+        url: "/hello",
+        errorId: expect.any(String),
+      });
+      expect(body).toContain(`Reference ${pageProps.errorId} at /hello`);
+      expect(body).not.toContain(failure.message);
+      expect(body).not.toContain("query-secret");
+      expect(consoleError).toHaveBeenCalledWith(
+        `[Goribu] Unhandled error ${pageProps.errorId}:`,
+        failure,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("treats a hostile thrown Proxy as an opaque production failure", async () => {
+    const hostile = new Proxy(
+      {},
+      {
+        get(target, property, receiver) {
+          if (
+            property === "message" ||
+            property === "status" ||
+            typeof property === "symbol"
+          ) {
+            throw new Error("property trap must not escape the boundary");
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const app = createApp({
+        manifest: [HELLO_HANDLER],
+        modules: new Map([
+          ["hello", { GET: () => { throw hostile; } }],
+        ]),
+        errorPages: { notFound: null, serverError: null },
+        documentId: null,
+      });
+      const response = await app.fetch(get("/hello"));
+      const body = await response.text();
+
+      expect(response.status).toBe(500);
+      expect(body).toContain("Something went wrong.");
+      expect(body).toContain("Error ID:");
+      expect(consoleError.mock.calls[0][0]).toMatch(
+        /^\[Goribu\] Unhandled error .+:$/,
+      );
+      expect(consoleError.mock.calls[0][1]).toBe(hostile);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("discloses unexpected development failures without rendering _500 or exposing the query", async () => {
+    const failure = new Error("database unavailable");
+    failure.stack = "Error: database unavailable\n    at GET (/app/routes/hello.js:1:1)";
+    const ServerErrorPage = vi.fn(() => h("main", null, "Must not render"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const app = createApp({
+        manifest: [HELLO_HANDLER],
+        modules: new Map([
+          ["hello", { GET: () => { throw failure; } }],
+          [SERVER_ERROR, { default: ServerErrorPage }],
+        ]),
+        errorPages: { notFound: null, serverError: SERVER_ERROR },
+        documentId: null,
+        mode: "development",
+      });
+      const response = await app.fetch(get("/hello?token=query-secret"));
+      const body = await response.text();
+
+      expect(response.status).toBe(500);
+      expect(body).toContain(failure.stack);
+      expect(body).toContain('while handling "/hello"');
+      expect(body).not.toContain("query-secret");
+      expect(body).not.toContain("Error ID:");
+      expect(ServerErrorPage).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[Goribu] Development request failed:",
+        failure,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it.each(["development", "production"])(
+    "maps a malformed-body HttpError to its safe 400 response in %s",
+    async (mode) => {
+      const ServerErrorPage = vi.fn(() => h("main", null, "Must not render"));
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const app = createApp({
+          manifest: [HELLO_HANDLER],
+          modules: new Map([
+            [
+              "hello",
+              { POST: async (req, res) => res.json(await req.body()) },
+            ],
+            [SERVER_ERROR, { default: ServerErrorPage }],
+          ]),
+          errorPages: { notFound: null, serverError: SERVER_ERROR },
+          documentId: null,
+          mode,
+        });
+        const response = await app.fetch(
+          new Request("https://example.com/hello?token=query-secret", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "{ broken",
+          }),
+        );
+        const body = await response.text();
+
+        expect(response.status).toBe(400);
+        expect(response.headers.get("content-type")).toBe(
+          "text/plain; charset=utf-8",
+        );
+        expect(body).toContain(
+          "[Goribu] Could not parse the application/json request body. Send valid JSON, or use rawBody() when the payload is not JSON.",
+        );
+        expect(body).not.toContain("query-secret");
+        expect(ServerErrorPage).not.toHaveBeenCalled();
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        consoleError.mockRestore();
+      }
+    },
+  );
+
+  it("falls back to plain text with the same error ID when custom _500 rendering fails", async () => {
+    const failure = new Error("handler failed");
+    const renderFailure = new Error("custom _500 failed");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const app = createApp({
+        manifest: [HELLO_HANDLER],
+        modules: new Map([
+          ["hello", { GET: () => { throw failure; } }],
+          [SERVER_ERROR, { default: () => { throw renderFailure; } }],
+        ]),
+        errorPages: { notFound: null, serverError: SERVER_ERROR },
+        documentId: null,
+      });
+      const response = await app.fetch(get("/hello"));
+      const body = await response.text();
+      const firstLog = consoleError.mock.calls.find(
+        ([message]) =>
+          typeof message === "string" &&
+          message.startsWith("[Goribu] Unhandled error "),
+      );
+      const errorId = firstLog[0].slice(
+        "[Goribu] Unhandled error ".length,
+        -1,
+      );
+
+      expect(response.status).toBe(500);
+      expect(body).toBe(`Internal Server Error\nError ID: ${errorId}`);
+      expect(firstLog[1]).toBe(failure);
+      expect(consoleError).toHaveBeenCalledWith(
+        `[Goribu] _500 rendering failed for error ${errorId}:`,
+        expect.objectContaining({ cause: renderFailure }),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("flushes cookies queued by middleware before a downstream production failure", async () => {
+    const failure = new Error("handler failed");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const app = createApp({
+        manifest: [HELLO_HANDLER],
+        modules: new Map([
+          [
+            ERROR_MIDDLEWARE,
+            {
+              default: (req) => {
+                req.cookies.set("before-error", "yes", { httpOnly: true });
+              },
+            },
+          ],
+          ["hello", { GET: () => { throw failure; } }],
+        ]),
+        errorPages: { notFound: null, serverError: null },
+        documentId: null,
+        middlewareByRoute: new Map([
+          [
+            "hello",
+            [
+              {
+                id: ERROR_MIDDLEWARE,
+                relativePath: "_middleware.js",
+              },
+            ],
+          ],
+        ]),
+      });
+      const response = await app.fetch(get("/hello"));
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get("set-cookie")).toBe(
+        "before-error=yes; HttpOnly",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
 
@@ -208,13 +476,14 @@ describe("createApp().fetch — middleware", () => {
     return { id, relativePath: id.replace("src/routes/", "") };
   }
 
-  function middlewareApp({ manifest, modules, middlewareByRoute }) {
+  function middlewareApp({ manifest, modules, middlewareByRoute, mode }) {
     return createApp({
       manifest,
       modules,
       errorPages: { notFound: null },
       documentId: null,
       middlewareByRoute,
+      mode,
     });
   }
 
@@ -400,11 +669,24 @@ describe("createApp().fetch — middleware", () => {
   });
 
   it.each([
-    ["a raw Web Response", () => new Response("raw"), "returned a Web Response"],
-    ["a non-response value", () => "wrong", "returned a non-response value"],
-  ])("rejects middleware returning %s with a teaching error", async (label, result, message) => {
+    [
+      "a raw Web Response",
+      function rawResponseMiddleware() {
+        return new Response("raw");
+      },
+      '[Goribu] Middleware "rawResponseMiddleware" at index 0 returned a Web Response. Return a res.* result instead so Goribu can apply cookies and other framework behavior. Use res.text(), res.json(), res.invalid(), res.redirect(), res.render(), or res.notFound().',
+    ],
+    [
+      "a non-response value",
+      function nonResponseMiddleware() {
+        return "wrong";
+      },
+      '[Goribu] Middleware "nonResponseMiddleware" at index 0 returned a non-response value. Return nothing to continue, or return a res.* result such as res.redirect(\'/login\') to stop the chain.',
+    ],
+  ])("discloses middleware returning %s as a teaching 500", async (label, result, message) => {
     const app = middlewareApp({
       manifest: [HELLO_HANDLER],
+      mode: "development",
       modules: new Map([
         [ROOT_MIDDLEWARE, { default: result }],
         ["hello", { GET: (req, res) => res.text("handler") }],
@@ -414,7 +696,9 @@ describe("createApp().fetch — middleware", () => {
       ]),
     });
 
-    await expect(app.fetch(get("/hello"))).rejects.toThrow(message);
+    await expect(developmentErrorBody(app, get("/hello"))).resolves.toContain(
+      message,
+    );
   });
 
   it("runs target middleware for automatic HEAD and preserves its cookies", async () => {
@@ -485,12 +769,13 @@ describe("createApp().fetch — middleware", () => {
 });
 
 describe("createApp().fetch — named handlers", () => {
-  function handlerApp(modules) {
+  function handlerApp(modules, overrides = {}) {
     return createApp({
       manifest: [HELLO_HANDLER, ITEM_HANDLER, MIXED],
       modules,
       errorPages: { notFound: null },
       documentId: null,
+      ...overrides,
     });
   }
 
@@ -763,38 +1048,55 @@ describe("createApp().fetch — named handlers", () => {
     expect(await response.text()).toContain("<h1>Missing: no such item</h1>");
   });
 
-  it("teaches when res.render() is used with a bodyless status", async () => {
+  it("discloses the teaching error when res.render() uses a bodyless status", async () => {
     const app = handlerApp(
       new Map([
         ["mixed", { default: () => h("p", null, "x"), GET: (req, res) => res.status(204).render({}) }],
       ]),
+      { mode: "development" },
     );
-    await expect(app.fetch(get("/mixed"))).rejects.toThrow(
-      /status 204 because that status cannot carry a response body/,
+    await expect(developmentErrorBody(app, get("/mixed"))).resolves.toContain(
+      "[Goribu] Cannot render a page with status 204 because that status cannot carry a response body. Choose a body-bearing status before calling res.render(props).",
     );
   });
 
-  it("teaches when a handler on a page-less route calls res.render()", async () => {
+  it("discloses the teaching error when a page-less handler calls res.render()", async () => {
     const app = handlerApp(
       new Map([["hello", { GET: (req, res) => res.render({}) }]]),
+      { mode: "development" },
     );
-    await expect(app.fetch(get("/hello"))).rejects.toThrow(
-      /requires the matched route to have a default page export/,
+    await expect(developmentErrorBody(app, get("/hello"))).resolves.toContain(
+      "[Goribu] res.render(props) requires the matched route to have a default page export. Add a default export to the route or return res.text(), res.json(), res.invalid(), res.redirect(), or res.notFound().",
     );
   });
 
-  it("teaches when a handler returns nothing", async () => {
-    const app = handlerApp(new Map([["hello", { GET: () => {} }]]));
-    await expect(app.fetch(get("/hello"))).rejects.toThrow(/did not return a response/);
+  it("discloses the teaching error when a handler returns nothing", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: () => {} }]]),
+      { mode: "development" },
+    );
+    await expect(developmentErrorBody(app, get("/hello"))).resolves.toContain(
+      "[Goribu] The GET handler for route \"hello\" did not return a response. Return a res.* result such as res.json(), res.text(), or res.redirect().",
+    );
   });
 
-  it("teaches when a handler returns a raw Web Response", async () => {
-    const app = handlerApp(new Map([["hello", { GET: () => new Response("no") }]]));
-    await expect(app.fetch(get("/hello"))).rejects.toThrow(/returned a Web Response/);
+  it("discloses the teaching error when a handler returns a raw Web Response", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: () => new Response("no") }]]),
+      { mode: "development" },
+    );
+    await expect(developmentErrorBody(app, get("/hello"))).resolves.toContain(
+      "[Goribu] The GET handler for route \"hello\" returned a Web Response. Return a res.* result instead so Goribu can apply framework behavior.",
+    );
   });
 
-  it("teaches when a handler returns a non-response value", async () => {
-    const app = handlerApp(new Map([["hello", { GET: () => "just a string" }]]));
-    await expect(app.fetch(get("/hello"))).rejects.toThrow(/non-response value/);
+  it("discloses the teaching error when a handler returns a non-response value", async () => {
+    const app = handlerApp(
+      new Map([["hello", { GET: () => "just a string" }]]),
+      { mode: "development" },
+    );
+    await expect(developmentErrorBody(app, get("/hello"))).resolves.toContain(
+      "[Goribu] The GET handler for route \"hello\" returned a non-response value. Return a genuine res.* result instead of a string, the response builder, or a plain object.",
+    );
   });
 });

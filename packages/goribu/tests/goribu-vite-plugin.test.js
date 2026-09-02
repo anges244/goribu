@@ -1,8 +1,19 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { goribu } from "goribu/vite";
+
+const APPLICATION_CONFIG_URL = new URL(
+  "../src/runtime/application-config.js",
+  import.meta.url,
+).href;
 
 const created = [];
 
@@ -53,6 +64,29 @@ describe("goribu()", () => {
       bundle,
     );
   };
+
+  it.each([
+    ["serve", "development"],
+    ["build", "production"],
+  ])("bakes Vite command %s into the generated %s Worker", async (command, mode) => {
+    const root = makeProject();
+    mkdirSync(join(root, "src", "routes"), { recursive: true });
+    writeFileSync(
+      join(root, "src", "routes", "index.jsx"),
+      "export default function Page() { return null; }\n",
+    );
+    writeFileSync(
+      join(root, "goribu.config.js"),
+      `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
+        'export default defineConfig({ name: "mode-app", compatibilityDate: "2026-08-31" });\n',
+    );
+
+    await goribuPlugin().config({ root }, { command });
+
+    expect(readFileSync(join(root, ".goribu", "worker.js"), "utf8")).toContain(
+      `const mode = ${JSON.stringify(mode)};`,
+    );
+  });
 
   it("emits a _headers asset that caches only the reserved fingerprinted namespace", () => {
     const client = emitHeadersFor("client");

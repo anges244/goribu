@@ -51,10 +51,12 @@ function createGoribuPlugin() {
     // Runs before the Cloudflare plugin resolves configPath (this plugin is
     // enforce: "pre"), so the generated Worker entry and Wrangler config are on
     // disk by the time it reads them.
-    async config(config) {
+    async config(config, environment = {}) {
       const root = config.root ? resolve(config.root) : process.cwd();
+      const mode =
+        environment.command === "serve" ? "development" : "production";
       assertNoReservedPublicFiles(root, config.publicDir);
-      writeWorkerEntry({ projectRoot: root });
+      writeWorkerEntry({ projectRoot: root, mode });
       const appConfig = await loadApplicationConfig({ projectRoot: root });
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
