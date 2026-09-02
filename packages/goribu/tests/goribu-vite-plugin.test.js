@@ -102,10 +102,11 @@ describe("goribu()", () => {
     expect(emitHeadersFor("goribu_basic_app")).toHaveLength(0);
   });
 
-  it("passes fingerprinted files and ignores files outside the reserved namespace", () => {
+  it("passes Vite hashes containing dashes and ignores files outside the reserved namespace", () => {
     expect(() =>
       auditBundle({
-        "_goribu/assets/client-entry-BvRk9kiK.js": { type: "chunk" },
+        "_goribu/assets/client-pages-Dh-wBXR4.js": { type: "chunk" },
+        "_goribu/assets/client-route__encoded-N1sL-lhX.js": { type: "chunk" },
         "_goribu/assets/logo-A1b2C3d4.svg": { type: "asset" },
         "robots.txt": { type: "asset" },
         "assets/vendor.js": { type: "chunk" },
@@ -114,14 +115,19 @@ describe("goribu()", () => {
   });
 
   it("fails closed on a non-fingerprinted file under the reserved namespace", () => {
-    // An app that overrode the client output filenames to drop the hash.
+    // App output with a descriptive chunk name but no generated hash.
     expect(() =>
-      auditBundle({ "_goribu/assets/client-entry.js": { type: "chunk" } }),
+      auditBundle({ "_goribu/assets/client-pages.js": { type: "chunk" } }),
+    ).toThrow(/carries no content hash/);
+
+    // A bare entry name is shorter than the required delimiter plus hash.
+    expect(() =>
+      auditBundle({ "_goribu/assets/entry.js": { type: "chunk" } }),
     ).toThrow(/carries no content hash/);
 
     // A dictionary-word segment has no entropy, so it is not mistaken for a hash.
     expect(() =>
-      auditBundle({ "_goribu/assets/navigation.js": { type: "chunk" } }),
+      auditBundle({ "_goribu/assets/client-fallback.js": { type: "chunk" } }),
     ).toThrow(/carries no content hash/);
 
     // A fixed-name asset emitted straight into the namespace by another plugin.

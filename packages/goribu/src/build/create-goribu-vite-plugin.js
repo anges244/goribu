@@ -158,11 +158,12 @@ function requireClientBoundary(boundary) {
  * Return the first file under the reserved immutable namespace whose name has no
  * content hash, or null when every such file is fingerprinted.
  *
- * A Rollup content hash is a run of at least eight base64url characters appended
- * after a hyphen. Unlike a dictionary name segment (`entry`, `navigation`), a
- * real hash carries entropy, so it holds at least one digit or uppercase letter;
- * requiring that separates a hashed name from an unhashed one whatever the app or
- * another plugin named the file.
+ * Vite's generated content hash is the final eight base64url characters after a
+ * hyphen. The hash itself may contain `-`, so its known length — not the final
+ * hyphen — anchors the boundary. A real hash also carries at least one digit or
+ * uppercase letter, separating it from a dictionary tail such as `fallback`.
+ * This guard is deliberately pinned to Vite's default hash length: if a future
+ * Vite changes that contract, the build fails closed until Goribu verifies it.
  */
 function findUnhashedReservedAsset(bundle) {
   for (const fileName of Object.keys(bundle)) {
@@ -175,13 +176,11 @@ function findUnhashedReservedAsset(bundle) {
 function isHashedAssetName(fileName) {
   const base = fileName.slice(fileName.lastIndexOf("/") + 1);
   const stem = base.replace(/(?:\.[A-Za-z0-9]+)+$/, "");
-  const lastDash = stem.lastIndexOf("-");
-  if (lastDash === -1) return false;
+  const token = stem.slice(-8);
 
-  const token = stem.slice(lastDash + 1);
   return (
-    token.length >= 8 &&
-    /^[A-Za-z0-9_-]+$/.test(token) &&
+    stem.at(-9) === "-" &&
+    /^[A-Za-z0-9_-]{8}$/.test(token) &&
     /[0-9A-Z]/.test(token)
   );
 }
