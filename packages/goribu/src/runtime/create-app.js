@@ -15,6 +15,12 @@ import {
   finalizeNavigationResult,
 } from "./finalize-navigation-result.js";
 import { resolveNavigationRequest } from "./resolve-navigation-request.js";
+import {
+  finalizeFormResult,
+  isFormResponseResult,
+  mergeVaryAccept,
+} from "./finalize-form-result.js";
+import { acceptsFormMediaType } from "../forms/form-protocol.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
 
@@ -116,7 +122,8 @@ export function createApp(options) {
       if (outerCanonical !== null) {
         const target = new URL(outerUrl);
         target.pathname = outerCanonical;
-        return Response.redirect(target.toString(), 308);
+        const response = Response.redirect(target.toString(), 308);
+        return request.method === "POST" ? addVaryAccept(response) : response;
       }
 
       const resolvedRequest = resolveNavigationRequest(request);
@@ -131,7 +138,7 @@ export function createApp(options) {
         if (targetCanonical !== null) {
           const target = new URL(url);
           target.pathname = targetCanonical;
-          const redirect = createResponse({ canRender: false })
+          const redirect = createResponse({ canRender: false, mode })
             .status(308)
             .redirect(`${target.pathname}${target.search}`);
           return normalizeHeadResponse(
@@ -140,6 +147,19 @@ export function createApp(options) {
           );
         }
       }
+
+      // An enhanced <Form> mutation is an ordinary document POST carrying the
+      // form media type in Accept with non-zero quality. It runs through normal
+      // routing and handlers, then negotiates a typed form envelope at finalization.
+      // Enhanced GET uses navigation instead. The render context lets res.render()
+      // re-render only the page the form is on (proven from a same-origin Referer),
+      // never a different route in place.
+      const formRenderContext =
+        resolvedRequest.kind === "document" &&
+        applicationRequest.method === "POST" &&
+        acceptsFormMediaType(applicationRequest.headers.get("accept"))
+          ? resolveFormRenderContext(applicationRequest)
+          : null;
 
       const cookieJar = createCookieJar(applicationRequest);
       const runtime = {
@@ -161,6 +181,7 @@ export function createApp(options) {
           applicationRequest,
           runtime,
           resolvedRequest.kind,
+          formRenderContext,
         );
       } catch (error) {
         response =
@@ -176,7 +197,14 @@ export function createApp(options) {
                 Document,
               });
       }
-      const flushed = appendSetCookies(response, cookieJar.pending);
+      // Every document POST can vary between its ordinary representation and a
+      // negotiated Form envelope. Mark even errors, fallbacks, and non-form
+      // results so shared caches never reuse one representation for the other.
+      const representation =
+        resolvedRequest.kind === "document" && applicationRequest.method === "POST"
+          ? addVaryAccept(response)
+          : response;
+      const flushed = appendSetCookies(representation, cookieJar.pending);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
       // headers but never carries a body. The outer request owns this decision;
@@ -185,8 +213,16 @@ export function createApp(options) {
     },
   });
 
-  async function resolveResponse(match, url, request, runtime, requestKind) {
+  async function resolveResponse(
+    match,
+    url,
+    request,
+    runtime,
+    requestKind,
+    formRenderContext,
+  ) {
     const navigation = requestKind === "navigation";
+    const form = formRenderContext !== null;
 
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
@@ -200,14 +236,23 @@ export function createApp(options) {
               request,
               runtime,
               runMiddleware,
+              formRenderContext,
             )
-          : await dispatchHandler(match, match.method, request, runtime);
+          : await dispatchHandler(
+              match,
+              match.method,
+              request,
+              runtime,
+              undefined,
+              formRenderContext,
+            );
         return finalizeMatchedResult(
           result,
           match,
           match.method,
           url,
           navigation,
+          form,
         );
       }
 
@@ -220,9 +265,10 @@ export function createApp(options) {
               request,
               runtime,
               runMiddleware,
+              formRenderContext,
             )
-          : createResponse({ canRender: true }).render({});
-        return finalizeMatchedResult(result, match, "GET", url, navigation);
+          : createResponse({ canRender: true, formRenderContext, mode }).render({});
+        return finalizeMatchedResult(result, match, "GET", url, navigation, form);
       }
 
       // A matched HEAD arrives as "automatic-head" and the HEAD boundary above
@@ -239,13 +285,28 @@ export function createApp(options) {
             request,
             runtime,
             runMiddleware,
+            formRenderContext,
           );
         } else if (target.kind === "handler") {
-          result = await dispatchHandler(match, target.method, request, runtime);
+          result = await dispatchHandler(
+            match,
+            target.method,
+            request,
+            runtime,
+            undefined,
+            formRenderContext,
+          );
         } else {
-          result = createResponse({ canRender: true }).render({});
+          result = createResponse({ canRender: true, formRenderContext, mode }).render({});
         }
-        return finalizeMatchedResult(result, match, target.method, url, navigation);
+        return finalizeMatchedResult(
+          result,
+          match,
+          target.method,
+          url,
+          navigation,
+          form,
+        );
       }
 
       case "automatic-options":
@@ -290,9 +351,14 @@ export function createApp(options) {
     request,
     runtime,
     runMiddleware,
+    formRenderContext,
   ) {
     const req = createRequest(request, match.params, runtime);
-    const res = createResponse({ canRender: match.route.hasDefaultExport });
+    const res = createResponse({
+      canRender: match.route.hasDefaultExport,
+      formRenderContext,
+      mode,
+    });
     const result = await runMiddleware(req, res);
 
     if (isResponseResult(result)) return result;
@@ -306,7 +372,14 @@ export function createApp(options) {
   // handler receives Goribu's request surface (method, path, params, query,
   // headers, body helpers, cookies, Worker bindings, and waitUntil) and the
   // response builder.
-  async function dispatchHandler(match, method, request, runtime, prepared) {
+  async function dispatchHandler(
+    match,
+    method,
+    request,
+    runtime,
+    prepared,
+    formRenderContext,
+  ) {
     if (!modules.has(match.route.id)) {
       throw new Error(
         `[Goribu] The route module "${match.route.id}" was matched but is not in the loaded module map. ` +
@@ -324,11 +397,16 @@ export function createApp(options) {
 
     const req = prepared?.req ?? createRequest(request, match.params, runtime);
     const res =
-      prepared?.res ?? createResponse({ canRender: match.route.hasDefaultExport });
+      prepared?.res ??
+      createResponse({
+        canRender: match.route.hasDefaultExport,
+        formRenderContext,
+        mode,
+      });
     return handler(req, res);
   }
 
-  function finalizeMatchedResult(result, match, method, url, navigation) {
+  function finalizeMatchedResult(result, match, method, url, navigation, form) {
     return finalizeHandlerResult(result, {
       method,
       routeId: match.route.id,
@@ -336,6 +414,7 @@ export function createApp(options) {
       NotFoundPage,
       location: url.href,
       navigation,
+      form,
       // Only a route with a default page reaches res.render(); createResponse
       // enforces that, so resolve the component lazily — a res.json() result
       // never loads it.
@@ -432,6 +511,37 @@ function canonicalPathname(pathname) {
 }
 
 /**
+ * Resolve the same-page render context for an enhanced form request. res.render()
+ * may re-render only the page the form is on, proven from a parseable same-origin
+ * Referer whose pathname equals the action pathname; the response builder rejects
+ * res.render() otherwise and teaches res.redirect()/res.json() instead.
+ */
+function resolveFormRenderContext(request) {
+  const requestUrl = new URL(request.url);
+  const referer = request.headers.get("referer");
+  let displayedPathname = null;
+
+  if (referer !== null) {
+    try {
+      const refererUrl = new URL(referer);
+      if (
+        (refererUrl.protocol === "http:" || refererUrl.protocol === "https:") &&
+        refererUrl.origin === requestUrl.origin
+      ) {
+        displayedPathname = refererUrl.pathname;
+      }
+    } catch {
+      // res.render() fails closed when the displayed pathname cannot be proven.
+    }
+  }
+
+  return Object.freeze({
+    actionPathname: requestUrl.pathname,
+    displayedPathname,
+  });
+}
+
+/**
  * Turn a handler's response-builder result into a Web Response, or fail with a
  * message that teaches how to return a valid one. Body-bearing and redirect
  * intents become a Web Response directly; res.render(props) and res.notFound(props)
@@ -465,6 +575,15 @@ async function finalizeHandlerResult(result, options) {
 
   if (options.navigation) {
     return finalizeNavigationResult(result, { routeId: options.routeId });
+  }
+
+  // An enhanced form request negotiates a typed JSON envelope for the res.*
+  // kinds a form can consume (json, invalid, redirect, render). Any other kind
+  // — a res.text(), say — falls through to its ordinary HTTP representation; the
+  // browser Form then reads a non-form content type and falls back to a full
+  // document load, so an unenhanceable response is never silently swallowed.
+  if (options.form && isFormResponseResult(result)) {
+    return finalizeFormResult(result, { routeId: options.routeId });
   }
 
   if (
@@ -540,6 +659,16 @@ function normalizeHeadResponse(response, request) {
   return new Response(null, {
     status: response.status,
     headers: response.headers,
+  });
+}
+
+function addVaryAccept(response) {
+  const headers = new Headers(response.headers);
+  mergeVaryAccept(headers);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
 

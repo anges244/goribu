@@ -211,3 +211,31 @@ pre code {
     border-bottom: 1px solid var(--border);
   }
 }
+
+.preview {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--border);
+  background: var(--surface, rgba(0, 0, 0, 0.03));
+  white-space: pre-wrap;
+}
+
+.preview-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.field-error {
+  display: block;
+  margin-top: 0.35rem;
+  color: #b3261e;
+  font-size: 0.9rem;
+}
+
+[aria-invalid="true"] {
+  outline: 2px solid #b3261e;
+  outline-offset: 1px;
+}
