@@ -10,7 +10,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { build } from "vite";
 import { afterEach, describe, expect, it } from "vitest";
-import { createClientBoundaryPlugin } from "../src/build/create-client-boundary-plugin.js";
+import {
+  createClientBoundaryPlugin,
+  createClientRouteModuleId,
+  routeFilePathFromClientModuleId,
+} from "../src/build/create-client-boundary-plugin.js";
 
 const created = [];
 
@@ -110,7 +114,84 @@ describe("Vite client server-only boundary", () => {
   });
 });
 
-async function buildClient(root, entry) {
+describe("virtual client-route module ID", () => {
+  it("mints and recovers an absolute route file path", () => {
+    const routeFilePath = "/app/src/routes/index.js";
+    const moduleId = createClientRouteModuleId(routeFilePath);
+
+    expect(moduleId).toBe(
+      `virtual:goribu/client-route:${encodeURIComponent(routeFilePath)}`,
+    );
+    expect(routeFilePathFromClientModuleId(`\0${moduleId}`)).toBe(routeFilePath);
+  });
+
+  it("rejects a non-absolute route file path", () => {
+    expect(() => createClientRouteModuleId("routes/index.js")).toThrow(
+      /\[Goribu\].*absolute route file path/,
+    );
+  });
+
+  it("returns null for anything that is not a resolved virtual entry", () => {
+    expect(routeFilePathFromClientModuleId(42)).toBeNull();
+    expect(routeFilePathFromClientModuleId("/app/src/routes/index.js")).toBeNull();
+    // Unresolved (no leading NUL): only resolved IDs front a chunk.
+    expect(
+      routeFilePathFromClientModuleId(
+        createClientRouteModuleId("/app/src/routes/index.js"),
+      ),
+    ).toBeNull();
+    // Malformed percent-encoding decodes to nothing usable.
+    expect(
+      routeFilePathFromClientModuleId("\0virtual:goribu/client-route:%zz"),
+    ).toBeNull();
+  });
+});
+
+describe("Vite client route boundary", () => {
+  it("exposes only the page default, stripping named handlers and their server deps", async () => {
+    const root = makeProject({
+      "src/routes/index.js":
+        'import { save } from "./handler.server.js";\n' +
+        "export function POST() {\n" +
+        "  return save();\n" +
+        "}\n" +
+        'export default "CLIENT_PAGE_VALUE_MUST_SURVIVE";\n',
+      "src/routes/handler.server.js":
+        'console.log("HANDLER_SIDE_EFFECT_MUST_NOT_RUN");\n' +
+        'export function save() {\n  return "HANDLER_SECRET_MUST_NOT_LEAK";\n}\n',
+    });
+
+    const routeFilePath = realpathSync(join(root, "src", "routes", "index.js"));
+    const chunks = await buildClient(
+      root,
+      createClientRouteModuleId(routeFilePath),
+    );
+    const source = chunks.map((chunk) => chunk.code).join("\n");
+    const modules = chunks.flatMap((chunk) => Object.keys(chunk.modules));
+
+    expect(source).toContain("CLIENT_PAGE_VALUE_MUST_SURVIVE");
+    expect(source).not.toContain("HANDLER_SIDE_EFFECT_MUST_NOT_RUN");
+    expect(source).not.toContain("HANDLER_SECRET_MUST_NOT_LEAK");
+    expect(modules).not.toContain(
+      realpathSync(join(root, "src", "routes", "handler.server.js")),
+    );
+  });
+
+  it("refuses to load a virtual entry for a path outside the routes directory", async () => {
+    const root = makeProject({
+      "src/outside-page.js": 'export default "OUTSIDE";\n',
+    });
+
+    const outsidePath = realpathSync(join(root, "src", "outside-page.js"));
+    await expect(
+      buildClient(root, createClientRouteModuleId(outsidePath)),
+    ).rejects.toThrow(
+      /\[Goribu\].*outside the configured routes directory.*Regenerate client route entries/s,
+    );
+  });
+});
+
+async function buildClient(root, input) {
   const result = await build({
     configFile: false,
     root,
@@ -122,7 +203,7 @@ async function buildClient(root, entry) {
       minify: false,
       write: false,
       rollupOptions: {
-        input: join(root, entry),
+        input: input.startsWith("virtual:") ? input : join(root, input),
         preserveEntrySignatures: "strict",
       },
     },

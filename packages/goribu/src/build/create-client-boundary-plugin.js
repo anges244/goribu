@@ -1,16 +1,60 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
+const CLIENT_ROUTE_PREFIX = "virtual:goribu/client-route:";
+const RESOLVED_CLIENT_ROUTE_PREFIX = `\0${CLIENT_ROUTE_PREFIX}`;
 const SERVER_MODULE_PATTERN = /\.server\.(?:[cm]?js|jsx|[cm]?ts|tsx)(?:[?#]|$)/i;
 const CALLER = "createClientBoundaryPlugin({ routesDir })";
 
 /**
- * Keep server-only modules out of Goribu's browser graph.
+ * Create the virtual browser entry for one route page.
  *
- * Route modules may import `.server.*` files for named handlers, so those imports
- * are marked side-effect-free and Rollup may remove them when browser-reachable
- * route pages arrive in Block 5. Any other client import fails immediately, and
- * the final bundle audit fails closed if a server-only module survives shaking.
+ * @param {string} routeFilePath
+ * @returns {string}
+ */
+export function createClientRouteModuleId(routeFilePath) {
+  if (typeof routeFilePath !== "string" || !isAbsolute(routeFilePath)) {
+    throw new TypeError(
+      "[Goribu] createClientRouteModuleId(routeFilePath) requires an absolute route file path. Pass the filePath from Goribu's generated route manifest.",
+    );
+  }
+
+  return `${CLIENT_ROUTE_PREFIX}${encodeURIComponent(routeFilePath)}`;
+}
+
+/**
+ * Recover the route file path a bundled chunk fronts, or null when the module ID
+ * is not one of Goribu's virtual client-route entries. Lets build integration
+ * map an emitted page chunk back to its canonical manifest route.
+ *
+ * @param {unknown} moduleId
+ * @returns {string|null}
+ */
+export function routeFilePathFromClientModuleId(moduleId) {
+  if (
+    typeof moduleId !== "string" ||
+    !moduleId.startsWith(RESOLVED_CLIENT_ROUTE_PREFIX)
+  ) {
+    return null;
+  }
+
+  try {
+    return decodeRouteFilePath(
+      moduleId.slice(RESOLVED_CLIENT_ROUTE_PREFIX.length),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keep server-only modules out of Goribu's browser bundle.
+ *
+ * Virtual route entries expose only the route's default page export, so named
+ * handlers are not retained as client entry exports. `.server.*` imports resolved
+ * from route modules are marked side-effect-free so Rollup can remove handler-only
+ * dependencies. Browser-reachable non-route imports fail immediately, and the
+ * final bundle audit fails closed if a server-only module survives tree-shaking.
  *
  * @param {{ routesDir: string }} options
  * @returns {import("vite").Plugin}
@@ -23,6 +67,9 @@ export function createClientBoundaryPlugin(options) {
     enforce: "pre",
 
     async resolveId(source, importer, resolveOptions) {
+      if (source.startsWith(RESOLVED_CLIENT_ROUTE_PREFIX)) return source;
+      if (source.startsWith(CLIENT_ROUTE_PREFIX)) return `\0${source}`;
+
       if (this.environment?.name !== "client") return null;
 
       const resolved = await this.resolve(source, importer, {
@@ -42,6 +89,21 @@ export function createClientBoundaryPlugin(options) {
       }
 
       throw createServerLeakError(resolved.id, importer);
+    },
+
+    load(id) {
+      if (!id.startsWith(RESOLVED_CLIENT_ROUTE_PREFIX)) return null;
+
+      const routeFilePath = decodeRouteFilePath(
+        id.slice(RESOLVED_CLIENT_ROUTE_PREFIX.length),
+      );
+      if (!isWithinDirectory(routesDir, routeFilePath)) {
+        throw new Error(
+          `[Goribu] Client route ${JSON.stringify(routeFilePath)} is outside the configured routes directory ${JSON.stringify(routesDir)}. Regenerate client route entries from the current Goribu manifest instead of constructing virtual IDs manually.`,
+        );
+      }
+
+      return `export { default } from ${JSON.stringify(routeFilePath)};\n`;
     },
 
     generateBundle(_outputOptions, bundle) {
@@ -66,6 +128,25 @@ function assertRoutesDir(routesDir) {
     );
   }
   return realpathOrFallback(resolve(routesDir));
+}
+
+function decodeRouteFilePath(encodedPath) {
+  let routeFilePath;
+  try {
+    routeFilePath = decodeURIComponent(encodedPath);
+  } catch (cause) {
+    throw new TypeError(
+      "[Goribu] Cannot load the client route because its virtual module ID is malformed. Regenerate client entries with createClientRouteModuleId(routeFilePath).",
+      { cause },
+    );
+  }
+
+  if (!isAbsolute(routeFilePath)) {
+    throw new TypeError(
+      "[Goribu] Cannot load the client route because its virtual module ID does not contain an absolute path. Regenerate client entries with createClientRouteModuleId(routeFilePath).",
+    );
+  }
+  return routeFilePath;
 }
 
 function isServerModule(moduleId) {
