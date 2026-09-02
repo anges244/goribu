@@ -1,7 +1,7 @@
-import { createElement as h } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { loadClientPage } from "./load-client-page.js";
 import { readInitialRenderData } from "./read-initial-render-data.js";
+import { createLocatedPage } from "../navigation/location-context.js";
 
 const ROOT_ELEMENT_ID = "root";
 
@@ -14,6 +14,10 @@ export async function hydrateInitialPage(options) {
       ? options.browserDocument
       : globalThis.document;
   const hydrate = options?.hydrate ?? hydrateRoot;
+  const location =
+    typeof options?.location === "string"
+      ? options.location
+      : globalThis.location?.href ?? null;
   const initialData = readInitialRenderData(browserDocument);
   if (initialData === null) return null;
 
@@ -39,7 +43,10 @@ export async function hydrateInitialPage(options) {
   });
 
   try {
-    return hydrate(rootElement, h(Page, initialData.props));
+    return hydrate(
+      rootElement,
+      createLocatedPage(Page, initialData.props, location),
+    );
   } catch (cause) {
     throw new Error(
       `[Goribu] Could not hydrate the initial page for route ${JSON.stringify(initialData.routeId)}. Ensure the server and client render the same page component with the same props.`,

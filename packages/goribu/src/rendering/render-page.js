@@ -5,6 +5,7 @@ import {
   serializePropsForScript,
   serializeRouteForScript,
 } from "./render-context.js";
+import { createLocatedPage } from "../navigation/location-context.js";
 
 /**
  * Stream one matched route page into a Worker HTML Response.
@@ -17,7 +18,7 @@ import {
  * channel for browser hydration. Matched pages also carry their canonical route
  * ID so the browser selects the same component from the generated loader map.
  *
- * @param {{ Page: Function, Document: Function, routeId?: string, status?: number, props?: object, headers?: object }} options
+ * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object }} options
  * @returns {Promise<Response>}
  */
 export async function renderPage(options) {
@@ -50,7 +51,9 @@ export async function renderPage(options) {
   const tree = h(
     RenderDataContext.Provider,
     { value: renderData },
-    h(Document, { children: h(Page, props) }),
+    h(Document, {
+      children: createLocatedPage(Page, props, options?.location),
+    }),
   );
 
   let stream;

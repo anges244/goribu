@@ -1,0 +1,765 @@
+
+import { loadClientPage } from "./load-client-page.js";
+import { readNavigationEnvelope } from "./read-navigation-envelope.js";
+import { createLocatedPage } from "../navigation/location-context.js";
+
+const NAVIGATION_PATH = "/_goribu/worker-nav";
+const HISTORY_KEY = "__goribu";
+const PREFETCH_DELAY_MS = 80;
+const PREFETCH_MAX_AGE_MS = 10_000;
+const SCROLL_SAVE_DELAY_MS = 100;
+const MAX_CACHE_ENTRIES = 20;
+const MAX_REDIRECTS = 8;
+
+/**
+ * Own browser navigation after initial hydration.
+ *
+ * The controller fetches only the reserved endpoint, resolves pages through the
+ * generated route-ID loader map, and commits history/UI only after both payload
+ * and page module are known-good. Every uncertain path falls back to a document
+ * load instead of leaving partially committed client state.
+ */
+export function createNavigationController(options) {
+  const root = options?.root;
+  const pageLoaders = options?.pageLoaders;
+  const browserWindow = options?.browserWindow ?? globalThis.window;
+  const fetchImplementation = options?.fetch ?? globalThis.fetch;
+  const afterRender = options?.afterRender ?? (() => waitForPaint(browserWindow));
+  const applyMeta = options?.applyMeta ?? (() => {});
+
+  assertControllerInputs({
+    root,
+    pageLoaders,
+    browserWindow,
+    fetchImplementation,
+    afterRender,
+    applyMeta,
+  });
+
+  const cache = new Map();
+  const scheduledPrefetches = new Map();
+  // Per-entry scroll positions, keyed by history-entry id. Intentionally
+  // unbounded, unlike `cache`: it is cleared on dispose and on any full document
+  // load, and a missing entry falls back to the coordinates mirrored in
+  // history.state, so it self-corrects without an eviction policy.
+  const scrollByHistoryEntry = new Map();
+  let navigationVersion = 0;
+  let nextHistoryEntryId = 0;
+  let currentHistoryEntryId = null;
+  let renderedUrl = new URL(browserWindow.location.href);
+  let scrollSaveTimer = null;
+  let disposed = false;
+
+  installInitialHistoryState();
+  const previousScrollRestoration = browserWindow.history.scrollRestoration;
+  browserWindow.history.scrollRestoration = "manual";
+  browserWindow.addEventListener("popstate", handlePopState);
+  browserWindow.addEventListener("hashchange", handleHashChange);
+  browserWindow.addEventListener("scroll", scheduleScrollSave);
+  browserWindow.addEventListener("pagehide", saveCurrentScroll);
+
+  const controller = Object.freeze({
+    navigate,
+    renderInPlace,
+    captureVersion: () => navigationVersion,
+    prefetch,
+    schedulePrefetch,
+    cancelPrefetch,
+    saveScroll: saveCurrentScroll,
+    dispose,
+  });
+  return controller;
+
+  async function navigate(target, navigationOptions = undefined) {
+    assertTarget(target);
+    const replace = resolveReplace(navigationOptions);
+    const signal = resolveNavigationSignal(navigationOptions);
+    if (signal?.aborted === true) return;
+
+    const destination = resolveHttpDestination(target);
+    if (destination === null) {
+      throw new TypeError(
+        `[Goribu] Cannot navigate to ${JSON.stringify(target)} because it is not a valid HTTP(S) URL or path. Pass a same-origin application path or an HTTP(S) document URL.`,
+      );
+    }
+    if (destination.origin !== browserWindow.location.origin) {
+      if (signal?.aborted === true) return;
+      return hardLoad(destination.href, replace);
+    }
+
+    const version = ++navigationVersion;
+    if (
+      isSameDocumentHash(destination) &&
+      hasSameRouteLocation(destination, renderedUrl)
+    ) {
+      saveCurrentScroll();
+      if (signal?.aborted === true) return;
+      try {
+        commitHistory(destination, replace ? "replace" : "push");
+        renderedUrl = destination;
+      } catch (error) {
+        logNavigationFailure(destination, error);
+        return hardLoad(destination.href, replace);
+      }
+      await afterRender();
+      if (disposed || version !== navigationVersion || signal?.aborted === true) return;
+      scrollToDestination(destination);
+      saveCurrentScroll();
+      return;
+    }
+
+    saveCurrentScroll();
+    return performNavigation(destination, {
+      version,
+      historyMode: replace ? "replace" : "push",
+      redirectDepth: 0,
+      restoreScroll: null,
+      signal,
+    });
+  }
+
+  async function renderInPlace(
+    routeId,
+    props,
+    metadata,
+    renderOptions = undefined,
+  ) {
+    const signal = resolveNavigationSignal(renderOptions);
+    const expectedVersion = resolveExpectedVersion(renderOptions);
+    if (
+      signal?.aborted === true ||
+      disposed ||
+      (expectedVersion !== null && expectedVersion !== navigationVersion)
+    ) {
+      return false;
+    }
+    if (typeof routeId !== "string" || routeId.length === 0) {
+      throw new TypeError(
+        "[Goribu] Form render requires the non-empty canonical route ID from the negotiated response envelope.",
+      );
+    }
+    if (!isPlainObject(props)) {
+      throw new TypeError(
+        "[Goribu] Form render requires page props to be a plain object from the negotiated response envelope.",
+      );
+    }
+
+    const Page = await loadClientPage({ routeId, pageLoaders });
+    if (
+      signal?.aborted === true ||
+      disposed ||
+      (expectedVersion !== null && expectedVersion !== navigationVersion)
+    ) {
+      return false;
+    }
+
+    applyMeta(metadata);
+    root.render(createLocatedPage(Page, props, browserWindow.location.href));
+    await afterRender();
+    return true;
+  }
+
+  async function performNavigation(destination, context) {
+    try {
+      const target = await consumeTarget(destination);
+      if (
+        disposed ||
+        context.version !== navigationVersion ||
+        context.signal?.aborted === true
+      ) {
+        return;
+      }
+
+      if (target.envelope.kind === "reload") {
+        if (context.signal?.aborted === true) return;
+        await hardLoad(destination.href, context.historyMode !== "push");
+        return;
+      }
+
+      if (target.envelope.kind === "redirect") {
+        if (context.redirectDepth >= MAX_REDIRECTS) {
+          throw new Error(
+            `[Goribu] Client navigation exceeded ${MAX_REDIRECTS} redirects. Check route redirect handlers for a loop.`,
+          );
+        }
+        const redirected = resolveHttpDestination(
+          target.envelope.location,
+          destination,
+        );
+        if (redirected === null) {
+          if (context.signal?.aborted === true) return;
+          await hardLoad(destination.href, context.historyMode !== "push");
+          return;
+        }
+        if (
+          destination.hash.length > 0 &&
+          !target.envelope.location.includes("#")
+        ) {
+          // Match document redirect behavior: an omitted fragment inherits the
+          // original one, including through trailing-slash canonicalization.
+          redirected.hash = destination.hash;
+        }
+        if (redirected.origin !== browserWindow.location.origin) {
+          if (context.signal?.aborted === true) return;
+          await hardLoad(redirected.href, context.historyMode !== "push");
+          return;
+        }
+        return performNavigation(redirected, {
+          ...context,
+          historyMode:
+            context.historyMode === "none" ? "replace" : context.historyMode,
+          redirectDepth: context.redirectDepth + 1,
+        });
+      }
+
+      if (context.signal?.aborted === true) return;
+      commitHistory(destination, context.historyMode);
+      renderedUrl = destination;
+      applyMeta(target.envelope.meta);
+      root.render(
+        createLocatedPage(
+          target.Page,
+          target.envelope.props,
+          destination.href,
+        ),
+      );
+      await afterRender();
+      if (
+        disposed ||
+        context.version !== navigationVersion ||
+        context.signal?.aborted === true
+      ) {
+        return;
+      }
+
+      if (context.restoreScroll !== null) {
+        browserWindow.scrollTo(
+          context.restoreScroll.x,
+          context.restoreScroll.y,
+        );
+      } else {
+        scrollToDestination(destination);
+      }
+      saveCurrentScroll();
+    } catch (error) {
+      if (
+        disposed ||
+        context.version !== navigationVersion ||
+        context.signal?.aborted === true
+      ) {
+        return;
+      }
+      logNavigationFailure(destination, error);
+      await hardLoad(destination.href, context.historyMode !== "push");
+    }
+  }
+
+  async function prefetch(target) {
+    if (disposed || typeof target !== "string" || target.length === 0) return;
+    const destination = resolveHttpDestination(target);
+    if (
+      destination === null ||
+      destination.origin !== browserWindow.location.origin ||
+      isSameDocumentHash(destination)
+    ) {
+      return;
+    }
+
+    try {
+      await warmTarget(destination);
+    } catch {
+      // Prefetch is an optional hint. A later navigation retries and owns fallback.
+    }
+  }
+
+  function schedulePrefetch(target) {
+    if (disposed || typeof target !== "string" || target.length === 0) return;
+    cancelPrefetch(target);
+    const timer = browserWindow.setTimeout(() => {
+      scheduledPrefetches.delete(target);
+      void prefetch(target);
+    }, PREFETCH_DELAY_MS);
+    scheduledPrefetches.set(target, timer);
+  }
+
+  function cancelPrefetch(target) {
+    const timer = scheduledPrefetches.get(target);
+    if (timer === undefined) return;
+    browserWindow.clearTimeout(timer);
+    scheduledPrefetches.delete(target);
+  }
+
+  function handlePopState(event) {
+    const version = ++navigationVersion;
+    cancelScheduledScrollSave();
+    activateHistoryEntry(event.state);
+    const destination = resolveHttpDestination(browserWindow.location.href);
+    if (
+      destination === null ||
+      destination.origin !== browserWindow.location.origin
+    ) {
+      void hardLoad(browserWindow.location.href, true);
+      return;
+    }
+
+    const staysOnCurrentDocument = hasSameRouteLocation(destination, renderedUrl);
+    const restoreScroll = readScrollState(event.state, scrollByHistoryEntry);
+    if (staysOnCurrentDocument) {
+      renderedUrl = destination;
+      void restoreSameDocumentHistory(destination, restoreScroll, version);
+      return;
+    }
+
+    void performNavigation(destination, {
+      version,
+      historyMode: "none",
+      redirectDepth: 0,
+      restoreScroll,
+    });
+  }
+
+  function handleHashChange() {
+    const destination = resolveHttpDestination(browserWindow.location.href);
+    if (
+      destination === null ||
+      destination.origin !== browserWindow.location.origin ||
+      destination.href === renderedUrl.href
+    ) {
+      return;
+    }
+
+    cancelScheduledScrollSave();
+    if (!hasSameRouteLocation(destination, renderedUrl)) {
+      navigationVersion += 1;
+      void hardLoad(destination.href, true);
+      return;
+    }
+
+    navigationVersion += 1;
+    // A standalone hashchange is a browser-created same-document entry. It
+    // inherits history.state, so give it its own scroll identity; hash changes
+    // reached through popstate already updated renderedUrl and returned above.
+    currentHistoryEntryId = nextHistoryEntryId++;
+    renderedUrl = destination;
+    saveCurrentScroll();
+  }
+
+  async function restoreSameDocumentHistory(destination, restoreScroll, version) {
+    await afterRender();
+    if (disposed || version !== navigationVersion) return;
+    if (restoreScroll === null) {
+      scrollToDestination(destination);
+    } else {
+      browserWindow.scrollTo(restoreScroll.x, restoreScroll.y);
+    }
+    saveCurrentScroll();
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    navigationVersion += 1;
+    cancelScheduledScrollSave();
+    for (const timer of scheduledPrefetches.values()) {
+      browserWindow.clearTimeout(timer);
+    }
+    scheduledPrefetches.clear();
+    cache.clear();
+    scrollByHistoryEntry.clear();
+    browserWindow.removeEventListener("popstate", handlePopState);
+    browserWindow.removeEventListener("hashchange", handleHashChange);
+    browserWindow.removeEventListener("scroll", scheduleScrollSave);
+    browserWindow.removeEventListener("pagehide", saveCurrentScroll);
+    browserWindow.history.scrollRestoration = previousScrollRestoration;
+  }
+
+  function warmTarget(destination) {
+    const key = navigationKey(destination);
+    const existing = cache.get(key);
+    if (
+      existing !== undefined &&
+      (!existing.settled || existing.expiresAt > Date.now())
+    ) {
+      return existing.promise;
+    }
+    if (existing !== undefined) cache.delete(key);
+
+    const record = {
+      promise: null,
+      settled: false,
+      expiresAt: Number.POSITIVE_INFINITY,
+    };
+    record.promise = fetchTarget(destination).then(
+      (target) => {
+        record.settled = true;
+        record.expiresAt = Date.now() + PREFETCH_MAX_AGE_MS;
+        return target;
+      },
+      (error) => {
+        if (cache.get(key) === record) cache.delete(key);
+        throw error;
+      },
+    );
+    cache.set(key, record);
+    while (cache.size > MAX_CACHE_ENTRIES) {
+      cache.delete(cache.keys().next().value);
+    }
+    return record.promise;
+  }
+
+  async function consumeTarget(destination) {
+    const key = navigationKey(destination);
+    const promise = warmTarget(destination);
+    try {
+      return await promise;
+    } finally {
+      if (cache.get(key)?.promise === promise) cache.delete(key);
+    }
+  }
+
+  async function fetchTarget(destination) {
+    const endpoint = new URL(NAVIGATION_PATH, browserWindow.location.origin);
+    endpoint.searchParams.set("to", navigationKey(destination));
+    const response = await fetchImplementation(endpoint.href, {
+      headers: { accept: "application/json" },
+      redirect: "manual",
+    });
+    const envelope = await readNavigationEnvelope(response);
+    if (envelope.kind !== "render") return { envelope, Page: null };
+
+    const Page = await loadClientPage({
+      routeId: envelope.routeId,
+      pageLoaders,
+    });
+    return { envelope, Page };
+  }
+
+  function resolveHttpDestination(target, base = undefined) {
+    let destination;
+    try {
+      destination = new URL(target, base ?? browserWindow.location.href);
+    } catch {
+      return null;
+    }
+    if (destination.protocol !== "http:" && destination.protocol !== "https:") {
+      return null;
+    }
+    return destination;
+  }
+
+  function isSameDocumentHash(destination) {
+    const current = new URL(browserWindow.location.href);
+    return (
+      destination.pathname === current.pathname &&
+      destination.search === current.search &&
+      destination.hash.length > 0
+    );
+  }
+
+  function navigationKey(destination) {
+    return `${destination.pathname}${destination.search}`;
+  }
+
+  function installInitialHistoryState() {
+    activateHistoryEntry(browserWindow.history.state);
+    saveCurrentScroll();
+  }
+
+  function activateHistoryEntry(state) {
+    const storedId = readHistoryEntryId(state);
+    if (storedId === null) {
+      currentHistoryEntryId = nextHistoryEntryId++;
+      return;
+    }
+    currentHistoryEntryId = storedId;
+    nextHistoryEntryId = Math.max(nextHistoryEntryId, storedId + 1);
+  }
+
+  function scheduleScrollSave() {
+    if (disposed) return;
+    scrollByHistoryEntry.set(currentHistoryEntryId, currentScrollState());
+    if (scrollSaveTimer !== null) return;
+    scrollSaveTimer = browserWindow.setTimeout(() => {
+      scrollSaveTimer = null;
+      saveCurrentScroll();
+    }, SCROLL_SAVE_DELAY_MS);
+  }
+
+  function saveCurrentScroll() {
+    if (disposed) return;
+    cancelScheduledScrollSave();
+    const scroll = currentScrollState();
+    scrollByHistoryEntry.set(currentHistoryEntryId, scroll);
+    try {
+      browserWindow.history.replaceState(
+        mergeHistoryState(
+          browserWindow.history.state,
+          scroll,
+          currentHistoryEntryId,
+        ),
+        "",
+        browserWindow.location.href,
+      );
+    } catch {
+      // Scroll restoration is best-effort and must never block navigation fallback.
+    }
+  }
+
+  function cancelScheduledScrollSave() {
+    if (scrollSaveTimer === null) return;
+    browserWindow.clearTimeout(scrollSaveTimer);
+    scrollSaveTimer = null;
+  }
+
+  function commitHistory(destination, mode) {
+    if (mode === "none") return;
+    if (mode === "push") currentHistoryEntryId = nextHistoryEntryId++;
+    const scroll = { x: 0, y: 0 };
+    scrollByHistoryEntry.set(currentHistoryEntryId, scroll);
+    const state = mergeHistoryState(
+      browserWindow.history.state,
+      scroll,
+      currentHistoryEntryId,
+    );
+    if (mode === "replace") {
+      browserWindow.history.replaceState(state, "", destination.href);
+    } else {
+      browserWindow.history.pushState(state, "", destination.href);
+    }
+  }
+
+  function currentScrollState() {
+    return {
+      x: Number.isFinite(browserWindow.scrollX) ? browserWindow.scrollX : 0,
+      y: Number.isFinite(browserWindow.scrollY) ? browserWindow.scrollY : 0,
+    };
+  }
+
+  function scrollToDestination(destination) {
+    const target = findHashTarget(browserWindow.document, destination.hash);
+    if (target !== null && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView();
+      return;
+    }
+    browserWindow.scrollTo(0, 0);
+  }
+
+  async function hardLoad(target, replace) {
+    if (replace && typeof browserWindow.location.replace === "function") {
+      browserWindow.location.replace(target);
+    } else if (typeof browserWindow.location.assign === "function") {
+      browserWindow.location.assign(target);
+    } else {
+      browserWindow.location.href = target;
+    }
+  }
+}
+
+function assertControllerInputs({
+  root,
+  pageLoaders,
+  browserWindow,
+  fetchImplementation,
+  afterRender,
+  applyMeta,
+}) {
+  if (root === null || typeof root !== "object" || typeof root.render !== "function") {
+    throw new TypeError(
+      "[Goribu] createNavigationController() requires the hydrated React root. Start navigation only after hydrateInitialPage() succeeds.",
+    );
+  }
+  if (
+    pageLoaders === null ||
+    typeof pageLoaders !== "object" ||
+    Array.isArray(pageLoaders)
+  ) {
+    throw new TypeError(
+      "[Goribu] createNavigationController() requires the generated client page loader map.",
+    );
+  }
+  if (
+    browserWindow === null ||
+    typeof browserWindow !== "object" ||
+    browserWindow.location === null ||
+    typeof browserWindow.location !== "object" ||
+    browserWindow.history === null ||
+    typeof browserWindow.history !== "object" ||
+    typeof browserWindow.history.pushState !== "function" ||
+    typeof browserWindow.history.replaceState !== "function" ||
+    typeof browserWindow.addEventListener !== "function" ||
+    typeof browserWindow.removeEventListener !== "function" ||
+    typeof browserWindow.scrollTo !== "function" ||
+    typeof browserWindow.setTimeout !== "function" ||
+    typeof browserWindow.clearTimeout !== "function"
+  ) {
+    throw new TypeError(
+      "[Goribu] createNavigationController() requires a browser window with location, history, events, scrolling, and timers.",
+    );
+  }
+  if (typeof fetchImplementation !== "function") {
+    throw new TypeError(
+      "[Goribu] createNavigationController() requires browser fetch to request the reserved navigation endpoint.",
+    );
+  }
+  if (typeof afterRender !== "function") {
+    throw new TypeError(
+      "[Goribu] createNavigationController() requires afterRender to be a function when provided.",
+    );
+  }
+  if (typeof applyMeta !== "function") {
+    throw new TypeError(
+      "[Goribu] createNavigationController() requires applyMeta to be a function when provided.",
+    );
+  }
+}
+
+function assertTarget(target) {
+  if (typeof target !== "string" || target.length === 0) {
+    throw new TypeError(
+      "[Goribu] Browser navigation requires a non-empty URL or path string.",
+    );
+  }
+}
+
+function resolveReplace(options) {
+  if (options === undefined) return false;
+  if (options === null || typeof options !== "object" || Array.isArray(options)) {
+    throw new TypeError(
+      "[Goribu] Browser navigation options must be an object such as { replace: true }.",
+    );
+  }
+  if (options.replace !== undefined && typeof options.replace !== "boolean") {
+    throw new TypeError(
+      "[Goribu] Browser navigation options.replace must be a boolean when provided.",
+    );
+  }
+  return options.replace === true;
+}
+
+function resolveNavigationSignal(options) {
+  const signal = options?.signal;
+  if (signal === undefined) return null;
+  if (
+    signal === null ||
+    typeof signal !== "object" ||
+    typeof signal.aborted !== "boolean"
+  ) {
+    throw new TypeError(
+      "[Goribu] Internal Form navigation requires an AbortSignal when signal is provided.",
+    );
+  }
+  return signal;
+}
+
+function resolveExpectedVersion(options) {
+  const version = options?.version;
+  if (version === undefined || version === null) return null;
+  if (!Number.isInteger(version) || version < 0) {
+    throw new TypeError(
+      "[Goribu] Internal Form rendering requires a captured non-negative navigation version.",
+    );
+  }
+  return version;
+}
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function mergeHistoryState(state, scroll, entryId) {
+  const merged =
+    state !== null && typeof state === "object" && !Array.isArray(state)
+      ? { ...state }
+      : {};
+  merged[HISTORY_KEY] = Object.freeze({
+    id: entryId,
+    x: scroll.x,
+    y: scroll.y,
+  });
+  return merged;
+}
+
+function readHistoryEntryId(state) {
+  const id = state?.[HISTORY_KEY]?.id;
+  return Number.isSafeInteger(id) && id >= 0 ? id : null;
+}
+
+function readScrollState(state, scrollByHistoryEntry) {
+  const entryId = readHistoryEntryId(state);
+  const remembered =
+    entryId === null ? undefined : scrollByHistoryEntry.get(entryId);
+  if (
+    remembered !== undefined &&
+    Number.isFinite(remembered.x) &&
+    Number.isFinite(remembered.y)
+  ) {
+    return { x: remembered.x, y: remembered.y };
+  }
+
+  const value = state?.[HISTORY_KEY];
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    !Number.isFinite(value.x) ||
+    !Number.isFinite(value.y)
+  ) {
+    return null;
+  }
+  return { x: value.x, y: value.y };
+}
+
+function hasSameRouteLocation(left, right) {
+  return left.pathname === right.pathname && left.search === right.search;
+}
+
+function findHashTarget(browserDocument, hash) {
+  if (
+    hash.length === 0 ||
+    browserDocument === null ||
+    typeof browserDocument !== "object"
+  ) {
+    return null;
+  }
+
+  const raw = hash.slice(1);
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // Keep the raw fragment when percent-decoding is malformed.
+  }
+
+  for (const value of decoded === raw ? [raw] : [decoded, raw]) {
+    const byId = browserDocument.getElementById?.(value) ?? null;
+    if (byId !== null) return byId;
+    const byName = browserDocument.getElementsByName?.(value)?.[0] ?? null;
+    if (byName !== null) return byName;
+  }
+  return null;
+}
+
+function waitForPaint(browserWindow) {
+  if (typeof browserWindow.requestAnimationFrame !== "function") {
+    return new Promise((resolve) => browserWindow.setTimeout(resolve, 0));
+  }
+  return new Promise((resolve) => {
+    browserWindow.requestAnimationFrame(() => {
+      browserWindow.requestAnimationFrame(resolve);
+    });
+  });
+}
+
+function logNavigationFailure(destination, error) {
+  try {
+    console.error(
+      `[Goribu] Client navigation to ${JSON.stringify(`${destination.pathname}${destination.search}${destination.hash}`)} failed; falling back to a full page load.`,
+      error,
+    );
+  } catch {
+    // Logging must never prevent the full-load fallback.
+  }
+}

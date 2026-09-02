@@ -10,6 +10,11 @@ import { flattenMiddlewareModules } from "./flatten-middleware-modules.js";
 import { composeMiddleware } from "./compose-middleware.js";
 import { finalizeDevelopmentErrorResponse } from "./finalize-development-error-response.js";
 import { finalizeErrorResponse } from "./finalize-error-response.js";
+import {
+  createNavigationReloadResponse,
+  finalizeNavigationResult,
+} from "./finalize-navigation-result.js";
+import { resolveNavigationRequest } from "./resolve-navigation-request.js";
 
 const CALLER = "createApp({ manifest, modules, errorPages, documentId })";
 
@@ -102,21 +107,41 @@ export function createApp(options) {
     async fetch(request, env, ctx) {
       assertWorkerFetchInputs(request, env, ctx);
 
-      const url = new URL(request.url);
+      const outerUrl = new URL(request.url);
 
-      // Canonicalize the trailing slash before anything else, so one URL serves
-      // each route. The canonical form drops the trailing slash (the root "/" is
-      // the only path that keeps it); the static-asset handler is configured with
-      // the same drop-trailing-slash policy, so static and dynamic routes agree.
-      // 308 preserves the method and body, so the rule is safe for every request.
-      const canonical = canonicalPathname(url.pathname);
-      if (canonical !== null) {
-        const target = new URL(url);
-        target.pathname = canonical;
+      // Canonicalize the document URL before protocol classification. Navigation
+      // targets are canonicalized below as an envelope so fetch never consumes a
+      // wire redirect that the browser runtime needs to observe explicitly.
+      const outerCanonical = canonicalPathname(outerUrl.pathname);
+      if (outerCanonical !== null) {
+        const target = new URL(outerUrl);
+        target.pathname = outerCanonical;
         return Response.redirect(target.toString(), 308);
       }
 
-      const cookieJar = createCookieJar(request);
+      const resolvedRequest = resolveNavigationRequest(request);
+      if (resolvedRequest.kind === "response") {
+        return normalizeHeadResponse(resolvedRequest.response, request);
+      }
+
+      const applicationRequest = resolvedRequest.request;
+      const url = new URL(applicationRequest.url);
+      if (resolvedRequest.kind === "navigation") {
+        const targetCanonical = canonicalPathname(url.pathname);
+        if (targetCanonical !== null) {
+          const target = new URL(url);
+          target.pathname = targetCanonical;
+          const redirect = createResponse({ canRender: false })
+            .status(308)
+            .redirect(`${target.pathname}${target.search}`);
+          return normalizeHeadResponse(
+            finalizeNavigationResult(redirect),
+            request,
+          );
+        }
+      }
+
+      const cookieJar = createCookieJar(applicationRequest);
       const runtime = {
         env,
         waitUntil: ctx.waitUntil.bind(ctx),
@@ -125,12 +150,18 @@ export function createApp(options) {
       const match = matchRoute({
         manifest,
         pathname: url.pathname,
-        method: request.method,
+        method: applicationRequest.method,
       });
 
       let response;
       try {
-        response = await resolveResponse(match, url, request, runtime);
+        response = await resolveResponse(
+          match,
+          url,
+          applicationRequest,
+          runtime,
+          resolvedRequest.kind,
+        );
       } catch (error) {
         response =
           mode === "development"
@@ -148,53 +179,50 @@ export function createApp(options) {
       const flushed = appendSetCookies(response, cookieJar.pending);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
-      // headers but never carries a body. Normalizing here, rather than in the
-      // matched-page branch, keeps the unmatched HEAD (a not-found body) and every
-      // later response path correct without each remembering the rule.
-      if (request.method.toUpperCase() === "HEAD") {
-        return new Response(null, {
-          status: flushed.status,
-          headers: flushed.headers,
-        });
-      }
-      return flushed;
+      // headers but never carries a body. The outer request owns this decision;
+      // navigation targets deliberately execute as application GET requests.
+      return normalizeHeadResponse(flushed, request);
     },
   });
 
-  function resolveResponse(match, url, request, runtime) {
+  async function resolveResponse(match, url, request, runtime, requestKind) {
+    const navigation = requestKind === "navigation";
+
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
       // finalize what it returns through the response builder.
       case "handler": {
         const runMiddleware = middlewareRunners.get(match.route.id);
-        if (runMiddleware) {
-          return dispatchWithMiddleware(
-            match,
-            { kind: "handler", method: match.method },
-            request,
-            runtime,
-            runMiddleware,
-          );
-        }
-        return dispatchHandler(match, match.method, request, runtime);
+        const result = runMiddleware
+          ? await dispatchWithMiddleware(
+              match,
+              { kind: "handler", method: match.method },
+              request,
+              runtime,
+              runMiddleware,
+            )
+          : await dispatchHandler(match, match.method, request, runtime);
+        return finalizeMatchedResult(
+          result,
+          match,
+          match.method,
+          url,
+          navigation,
+        );
       }
 
       case "page": {
         const runMiddleware = middlewareRunners.get(match.route.id);
-        if (runMiddleware) {
-          return dispatchWithMiddleware(
-            match,
-            { kind: "page", method: "GET" },
-            request,
-            runtime,
-            runMiddleware,
-          );
-        }
-        return renderPage({
-          Page: loadDefaultExport(modules, match.route.id, "route"),
-          Document,
-          routeId: match.route.id,
-        });
+        const result = runMiddleware
+          ? await dispatchWithMiddleware(
+              match,
+              { kind: "page", method: "GET" },
+              request,
+              runtime,
+              runMiddleware,
+            )
+          : createResponse({ canRender: true }).render({});
+        return finalizeMatchedResult(result, match, "GET", url, navigation);
       }
 
       // A matched HEAD arrives as "automatic-head" and the HEAD boundary above
@@ -202,39 +230,48 @@ export function createApp(options) {
       // the route exports GET, otherwise the default page.
       case "automatic-head": {
         const runMiddleware = middlewareRunners.get(match.route.id);
+        const target = { ...match.target, method: "GET" };
+        let result;
         if (runMiddleware) {
-          return dispatchWithMiddleware(
+          result = await dispatchWithMiddleware(
             match,
-            { ...match.target, method: "GET" },
+            target,
             request,
             runtime,
             runMiddleware,
           );
+        } else if (target.kind === "handler") {
+          result = await dispatchHandler(match, target.method, request, runtime);
+        } else {
+          result = createResponse({ canRender: true }).render({});
         }
-        if (match.target?.kind === "handler") {
-          return dispatchHandler(match, match.target.method, request, runtime);
-        }
-        return renderPage({
-          Page: loadDefaultExport(modules, match.route.id, "route"),
-          Document,
-          routeId: match.route.id,
-        });
+        return finalizeMatchedResult(result, match, target.method, url, navigation);
       }
 
       case "automatic-options":
-        return new Response(null, {
-          status: 204,
-          headers: { allow: match.allowedMethods.join(", ") },
-        });
+        return navigation
+          ? createNavigationReloadResponse({
+              allow: match.allowedMethods.join(", "),
+            })
+          : new Response(null, {
+              status: 204,
+              headers: { allow: match.allowedMethods.join(", ") },
+            });
 
       case "method-not-allowed":
-        return new Response(null, {
-          status: 405,
-          headers: { allow: match.allowedMethods.join(", ") },
-        });
+        return navigation
+          ? createNavigationReloadResponse({
+              allow: match.allowedMethods.join(", "),
+            })
+          : new Response(null, {
+              status: 405,
+              headers: { allow: match.allowedMethods.join(", ") },
+            });
 
       case "not-found":
-        return renderNotFound({ NotFoundPage, Document });
+        return navigation
+          ? createNavigationReloadResponse()
+          : renderNotFound({ NotFoundPage, Document, location: url.href });
 
       default:
         throw new TypeError(
@@ -244,10 +281,9 @@ export function createApp(options) {
   }
 
   // Run selected middleware with the same request and response objects the
-  // handler receives if the chain continues. A terminal middleware intent uses
-  // the same finalization path as a handler; an implicit page finalizes
-  // res.render({}) so status and headers accumulated by continuing middleware
-  // reach the streamed response.
+  // handler receives if the chain continues. Return the genuine terminal intent
+  // unchanged so document and navigation requests share execution and choose
+  // their representation only afterward.
   async function dispatchWithMiddleware(
     match,
     target,
@@ -259,16 +295,14 @@ export function createApp(options) {
     const res = createResponse({ canRender: match.route.hasDefaultExport });
     const result = await runMiddleware(req, res);
 
-    if (isResponseResult(result)) {
-      return finalizeMatchedResult(result, match, target.method);
-    }
+    if (isResponseResult(result)) return result;
     if (target.kind === "handler") {
       return dispatchHandler(match, target.method, request, runtime, { req, res });
     }
-    return finalizeMatchedResult(res.render({}), match, target.method);
+    return res.render({});
   }
 
-  // Run one named method handler and finalize its response-builder result. The
+  // Run one named method handler and preserve its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
   // headers, body helpers, cookies, Worker bindings, and waitUntil) and the
   // response builder.
@@ -291,16 +325,17 @@ export function createApp(options) {
     const req = prepared?.req ?? createRequest(request, match.params, runtime);
     const res =
       prepared?.res ?? createResponse({ canRender: match.route.hasDefaultExport });
-    const result = await handler(req, res);
-    return finalizeMatchedResult(result, match, method);
+    return handler(req, res);
   }
 
-  function finalizeMatchedResult(result, match, method) {
+  function finalizeMatchedResult(result, match, method, url, navigation) {
     return finalizeHandlerResult(result, {
       method,
       routeId: match.route.id,
       Document,
       NotFoundPage,
+      location: url.href,
+      navigation,
       // Only a route with a default page reaches res.render(); createResponse
       // enforces that, so resolve the component lazily — a res.json() result
       // never loads it.
@@ -428,6 +463,10 @@ async function finalizeHandlerResult(result, options) {
     );
   }
 
+  if (options.navigation) {
+    return finalizeNavigationResult(result, { routeId: options.routeId });
+  }
+
   if (
     result.kind === "text" ||
     result.kind === "json" ||
@@ -467,6 +506,7 @@ async function finalizeHandlerResult(result, options) {
       Page: options.getPage(),
       Document: options.Document,
       routeId: options.routeId,
+      location: options.location,
       props: result.props,
       status: result.status,
       headers: result.headers,
@@ -479,6 +519,7 @@ async function finalizeHandlerResult(result, options) {
     return renderNotFound({
       NotFoundPage: options.NotFoundPage,
       Document: options.Document,
+      location: options.location,
       props: result.props,
       headers: result.headers,
     });
@@ -494,6 +535,14 @@ async function finalizeHandlerResult(result, options) {
  * Convert a response-builder headers snapshot (string or array-of-string values)
  * into Web Headers, appending each entry of an array so repeated headers survive.
  */
+function normalizeHeadResponse(response, request) {
+  if (request.method.toUpperCase() !== "HEAD") return response;
+  return new Response(null, {
+    status: response.status,
+    headers: response.headers,
+  });
+}
+
 function toWebHeaders(values) {
   const headers = new Headers();
   for (const [name, value] of Object.entries(values)) {

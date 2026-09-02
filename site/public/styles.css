@@ -158,6 +158,11 @@ pre code {
   padding: 0.3rem 0;
 }
 
+.sidebar nav a[aria-current="page"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .content {
   padding: 3rem 2rem 6rem;
 }

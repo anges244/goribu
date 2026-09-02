@@ -1,3 +1,5 @@
+import { Link } from "goribu";
+
 // The landing page. Hand-written JSX rather than Markdown: the landing is chrome,
 // not prose. Like the docs pages it does no per-request work, so it is served as
 // a static asset.
@@ -12,9 +14,9 @@ export default function LandingPage() {
           goes from one command to a public URL.
         </p>
         <p className="cta">
-          <a className="button" href="/docs">
+          <Link className="button" href="/docs">
             Read the docs
-          </a>
+          </Link>
         </p>
       </header>
 

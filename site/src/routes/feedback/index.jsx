@@ -1,3 +1,5 @@
+import { Link } from "goribu";
+
 // A route that exports both a page and a POST handler — the request surface in
 // use on the live site. GET renders the form (statically impossible here: the
 // folder has middleware, so the whole /feedback subtree is Worker-served). POST
@@ -25,7 +27,7 @@ export default function FeedbackPage() {
           </p>
         </form>
         <p>
-          <a href="/">Back to home</a>
+          <Link href="/">Back to home</Link>
         </p>
       </article>
     </main>
