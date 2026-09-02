@@ -38,10 +38,13 @@ describe("goribu()", () => {
     expect(() => goribu({})).toThrow(/does not accept options/);
   });
 
-  it("returns a plugin array that includes the goribu plugin", () => {
+  it("returns a plugin array with Goribu's build and client-boundary plugins", () => {
     const plugins = goribu();
     expect(Array.isArray(plugins)).toBe(true);
     expect(plugins.some((plugin) => plugin?.name === "goribu")).toBe(true);
+    expect(
+      plugins.some((plugin) => plugin?.name === "goribu:client-boundary"),
+    ).toBe(true);
   });
 
   const emitHeadersFor = (environmentName) => {

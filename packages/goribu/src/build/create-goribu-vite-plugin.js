@@ -4,6 +4,7 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import { loadApplicationConfig } from "./load-application-config.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { writeWranglerConfig } from "./generate-wrangler-config.js";
+import { createClientBoundaryPlugin } from "./create-client-boundary-plugin.js";
 
 const CLIENT_ENTRY = "src/client-entry.js";
 const GENERATED_WRANGLER_CONFIG = ".goribu/wrangler.json";
@@ -40,7 +41,11 @@ export function goribu(options) {
     );
   }
 
-  return [createGoribuPlugin(), ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG })];
+  return [
+    createGoribuPlugin(),
+    createConfiguredClientBoundaryPlugin(),
+    ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
+  ];
 }
 
 function createGoribuPlugin() {
@@ -100,6 +105,53 @@ function createGoribuPlugin() {
       }
     },
   };
+}
+
+/**
+ * Create the client-boundary plugin after Vite supplies the application root.
+ * `goribu()` is called while config is loading, when `root` may still differ from
+ * process.cwd(); resolving here keeps the boundary aligned with the same root the
+ * generated Worker and Wrangler configuration use.
+ */
+function createConfiguredClientBoundaryPlugin() {
+  let boundary;
+
+  return {
+    name: "goribu:client-boundary",
+    enforce: "pre",
+
+    config(config) {
+      const root = config.root ? resolve(config.root) : process.cwd();
+      boundary = createClientBoundaryPlugin({
+        routesDir: resolve(root, "src/routes"),
+      });
+    },
+
+    resolveId(source, importer, options) {
+      return requireClientBoundary(boundary).resolveId.call(
+        this,
+        source,
+        importer,
+        options,
+      );
+    },
+
+    generateBundle(options, bundle, isWrite) {
+      return requireClientBoundary(boundary).generateBundle.call(
+        this,
+        options,
+        bundle,
+        isWrite,
+      );
+    },
+  };
+}
+
+function requireClientBoundary(boundary) {
+  if (boundary) return boundary;
+  throw new Error(
+    "[Goribu] The client boundary ran before Vite configured the application root. Run it through goribu() so server-only modules can be checked against src/routes.",
+  );
 }
 
 /**

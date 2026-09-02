@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
@@ -69,6 +69,11 @@ describe("goribu build static output (workerd)", () => {
     );
     expect(build.output).toContain("src/routes/posts/_middleware.js");
     expect(build.output).toContain("src/routes/posts/demo/_middleware.js");
+    expect(
+      readdirSync(clientDir, { recursive: true }).some((file) =>
+        /\.server\./i.test(file),
+      ),
+    ).toBe(false);
   });
 
   it("passes Worker bindings and a bound waitUntil capability to a fixture handler", async () => {
@@ -79,7 +84,10 @@ describe("goribu build static output (workerd)", () => {
       const response = await worker.fetch("https://goribu.test/hello");
 
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ hasAssets: true });
+      expect(await response.json()).toEqual({
+        hasAssets: true,
+        hasServerToken: true,
+      });
     } finally {
       await harness.close();
     }
