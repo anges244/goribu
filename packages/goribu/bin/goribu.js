@@ -9,12 +9,18 @@ import { readFileSync } from "node:fs";
 import { runCheck } from "../src/build/run-check.js";
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
+import { runMigrate } from "../src/build/migrations/run-migrate.js";
+import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
+import { runMigrateStatus } from "../src/build/migrations/run-migrate-status.js";
 
 const COMMANDS = {
   dev: "Start the local development server.",
   build: "Produce the production Worker and client bundles.",
   check: "Preview production resources without changing them.",
   deploy: "Build and deploy to Cloudflare.",
+  migrate: "Apply pending D1 migrations (default local; --remote for production).",
+  "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
+  "migrate:status": "Show applied and pending migrations without changing anything.",
 };
 
 function readVersion() {
@@ -29,7 +35,7 @@ function printUsage(stream) {
     "",
     "Commands:",
     ...Object.entries(COMMANDS).map(
-      ([name, summary]) => `  ${name.padEnd(8)}${summary}`,
+      ([name, summary]) => `  ${name.padEnd(16)}${summary}`,
     ),
     "",
     "Options:",
@@ -87,6 +93,33 @@ function assertNoArguments(command, rest) {
   return false;
 }
 
+// Resolve the migration target. It is always explicit in intent: no flag means
+// the local development database, --remote means the deployed production database.
+function resolveTarget(command, rest) {
+  let target;
+  for (const argument of rest) {
+    let next;
+    if (argument === "--local") next = "local";
+    else if (argument === "--remote") next = "remote";
+    else {
+      console.error(
+        `[Goribu] \`goribu ${command}\` accepts only --local (default) or --remote, but received ${JSON.stringify(argument)}.`,
+      );
+      process.exitCode = 1;
+      return null;
+    }
+    if (target !== undefined && target !== next) {
+      console.error(
+        `[Goribu] \`goribu ${command}\` cannot target both --local and --remote. Choose one.`,
+      );
+      process.exitCode = 1;
+      return null;
+    }
+    target = next;
+  }
+  return target ?? "local";
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
 
@@ -133,6 +166,35 @@ function main(argv) {
       console.error(error);
       process.exitCode = 1;
     });
+    return;
+  }
+
+  if (command === "migrate" || command === "migrate:status") {
+    const target = resolveTarget(command, rest);
+    if (target === null) return;
+    const run = command === "migrate" ? runMigrate : runMigrateStatus;
+    run({ projectRoot: process.cwd(), target }).catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+    return;
+  }
+
+  if (command === "migrate:new") {
+    const name = rest.filter((argument) => !argument.startsWith("--")).join(" ");
+    if (rest.some((argument) => argument.startsWith("--")) || name.length === 0) {
+      console.error(
+        "[Goribu] `goribu migrate:new <name>` takes a descriptive name, not options. Example: `goribu migrate:new create feedback`.",
+      );
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      runMigrateNew({ projectRoot: process.cwd(), name });
+    } catch (error) {
+      console.error(error);
+      process.exitCode = 1;
+    }
     return;
   }
 

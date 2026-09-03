@@ -50,4 +50,22 @@ describe("goribu CLI", () => {
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\] `goribu deploy` does not accept arguments/);
   });
+
+  it("fails closed on conflicting migration targets", () => {
+    const { status, stderr } = runCli(["migrate", "--local", "--remote"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/cannot target both --local and --remote/);
+  });
+
+  it("rejects an unknown migrate flag", () => {
+    const { status, stderr } = runCli(["migrate", "--bogus"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/accepts only --local \(default\) or --remote/);
+  });
+
+  it("requires a name for migrate:new", () => {
+    const { status, stderr } = runCli(["migrate:new"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/takes a descriptive name/);
+  });
 });
