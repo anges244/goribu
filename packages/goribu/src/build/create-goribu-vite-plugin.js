@@ -9,6 +9,7 @@ import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { writeWranglerConfig } from "./generate-wrangler-config.js";
 import { loadApplicationConfig } from "./load-application-config.js";
 
+const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const CLIENT_ENTRY = "src/client-entry.js";
 const GENERATED_WRANGLER_CONFIG = ".goribu/wrangler.json";
 const CLIENT_ASSETS_MODULE = "virtual:goribu/client-assets";
@@ -64,6 +65,7 @@ function createGoribuPlugin() {
     // enforce: "pre"), so the generated Worker entry and Wrangler config are on
     // disk by the time it reads them.
     async config(config, environment = {}) {
+      assertCanonicalEnvPrefix(config?.envPrefix, true);
       const root = config.root ? resolve(config.root) : process.cwd();
       const mode =
         environment.command === "serve" ? "development" : "production";
@@ -72,6 +74,7 @@ function createGoribuPlugin() {
       const appConfig = await loadApplicationConfig({ projectRoot: root });
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
+        envPrefix: PUBLIC_ENV_PREFIX,
         builder: {
           buildApp: buildClientBeforeWorkers,
         },
@@ -88,6 +91,10 @@ function createGoribuPlugin() {
           },
         },
       };
+    },
+
+    configResolved(config) {
+      assertCanonicalEnvPrefix(config.envPrefix, false);
     },
 
     // Emit the blanket asset headers into the client output only. The Worker
@@ -366,5 +373,30 @@ function assertNoReservedPublicFiles(root, configuredPublicDir) {
       `[Goribu] The /_goribu/ URL namespace is reserved for Goribu's generated assets, so ${JSON.stringify(reservedDir)} cannot be published. ` +
         "Move those files under a different folder in public/.",
     );
+  }
+}
+
+function assertCanonicalEnvPrefix(envPrefix, allowUndefined) {
+  if (
+    (allowUndefined && envPrefix === undefined) ||
+    envPrefix === PUBLIC_ENV_PREFIX ||
+    (Array.isArray(envPrefix) &&
+      envPrefix.length >= 1 &&
+      envPrefix.every((prefix) => prefix === PUBLIC_ENV_PREFIX))
+  ) {
+    return;
+  }
+
+  throw new TypeError(
+    `[Goribu] Browser environment variables must use only Vite's ${JSON.stringify(PUBLIC_ENV_PREFIX)} envPrefix, but received ${formatEnvPrefix(envPrefix)}. ` +
+      "Remove the custom envPrefix and rename browser-visible variables to PUBLIC_*. Keep secrets unprefixed and read server bindings from request.env.",
+  );
+}
+
+function formatEnvPrefix(envPrefix) {
+  try {
+    return JSON.stringify(envPrefix) ?? String(envPrefix);
+  } catch {
+    return String(envPrefix);
   }
 }
