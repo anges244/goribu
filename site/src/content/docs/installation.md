@@ -47,8 +47,8 @@ Goribu expects a few files at the project root and under `src/`.
 
 ### `goribu.config.js`
 
-The single application configuration channel. Today it carries the deploy
-identity; more fields arrive with later features.
+The single application configuration channel. It carries the deploy identity
+and an optional Worker response-header callback.
 
 ```js
 import { defineConfig } from "goribu/server";
@@ -97,12 +97,14 @@ Add more routes by adding files — `src/routes/about.jsx` serves `/about`,
 
 ### `src/client-entry.js`
 
-A client entry so the build emits a client bundle alongside the Worker. It is a
-placeholder until the client runtime (hydration) lands in a later release.
+The browser entry hydrates the initial page and installs navigation and forms:
 
 ```js
-export const goribuClientPlaceholder = true;
+import "goribu/client";
 ```
+
+Import global browser CSS here as well. Production fingerprints this graph;
+development serves it through Vite.
 
 ## Running it
 

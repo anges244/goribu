@@ -21,35 +21,25 @@ Goribu owns the outer HTML document — the `<html>`, `<head>`, and `<body>` —
 every route produces one consistent, valid page. Your page component renders as
 the document's body content.
 
-The default shell is minimal:
-
-```html
-<html>
-  <head><meta charset="utf-8"></head>
-  <body><div id="root"><!-- your page --></div></body>
-</html>
-```
-
-That `<div id="root">` is the mount point where Block 5's client runtime will
-hydrate.
-
-## Customizing the document
-
-To control the document yourself, add `src/routes/_document.jsx` with a
-default-exported component. It receives the rendered page as `children` and is
-responsible for the same three elements:
+The default shell includes route metadata, graph styles, the hydration root,
+inert render data, and the client entry. To control placement yourself, add
+`src/routes/_document.jsx`:
 
 ```jsx
-export default function Document({ children }) {
+import { ClientEntry, Stylesheet } from "goribu";
+
+export default function Document({ children, head, nonce }) {
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>My app</title>
+        <Stylesheet />
+        {head}
       </head>
       <body>
         <div id="root">{children}</div>
+        <ClientEntry src="/src/client-entry.js" />
       </body>
     </html>
   );
@@ -59,20 +49,21 @@ export default function Document({ children }) {
 The Document is a **file in the route graph**, not a field in
 `goribu.config.js`. Configuration is plain data that Node loads directly; a
 Document is a React component, so it lives where it can be compiled, styled, and
-(from Block 5) audited for the client boundary. `goribu.config.js` rejects a
+audited for the client boundary. `goribu.config.js` rejects a
 `Document` field with a message pointing you here. See
 [decisions.md](./decisions.md).
 
-Later blocks extend what the Document receives (metadata for `<head>`, a
-hydration nonce). An existing Document keeps working across those additions
-because it simply ignores props it does not read.
+Keep `children` under the fixed `#root`, render the route-owned `head` inside
+`<head>`, and place one `<Stylesheet />` and one `<ClientEntry>`. `nonce` is for
+application-owned inline elements on Worker-rendered documents. Route titles
+belong to metadata, not a fallback `<title>` in Document. See
+[metadata.md](./metadata.md).
 
 ## What a page receives
 
-In this block a page renders with no props. Route parameters (the `id` from
-`posts/[id]`) and loaded data reach a page only through a request handler, which
-arrives in a later block. Until then a page is a pure function of nothing — which
-is exactly what makes most pages [static](./static-routes.md).
+A page without a GET handler receives no props. A GET handler can load request
+data and return `res.render(props)`; those same props feed route metadata and the
+browser hydration payload. See [handlers.md](./handlers.md).
 
 ## The not-found page
 
@@ -82,11 +73,10 @@ through the same shell as any other page. Supply your own by adding
 
 ## When rendering can't proceed
 
-If a route's default export — or a custom Document — is not a React component,
-the build (or the render) fails with a `[Goribu]` message naming the file and
-what to export. A request error boundary (`_500`) is part of a later block; this
-block renders pages, the not-found page, and the automatic method responses that
-[routing](./routing.md) answers on its own.
+If a route's default export or custom Document is not a React component, the
+build or render fails with a `[Goribu]` message naming what to repair. Throws from
+handlers, metadata, or rendering reach the request error boundary described in
+[errors.md](./errors.md).
 
 ## See also
 

@@ -11,9 +11,10 @@ second one:
 - **What runs in the browser** — plain HTML, or a hydrated React app? That is
   this page.
 
-The two are independent. A page can be served statically *and* run JavaScript in
-the browser; a page can be served by the Worker and run no JavaScript at all.
-"Static" is never a statement about the browser.
+The two are independent architectural concerns. Serving a page statically does
+not imply that it runs without JavaScript, and serving it from the Worker does
+not itself require browser JavaScript. "Static" is never a statement about the
+browser. Goribu's current browser policy is described below.
 
 ## The position
 
@@ -28,25 +29,24 @@ A route-level opt-out to **HTML only** — a page that ships no client bundle at
 for now means "static" can never quietly drift into meaning "no JavaScript": the
 two axes stay separate because the browser axis has exactly one setting today.
 
-## Which routes need JavaScript right now
+## What runs now
 
-Honestly: **none of them do yet.** The browser runtime — hydration, client-side
-navigation, forms — is a later block. Until it lands, every Goribu route is
-server-rendered HTML and nothing runs in the browser.
+Every route hydrates. The landing page proves the combination directly: `/` is
+statically output and served without a Worker invocation, then its "Why Goribu?"
+control becomes interactive through React hydration. Static request, interactive
+browser - both are true.
 
-This documentation site is the proving ground for that state. Every page you are
-reading is:
+Documentation links use client navigation after hydration, with real anchors as
+their no-JavaScript baseline. The [feedback form](/feedback) is a real native
+POST before hydration and gains validation, preview, and redirect behavior after
+the client runtime installs.
 
-- **Server-rendered** through the streaming SSR pipeline (see
-  [Rendering](/docs/rendering)),
-- **Statically output** at build time, so it is served from Static Assets and the
-  Worker is never invoked (see [Static routes](/docs/static-routes)),
-- and **HTML only** — no client bundle does any work, because there is nothing
-  interactive on these pages to hydrate.
+Goribu fails closed at the browser boundary. Route modules are loaded by canonical
+ID, `.server.*` code is rejected from the client graph, only `PUBLIC_*`
+environment values are exposed, and an uncertain navigation or form protocol
+falls back to a document load.
 
-So the site sits at one corner of the two axes: static request, HTML browser. When
-hydration ships, the interesting corner opens up — a statically served route that
-also hydrates — and both halves will be true of the same page at once. This page
-will be updated then to show it, not before.
+See [Navigation](/docs/navigation), [Forms](/docs/forms), and
+[Metadata & Document](/docs/metadata).
 
 **Next:** [Deploying](/docs/deploy).

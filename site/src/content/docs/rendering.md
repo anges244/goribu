@@ -24,34 +24,25 @@ Goribu owns the outer HTML document — the `<html>`, `<head>`, and `<body>` —
 every route produces one consistent, valid page. Your page component renders as
 the document's body content.
 
-The default shell is minimal:
-
-```html
-<html>
-  <head><meta charset="utf-8"></head>
-  <body><div id="root"><!-- your page --></div></body>
-</html>
-```
-
-That `<div id="root">` is the mount point where the client runtime will hydrate.
-
-## Customizing the document
-
-To control the document yourself, add `src/routes/_document.jsx` with a
-default-exported component. It receives the rendered page as `children` and is
-responsible for the same three elements:
+The default shell includes metadata, graph styles, the hydration root, inert
+render data, and the client entry. To control placement, add
+`src/routes/_document.jsx`:
 
 ```jsx
-export default function Document({ children }) {
+import { ClientEntry, Stylesheet } from "goribu";
+
+export default function Document({ children, head }) {
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>My app</title>
+        <Stylesheet />
+        {head}
       </head>
       <body>
         <div id="root">{children}</div>
+        <ClientEntry src="/src/client-entry.js" />
       </body>
     </html>
   );
@@ -64,16 +55,15 @@ component, so it lives where it can be compiled, styled, and audited for the
 client boundary. `goribu.config.js` rejects a `Document` field with a message
 pointing you here.
 
-Later releases extend what the Document receives (metadata for `<head>`, a
-hydration nonce). An existing Document keeps working across those additions
-because it simply ignores props it does not read.
+Keep `children` inside `#root`, render the route-owned `head` in `<head>`, and
+place one of each helper. Worker-rendered documents also receive `nonce` for
+application-owned inline elements. See [Metadata & Document](/docs/metadata).
 
 ## What a page receives
 
-Today a page renders with no props. Route parameters (the `id` from `posts/[id]`)
-and loaded data reach a page only through a request handler, which arrives in a
-later release. Until then a page is a pure function of nothing — which is exactly
-what makes most pages [static](/docs/static-routes).
+A page without a GET handler receives no props. A GET handler loads request data
+and returns `res.render(props)` to pass it to the page. The same props feed route
+metadata and the browser hydration payload. See [Handlers](/docs/handlers).
 
 ## The not-found page
 

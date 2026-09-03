@@ -26,14 +26,11 @@ version.) See [decisions.md](./decisions.md).
 
 A route is served statically when both hold:
 
-1. **Its first response needs no Worker.** The page has no request handler, so it
-   renders from nothing (see [rendering.md](./rendering.md)) — the same output
-   every time.
+1. **Its GET representation needs no Worker.** The route has a page and no GET
+   handler, has not set `prerender = false`, and has no selected middleware.
+   POST-only handlers do not prevent the page's GET from being static.
 2. **Its URL is fully known at build time.** A route with a dynamic segment
    (`posts/[id]`) has no single URL to build, so it cannot be static.
-
-In this block, where routes are pages, that means every page with a static URL is
-served statically, and dynamic routes are served by the Worker.
 
 You can be explicit with a `prerender` export:
 
@@ -68,10 +65,10 @@ but was not statically output: it has a dynamic segment (:id) whose URL is not
 known at build time. It will render on the Worker at request time.
 ```
 
-A route is downgraded when it has a dynamic segment, or when the Worker cannot
-render it at build time (it depends on the request). A route that *forced*
-`prerender = true` fails the build instead of downgrading — it asked for a
-guarantee it could not keep.
+A route is downgraded when it has a dynamic segment, selected middleware, or the
+Worker cannot render it at build time. A route that *forced* `prerender = true`
+fails the build instead of downgrading — it asked for a guarantee it could not
+keep.
 
 ## Assets and routes cannot collide
 

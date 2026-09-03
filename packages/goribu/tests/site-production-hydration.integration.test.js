@@ -67,6 +67,25 @@ describe("site production hydration", () => {
     expect(html).toContain('aria-expanded="false"');
   });
 
+  it("writes the client-runtime guides as static pages with managed titles", () => {
+    for (const [page, title] of [
+      ["navigation", "Navigation"],
+      ["forms", "Forms"],
+      ["metadata", "Metadata &amp; Document"],
+    ]) {
+      const file = join(clientDir, "docs", `${page}.html`);
+      expect(existsSync(file), page).toBe(true);
+      const html = readFileSync(file, "utf8");
+
+      expect(html).toContain(
+        `<title data-goribu-head="">${title}</title>`,
+      );
+      expect(html).toMatch(productionEntry);
+      expect(html).toMatch(productionStyle);
+      expect(html).not.toContain(' nonce=');
+    }
+  });
+
   it("renders the Worker-owned feedback route with the same hashed entry", async () => {
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();

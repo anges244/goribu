@@ -12,6 +12,23 @@ Unreleased.
 
 ### Added
 
+- Client hydration — every route ships an audited browser graph, hydrates the
+  fixed `#root` from escaped inert route/props data, and resolves production
+  entries, route chunks, module preloads, and CSS by content-hashed manifest.
+- Client navigation — `<Link>`, `<NavLink>`, and `navigate()` use a reserved
+  Worker protocol with lazy route modules, intent prefetch, history and scroll
+  restoration, metadata synchronization, and full-document fallback.
+- Enhanced forms — `<Form>` provides native GET/POST fallback plus hydrated
+  pending/data/error state, validation focus, JSON/invalid/redirect/same-page
+  render outcomes, file-aware encoding, and stale/duplicate submission guards.
+- Route metadata and Document helpers — strict route-owned `meta`, managed head
+  replacement, `Document({ children, head, nonce })`, `<Stylesheet />`, and
+  `<ClientEntry>` with request-coupled nonce support on Worker renders.
+- Global Worker response policy — callback-only `responseHeaders({ request, env,
+  mode, nonce })`, with unsafe blanket-header rejection and protected navigation
+  and form representations. Static Assets do not receive this policy.
+- Public browser environment — only mode-aware `PUBLIC_*` values enter
+  `import.meta.env`; custom Vite prefixes that could expose secrets fail closed.
 - Route handlers — a route can export named HTTP method functions (`GET`, `POST`,
   …) that run instead of rendering. Each handler receives a request surface
   (`req.method`, `req.path`, `req.params`, `req.query`, `req.headers`,

@@ -93,4 +93,4 @@ log stream).
 - [Middleware](/docs/middleware) — a middleware throw hits this same boundary.
 - [Routing](/docs/routing) — `_404`, the sibling of `_500`, for unmatched URLs.
 
-**Next:** [Static routes](/docs/static-routes).
+**Next:** [Navigation](/docs/navigation).
