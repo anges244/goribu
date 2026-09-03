@@ -1,7 +1,12 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { resolveWranglerBin, runWranglerDeploy } from "../src/build/run-deploy.js";
+import { describe, expect, it, vi } from "vitest";
+import { defineConfig } from "../src/runtime/application-config.js";
+import {
+  resolveWranglerBin,
+  runDeploy,
+  runWranglerDeploy,
+} from "../src/build/run-deploy.js";
 
 const FAKE_BIN = "/fake/path/to/wrangler.js";
 
@@ -90,5 +95,111 @@ describe("runWranglerDeploy", () => {
     const bin = resolveWranglerBin();
     expect(bin).toMatch(/wrangler\.js$/);
     expect(existsSync(bin)).toBe(true);
+  });
+});
+
+describe("runDeploy", () => {
+  it("guards and builds before provisioning, then finalizes and deploys", async () => {
+    const events = [];
+    const appConfig = defineConfig({
+      name: "app",
+      compatibilityDate: "2026-09-03",
+      database: { type: "d1", name: "app-db" },
+    });
+    const database = { name: "app-db", uuid: "database-id" };
+    const guard = vi.fn(async () => events.push("guard"));
+    const provision = vi.fn(async () => {
+      events.push("provision");
+      return database;
+    });
+    const build = vi.fn(async () => events.push("build"));
+    const finalize = vi.fn(() => events.push("finalize"));
+    const deploy = vi.fn(async () => {
+      events.push("deploy");
+      return 0;
+    });
+
+    await expect(
+      runDeploy({
+        projectRoot: "/app",
+        build,
+        loadConfig: async () => appConfig,
+        guard,
+        provision,
+        finalize,
+        deploy,
+        stdout: { write() {} },
+      }),
+    ).resolves.toBe(0);
+    expect(events).toEqual(["guard", "build", "provision", "finalize", "deploy"]);
+    expect(guard).toHaveBeenCalledWith({ projectRoot: "/app", appConfig });
+    expect(finalize).toHaveBeenCalledWith({
+      projectRoot: "/app",
+      appConfig,
+      database,
+    });
+  });
+
+  it("does not mutate remote state when local validation or build fails", async () => {
+    const appConfig = defineConfig({
+      name: "app",
+      compatibilityDate: "2026-09-03",
+      database: { type: "d1", name: "app-db" },
+    });
+    const build = vi.fn();
+    const provision = vi.fn();
+    const deploy = vi.fn();
+
+    await expect(
+      runDeploy({
+        projectRoot: "/app",
+        build,
+        loadConfig: async () => appConfig,
+        guard: async () => {
+          throw new Error("duplicate d1_databases");
+        },
+        provision,
+        deploy,
+      }),
+    ).rejects.toThrow(/duplicate d1_databases/);
+    expect(build).not.toHaveBeenCalled();
+    expect(provision).not.toHaveBeenCalled();
+    expect(deploy).not.toHaveBeenCalled();
+
+    await expect(
+      runDeploy({
+        projectRoot: "/app",
+        build: async () => {
+          throw new Error("build failed");
+        },
+        loadConfig: async () => appConfig,
+        guard: async () => {},
+        provision,
+        deploy,
+      }),
+    ).rejects.toThrow(/build failed/);
+    expect(provision).not.toHaveBeenCalled();
+    expect(deploy).not.toHaveBeenCalled();
+  });
+
+  it("builds and deploys without resource work when no database is declared", async () => {
+    const appConfig = defineConfig({
+      name: "app",
+      compatibilityDate: "2026-09-03",
+    });
+    const finalize = vi.fn();
+    const deploy = vi.fn(async () => 0);
+
+    await runDeploy({
+      projectRoot: "/app",
+      build: async () => {},
+      loadConfig: async () => appConfig,
+      provision: async () => null,
+      finalize,
+      deploy,
+    });
+
+    expect(finalize).not.toHaveBeenCalled();
+    expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app" });
   });
 });

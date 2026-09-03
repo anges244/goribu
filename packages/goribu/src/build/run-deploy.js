@@ -1,7 +1,51 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
+import { finalizeD1Binding } from "./finalize-d1-binding.js";
+import { loadApplicationConfig } from "./load-application-config.js";
+import { provisionD1 } from "./provision-d1.js";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
+
+/** Validate and build locally, provision, attach concrete bindings, and deploy. */
+export async function runDeploy(options) {
+  const projectRoot = options?.projectRoot;
+  if (typeof projectRoot !== "string" || projectRoot.length === 0) {
+    throw new TypeError(
+      "[Goribu] runDeploy({ projectRoot, build }) requires the application project root.",
+    );
+  }
+  const build = options?.build;
+  if (typeof build !== "function") {
+    throw new TypeError(
+      "[Goribu] runDeploy({ build }) requires the production build callback.",
+    );
+  }
+
+  const loadConfig = options?.loadConfig ?? loadApplicationConfig;
+  const guard = options?.guard ?? assertNoDuplicateD1Declaration;
+  const provision = options?.provision ?? provisionD1;
+  const finalize = options?.finalize ?? finalizeD1Binding;
+  const deploy = options?.deploy ?? runWranglerDeploy;
+  const appConfig = await loadConfig({ projectRoot });
+
+  // Prove all local inputs and the complete production build before the first
+  // remote mutation. The Vite plugin repeats the ownership guard so standalone
+  // `goribu build` has the same protection.
+  await guard({ projectRoot, appConfig });
+  await build();
+
+  const database = await provision({
+    projectRoot,
+    appConfig,
+    stdout: options?.stdout ?? process.stdout,
+  });
+
+  if (database !== null) {
+    finalize({ projectRoot, appConfig, database });
+  }
+  return deploy({ projectRoot });
+}
 
 /**
  * Launch `wrangler deploy` for the built application.

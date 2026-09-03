@@ -68,6 +68,25 @@ describe("writeWranglerConfig", () => {
     expect(config.compatibility_flags).toEqual(["nodejs_compat"]);
   });
 
+  it("synthesizes a DB binding whose preview id gives dev a name-keyed local D1", () => {
+    const root = makeProject();
+    const appConfig = defineConfig({
+      name: "goribu-basic-app",
+      compatibilityDate: "2026-08-31",
+      database: { type: "d1", name: "goribu-basic-db" },
+    });
+
+    const { config } = writeWranglerConfig({ projectRoot: root, appConfig });
+
+    expect(config.d1_databases).toEqual([
+      {
+        binding: "DB",
+        database_name: "goribu-basic-db",
+        preview_database_id: "goribu-basic-db",
+      },
+    ]);
+  });
+
   it("requires a project root", () => {
     const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-08-31" });
     expect(() => writeWranglerConfig({ appConfig })).toThrow(/requires the application project root/);

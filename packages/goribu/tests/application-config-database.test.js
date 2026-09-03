@@ -25,13 +25,7 @@ describe("defineConfig database", () => {
     }
   });
 
-  it("rejects fields owned by later substeps and unsafe nested shapes", () => {
-    expect(() =>
-      defineConfig({
-        ...base,
-        database: { type: "d1", name: "app", replication: true },
-      }),
-    ).toThrow(/unknown field "replication".*supported D1 fields are type and name/);
+  it("rejects unsafe nested shapes", () => {
     expect(() => defineConfig({ ...base, database: "app" })).toThrow(
       /database must be a plain object/,
     );

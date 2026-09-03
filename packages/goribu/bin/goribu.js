@@ -7,7 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { runCheck } from "../src/build/run-check.js";
-import { runWranglerDeploy } from "../src/build/run-deploy.js";
+import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 
 const COMMANDS = {
@@ -69,8 +69,10 @@ async function runDev() {
 // exactly what the build produced. Wrangler owns Cloudflare authentication and
 // prompts for it when needed.
 async function runDeploy() {
-  await runBuild();
-  const exitCode = await runWranglerDeploy({ projectRoot: process.cwd() });
+  const exitCode = await deployApplication({
+    projectRoot: process.cwd(),
+    build: runBuild,
+  });
   if (exitCode !== 0) {
     process.exitCode = exitCode;
   }

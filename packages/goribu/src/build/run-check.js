@@ -110,7 +110,7 @@ export async function listRemoteD1Databases(options) {
     );
   }
 
-  return normalizeRemoteDatabases(databases);
+  return normalizeRemoteD1Databases(databases);
 }
 
 function wranglerStartError(cause) {
@@ -127,7 +127,7 @@ export function createCheckPlan({ appConfig, remoteDatabases } = {}) {
       "[Goribu] createCheckPlan({ appConfig }) requires the defineConfig() result loaded from goribu.config.js.",
     );
   }
-  const databases = normalizeRemoteDatabases(remoteDatabases);
+  const databases = normalizeRemoteD1Databases(remoteDatabases);
   const declaration = appConfig.database;
   let resources = [];
   let bindings = [];
@@ -216,7 +216,7 @@ export function formatCheckPlan(plan) {
   return `${lines.join("\n")}\n`;
 }
 
-function normalizeRemoteDatabases(databases) {
+export function normalizeRemoteD1Databases(databases) {
   if (!Array.isArray(databases)) {
     throw new TypeError(
       "[Goribu] D1 inspection must return Wrangler's database array. Rerun `goribu check`; no resources were changed.",
@@ -238,7 +238,26 @@ function normalizeRemoteDatabases(databases) {
             "Update Wrangler and rerun `goribu check`; no resources were changed.",
         );
       }
-      return Object.freeze({ name: database.name, uuid: database.uuid });
+      let readReplication;
+      if (
+        database.read_replication !== undefined ||
+        database.readReplication !== undefined
+      ) {
+        const mode =
+          database.readReplication ?? database.read_replication?.mode;
+        if (mode !== "auto" && mode !== "disabled") {
+          throw new TypeError(
+            `[Goribu] Wrangler returned an invalid D1 read-replication mode at index ${index}. ` +
+              "Update Wrangler and rerun `goribu check`; no resources were changed.",
+          );
+        }
+        readReplication = mode;
+      }
+      return Object.freeze({
+        name: database.name,
+        uuid: database.uuid,
+        ...(readReplication === undefined ? {} : { readReplication }),
+      });
     }),
   );
 }

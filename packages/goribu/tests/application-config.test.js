@@ -46,6 +46,31 @@ describe("defineConfig", () => {
     ).toThrow(/responseHeaders callback/);
   });
 
+  it("accepts and freezes the three-state D1 replication declaration", () => {
+    for (const replication of [undefined, true, false]) {
+      const database = defineConfig({
+        name: "app",
+        compatibilityDate: "2024-01-01",
+        database: {
+          type: "d1",
+          name: "app-db",
+          ...(replication === undefined ? {} : { replication }),
+        },
+      }).database;
+
+      expect(database.replication).toBe(replication);
+      expect(Object.isFrozen(database)).toBe(true);
+    }
+
+    expect(() =>
+      defineConfig({
+        name: "app",
+        compatibilityDate: "2024-01-01",
+        database: { type: "d1", name: "app-db", replication: "auto" },
+      }),
+    ).toThrow(/replication must be true, false, or omitted/);
+  });
+
   it("rejects names that are not valid Cloudflare Worker names", () => {
     for (const name of ["MyApp", "app-", "-app", "under_score", ""]) {
       expect(() =>

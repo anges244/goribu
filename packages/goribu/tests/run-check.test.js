@@ -92,7 +92,12 @@ describe("goribu check", () => {
   it("uses pinned Wrangler's read-only JSON list and validates its response", async () => {
     const spawn = fakeSpawn({
       output: JSON.stringify([
-        { name: "goribu-site-db", uuid: "database-id", ignored: true },
+        {
+          name: "goribu-site-db",
+          uuid: "database-id",
+          read_replication: { mode: "auto" },
+          ignored: true,
+        },
       ]),
     });
 
@@ -102,7 +107,13 @@ describe("goribu check", () => {
         spawn,
         resolveBin: () => "/framework/wrangler.js",
       }),
-    ).resolves.toEqual([{ name: "goribu-site-db", uuid: "database-id" }]);
+    ).resolves.toEqual([
+      {
+        name: "goribu-site-db",
+        uuid: "database-id",
+        readReplication: "auto",
+      },
+    ]);
     expect(spawn.calls).toEqual([
       {
         command: process.execPath,

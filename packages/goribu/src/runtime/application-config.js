@@ -8,7 +8,7 @@ const CONFIG_FIELDS = new Set([
   "responseHeaders",
   "database",
 ]);
-const D1_DATABASE_FIELDS = new Set(["type", "name"]);
+const D1_DATABASE_FIELDS = new Set(["type", "name", "replication"]);
 
 // Cloudflare Worker script name: lowercase letters, digits, and hyphens, not
 // starting or ending with a hyphen, up to 63 characters.
@@ -113,7 +113,7 @@ function assertD1DatabaseConfig(database) {
 
   if (Object.getOwnPropertySymbols(database).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration field database cannot contain symbol-keyed fields. Use only type and name for the D1 declaration.",
+      "[Goribu] Application configuration field database cannot contain symbol-keyed fields. Use only type, name, and replication for the D1 declaration.",
     );
   }
 
@@ -123,7 +123,7 @@ function assertD1DatabaseConfig(database) {
   )) {
     if (!D1_DATABASE_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration field database contains unknown field ${JSON.stringify(field)}. Remove it; the supported D1 fields are type and name.`,
+        `[Goribu] Application configuration field database contains unknown field ${JSON.stringify(field)}. Remove it; the supported D1 fields are type, name, and replication.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -146,6 +146,16 @@ function assertD1DatabaseConfig(database) {
   ) {
     throw new TypeError(
       "[Goribu] Application configuration field database.name must be a lowercase D1 database name: start with a letter or digit, then letters, digits, hyphens, or underscores, up to 63 characters. Rename the database in goribu.config.js.",
+    );
+  }
+
+  if (
+    normalized.replication !== undefined &&
+    typeof normalized.replication !== "boolean"
+  ) {
+    throw new TypeError(
+      "[Goribu] Application configuration field database.replication must be true, false, or omitted. " +
+        "Omit it to enable replication on databases Goribu creates and leave existing ones untouched.",
     );
   }
 

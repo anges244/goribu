@@ -6,6 +6,7 @@ const GENERATED_DIRECTORY = ".goribu";
 const WRANGLER_FILENAME = "wrangler.json";
 const WORKER_FILENAME = "worker.js";
 const ASSETS_BINDING = "ASSETS";
+const D1_BINDING = "DB";
 
 /**
  * Synthesize the Wrangler configuration from the application config and write it
@@ -56,6 +57,19 @@ function synthesizeWranglerConfig(appConfig) {
   const flags = appConfig.compatibilityFlags;
   if (Array.isArray(flags) && flags.length > 0) {
     config.compatibility_flags = [...flags];
+  }
+
+  if (appConfig.database !== undefined) {
+    config.d1_databases = [
+      {
+        binding: D1_BINDING,
+        database_name: appConfig.database.name,
+        // Wrangler uses the preview id as the local SQLite store key. The
+        // application-authored name keeps the same local database stable while
+        // Goribu owns the production UUID separately at deploy time.
+        preview_database_id: appConfig.database.name,
+      },
+    ];
   }
 
   return config;

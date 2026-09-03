@@ -5,6 +5,7 @@ import { generateManifest } from "../routing/generate-manifest.js";
 import { createClientAssetManifestPlugin } from "./create-client-asset-manifest-plugin.js";
 import { createClientBoundaryPlugin } from "./create-client-boundary-plugin.js";
 import { createClientPageManifestPlugin } from "./create-client-page-manifest-plugin.js";
+import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { writeWranglerConfig } from "./generate-wrangler-config.js";
 import { loadApplicationConfig } from "./load-application-config.js";
@@ -72,6 +73,7 @@ function createGoribuPlugin() {
       assertNoReservedPublicFiles(root, config.publicDir);
       writeWorkerEntry({ projectRoot: root, mode });
       const appConfig = await loadApplicationConfig({ projectRoot: root });
+      await assertNoDuplicateD1Declaration({ projectRoot: root, appConfig });
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
         envPrefix: PUBLIC_ENV_PREFIX,
