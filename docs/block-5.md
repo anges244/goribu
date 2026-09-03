@@ -96,18 +96,25 @@ The automated floor is green: 54 test files and 439 tests, including real Vite
 production/development transforms, a production site build, static HTML asset
 inspection, and dynamic workerd rendering.
 
-The block still requires maintainer-run deployment and live browser verification
-before it is closed. Against the deployed site, verify:
+The maintainer deployed the completed block on 2026-09-03 to
+https://goribu-site.aggelos-gesoulis.workers.dev. Live verification confirmed:
 
-1. The landing disclosure hydrates while `/` remains served from Static Assets.
-2. Docs `<Link>` navigation changes routes without a full document load.
-3. `/feedback` shows validation and preview in place, then redirects after send,
-   without a full document load.
-4. Dynamic `/feedback` carries one request-specific CSP nonce shared by all three
-   script elements; static pages remain nonce-free and are not claimed to receive
-   the Worker CSP policy.
-5. Browser back/forward, active navigation, metadata/title replacement, and
-   scroll restoration remain coherent.
+1. `/` was a Cloudflare cache hit with nonce-free static HTML, hashed client
+   assets, and graph-owned CSS; its disclosure changed from collapsed to expanded
+   after hydration.
+2. Navigation from `/` to `/docs`, between documentation routes, and through
+   browser history issued no additional document requests. The browser document
+   identity survived throughout.
+3. `/feedback` displayed validation and preview in place, then followed the send
+   redirect to `/feedback/thanks`, again without a document request or document
+   replacement.
+4. Two independent dynamic `/feedback` requests received different CSP nonces.
+   Within each response, all three script elements carried the one nonce named by
+   that response's CSP header.
+5. `NavLink` active state and route titles updated during client navigation, and
+   browser back restored the observed scroll position exactly.
+
+The Block 5 "Done when" is therefore true against the deployed site.
 
 ## Lesson log
 
