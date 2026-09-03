@@ -6,12 +6,15 @@ const CONFIG_FIELDS = new Set([
   "compatibilityDate",
   "compatibilityFlags",
   "responseHeaders",
+  "database",
 ]);
+const D1_DATABASE_FIELDS = new Set(["type", "name"]);
 
 // Cloudflare Worker script name: lowercase letters, digits, and hyphens, not
 // starting or ending with a hyphen, up to 63 characters.
 const APP_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const COMPATIBILITY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DATABASE_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]{0,62}$/;
 
 /**
  * Validate and brand Goribu's one author-owned application configuration object.
@@ -38,7 +41,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, and responseHeaders fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, responseHeaders, and database fields.",
     );
   }
 
@@ -55,7 +58,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, and responseHeaders.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, responseHeaders, and database.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -86,10 +89,67 @@ export function defineConfig(config) {
     normalized.responseHeaders,
     "Application configuration field responseHeaders",
   );
+  if (normalized.database !== undefined) {
+    normalized.database = assertD1DatabaseConfig(normalized.database);
+  }
 
   const result = Object.freeze(normalized);
   CONFIG_BRAND.add(result);
   return result;
+}
+
+/** Validate the one D1 declaration this block currently supports. */
+function assertD1DatabaseConfig(database) {
+  if (
+    database === null ||
+    typeof database !== "object" ||
+    Array.isArray(database) ||
+    Object.getPrototypeOf(database) !== Object.prototype
+  ) {
+    throw new TypeError(
+      '[Goribu] Application configuration field database must be a plain object. Pass defineConfig({ database: { type: "d1", name: "your-app-db" } }) in goribu.config.js.',
+    );
+  }
+
+  if (Object.getOwnPropertySymbols(database).length > 0) {
+    throw new TypeError(
+      "[Goribu] Application configuration field database cannot contain symbol-keyed fields. Use only type and name for the D1 declaration.",
+    );
+  }
+
+  const normalized = {};
+  for (const [field, descriptor] of Object.entries(
+    Object.getOwnPropertyDescriptors(database),
+  )) {
+    if (!D1_DATABASE_FIELDS.has(field)) {
+      throw new TypeError(
+        `[Goribu] Application configuration field database contains unknown field ${JSON.stringify(field)}. Remove it; the supported D1 fields are type and name.`,
+      );
+    }
+    if (!("value" in descriptor) || descriptor.enumerable !== true) {
+      throw new TypeError(
+        `[Goribu] Application configuration field database.${field} must be an ordinary enumerable value. Replace getters, setters, or hidden properties with a direct value.`,
+      );
+    }
+    normalized[field] = descriptor.value;
+  }
+
+  if (normalized.type !== "d1") {
+    throw new TypeError(
+      '[Goribu] Application configuration field database.type must be "d1". Set type: "d1" for the database declared in goribu.config.js.',
+    );
+  }
+
+  if (
+    typeof normalized.name !== "string" ||
+    !DATABASE_NAME_PATTERN.test(normalized.name)
+  ) {
+    throw new TypeError(
+      "[Goribu] Application configuration field database.name must be a lowercase D1 database name: start with a letter or digit, then letters, digits, hyphens, or underscores, up to 63 characters. Rename the database in goribu.config.js.",
+    );
+  }
+
+  return Object.freeze(normalized);
 }
 
 /**

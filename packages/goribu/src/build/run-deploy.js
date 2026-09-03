@@ -1,19 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
-const require = createRequire(import.meta.url);
-
-/**
- * Resolve the Wrangler CLI entry from Goribu's own dependency, so deployment
- * uses the pinned Wrangler rather than whatever might be on the global PATH.
- */
-export function resolveWranglerBin() {
-  const manifestPath = require.resolve("wrangler/package.json");
-  const { bin } = JSON.parse(readFileSync(manifestPath, "utf8"));
-  return resolve(dirname(manifestPath), bin.wrangler);
-}
+export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
 /**
  * Launch `wrangler deploy` for the built application.

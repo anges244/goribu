@@ -6,12 +6,14 @@
 // instruction rather than pretending to work.
 
 import { readFileSync } from "node:fs";
+import { runCheck } from "../src/build/run-check.js";
 import { runWranglerDeploy } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 
 const COMMANDS = {
   dev: "Start the local development server.",
   build: "Produce the production Worker and client bundles.",
+  check: "Preview production resources without changing them.",
   deploy: "Build and deploy to Cloudflare.",
 };
 
@@ -108,6 +110,15 @@ function main(argv) {
   if (command === "build") {
     if (!assertNoArguments("build", rest)) return;
     runBuild().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+    return;
+  }
+
+  if (command === "check") {
+    if (!assertNoArguments("check", rest)) return;
+    runCheck({ projectRoot: process.cwd() }).catch((error) => {
       console.error(error);
       process.exitCode = 1;
     });

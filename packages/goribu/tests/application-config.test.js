@@ -69,8 +69,8 @@ describe("defineConfig", () => {
 
   it("rejects unknown fields and non-plain configuration objects", () => {
     expect(() =>
-      defineConfig({ name: "app", compatibilityDate: "2024-01-01", database: {} }),
-    ).toThrow(/unknown field "database"/);
+      defineConfig({ name: "app", compatibilityDate: "2024-01-01", extra: {} }),
+    ).toThrow(/unknown field "extra"/);
     expect(() => defineConfig([])).toThrow(/requires a plain application configuration object/);
     expect(() => defineConfig(null)).toThrow(/requires a plain application configuration object/);
   });

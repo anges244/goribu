@@ -24,6 +24,7 @@ describe("goribu CLI", () => {
     const { status, stderr } = runCli(["frobnicate"]);
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\] Unknown command/);
+    expect(stderr).toMatch(/dev, build, check, deploy/);
   });
 
   it("rejects trailing arguments to build without building", () => {
@@ -36,6 +37,12 @@ describe("goribu CLI", () => {
     const { status, stderr } = runCli(["dev", "--definitely-not-a-real-option"]);
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\] `goribu dev` does not accept arguments/);
+  });
+
+  it("rejects trailing arguments to check without inspecting Cloudflare", () => {
+    const { status, stderr } = runCli(["check", "--definitely-not-a-real-option"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/\[Goribu\] `goribu check` does not accept arguments/);
   });
 
   it("rejects trailing arguments to deploy without deploying", () => {
