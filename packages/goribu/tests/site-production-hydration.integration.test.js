@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
@@ -13,6 +13,8 @@ const productionEntry =
   /\/_goribu\/assets\/client-entry-[A-Za-z0-9_-]{8}\.js/;
 const productionStyle =
   /\/_goribu\/assets\/[^"/]+-[A-Za-z0-9_-]{8}\.css/;
+const productionRoute =
+  /\/_goribu\/assets\/client-route-[A-Za-z0-9_-]{8}\.js/;
 
 let build;
 
@@ -65,6 +67,15 @@ describe("site production hydration", () => {
     expect(html).not.toContain(' nonce=');
     expect(html).toContain('aria-controls="why-goribu-details"');
     expect(html).toContain('aria-expanded="false"');
+
+    const routeChunks = readdirSync(join(clientDir, "_goribu", "assets"))
+      .filter((fileName) => fileName.startsWith("client-route"));
+    expect(routeChunks.length).toBeGreaterThan(0);
+    expect(
+      routeChunks.every((fileName) =>
+        /^client-route-[A-Za-z0-9_-]{8}\.js$/.test(fileName),
+      ),
+    ).toBe(true);
   });
 
   it("writes the client-runtime guides as static pages with managed titles", () => {
@@ -86,7 +97,8 @@ describe("site production hydration", () => {
     }
   });
 
-  it("renders the Worker-owned feedback route with the same hashed entry", async () => {
+  it("persists feedback through the Worker-owned req.d1 route", async () => {
+    expect(existsSync(join(clientDir, "feedback.html"))).toBe(false);
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();
     const worker = harness.getWorker();
@@ -97,6 +109,7 @@ describe("site production hydration", () => {
       expect(response.status).toBe(200);
       expect(html).toMatch(productionEntry);
       expect(html).toMatch(productionStyle);
+      expect(html).toMatch(productionRoute);
       expect(html).toContain('rel="modulepreload"');
       expect(html).not.toContain('/src/client-entry.js');
       expect(html).toContain(
@@ -108,6 +121,77 @@ describe("site production hydration", () => {
       )?.[1];
       expect(nonce).toMatch(/^[a-f0-9]{32}$/);
       expect(html.match(new RegExp(`nonce="${nonce}"`, "g"))).toHaveLength(3);
+      expect(html).toContain("No feedback has been sent yet.");
+
+      const sent = await worker.fetch("https://goribu.test/feedback", {
+        method: "POST",
+        body: new URLSearchParams({
+          message: "Stored through req.d1",
+          intent: "send",
+        }),
+        headers: {
+          accept: "application/vnd.goribu.form+json",
+          referer: "https://goribu.test/feedback",
+        },
+        redirect: "manual",
+      });
+
+      expect(sent.status).toBe(303);
+      expect(sent.headers.get("location")).toBeNull();
+      await expect(sent.clone().json()).resolves.toEqual({
+        type: "redirect",
+        to: "/feedback/thanks",
+      });
+      const bookmark = sent.headers
+        .getSetCookie()
+        .find((cookie) => cookie.startsWith("goribu_d1_bookmark="));
+      expect(bookmark).toBeDefined();
+
+      const afterWrite = await worker.fetch("https://goribu.test/feedback", {
+        headers: { cookie: bookmark.split(";", 1)[0] },
+      });
+      expect(afterWrite.status).toBe(200);
+      await expect(afterWrite.text()).resolves.toContain("Stored through req.d1");
+
+      // WorkerHandle's RPC transport does not serialize a FormData instance as an HTTP
+      // multipart body. Send the wire representation explicitly so this exercises the
+      // native browser form path and req.body() returns FormData inside the Worker.
+      const boundary = "----goribu-native-form-test";
+      const nativeBody = [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="message"',
+        "",
+        "Stored through native multipart",
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="intent"',
+        "",
+        "send",
+        `--${boundary}--`,
+        "",
+      ].join("\r\n");
+      const native = await harness.fetch("https://goribu.test/feedback", {
+        method: "POST",
+        body: nativeBody,
+        headers: {
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+        },
+        redirect: "manual",
+      });
+
+      expect(native.status).toBe(303);
+      expect(native.headers.get("location")).toBe("/feedback/thanks");
+      const nativeBookmark = native.headers
+        .getSetCookie()
+        .find((cookie) => cookie.startsWith("goribu_d1_bookmark="));
+      expect(nativeBookmark).toBeDefined();
+
+      const afterNativeWrite = await worker.fetch("https://goribu.test/feedback", {
+        headers: { cookie: nativeBookmark.split(";", 1)[0] },
+      });
+      expect(afterNativeWrite.status).toBe(200);
+      await expect(afterNativeWrite.text()).resolves.toContain(
+        "Stored through native multipart",
+      );
     } finally {
       await harness.close();
     }

@@ -3,7 +3,10 @@ import { join, resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { generateManifest } from "../routing/generate-manifest.js";
 import { createClientAssetManifestPlugin } from "./create-client-asset-manifest-plugin.js";
-import { createClientBoundaryPlugin } from "./create-client-boundary-plugin.js";
+import {
+  createClientBoundaryPlugin,
+  routeFilePathFromClientModuleId,
+} from "./create-client-boundary-plugin.js";
 import { createClientPageManifestPlugin } from "./create-client-page-manifest-plugin.js";
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
@@ -88,6 +91,17 @@ function createGoribuPlugin() {
               assetsDir: GENERATED_ASSETS_DIR,
               rollupOptions: {
                 input: resolve(root, CLIENT_ENTRY),
+                output: {
+                  chunkFileNames(chunk) {
+                    // Rollup derives a dynamic entry's default name from its virtual
+                    // module ID. Goribu's route IDs contain an encoded absolute source
+                    // path so the loader can recover the file, but that path must not
+                    // become part of a public production URL.
+                    return routeFilePathFromClientModuleId(chunk.facadeModuleId) === null
+                      ? `${GENERATED_ASSETS_DIR}/[name]-[hash].js`
+                      : `${GENERATED_ASSETS_DIR}/client-route-[hash].js`;
+                  },
+                },
               },
             },
           },

@@ -383,6 +383,53 @@ describe("request-scoped D1 sessions", () => {
   });
 
   it.each([
+    [
+      "a terminal operation",
+      (controller) => controller.d1`CREATE TABLE visits (count INTEGER)`.run(),
+      "run",
+    ],
+    [
+      "an atomic batch",
+      (controller) =>
+        controller.d1.atomic([
+          controller.d1`INSERT INTO visits (count) VALUES (${1})`,
+        ]),
+      "batch",
+    ],
+  ])(
+    "reopens once when real D1 rejects an incoming bookmark during %s",
+    async (_label, execute, method) => {
+      const request = new Request("https://example.com/polls", {
+        headers: { cookie: "goribu_d1_bookmark=stale" },
+      });
+      const cookieJar = createCookieJar(request);
+      const rejected = createTarget({
+        executionError: new Error(
+          "D1_ERROR: invalid commitToken bookmark provided: stale",
+        ),
+      });
+      const fallback = createTarget();
+      const binding = {
+        withSession: vi.fn((constraint) =>
+          constraint === "stale" ? rejected : fallback,
+        ),
+      };
+      const controller = createD1RequestController({ binding, cookieJar });
+
+      await execute(controller);
+      controller.commit();
+
+      expect(binding.withSession.mock.calls).toEqual([
+        ["stale"],
+        ["first-unconstrained"],
+      ]);
+      expect(rejected.executions).toEqual([method]);
+      expect(fallback.executions).toEqual([method]);
+      expect(cookieJar.pending).toEqual([BOOKMARK_COOKIE]);
+    },
+  );
+
+  it.each([
     ["a throwing getBookmark", { bookmarkError: new Error("bookmark unavailable") }],
     ["a malformed bookmark", { bookmark: { invalid: true } }],
   ])("keeps unrelated pending cookies when commit sees %s", async (_label, targetOptions) => {

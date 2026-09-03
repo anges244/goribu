@@ -272,3 +272,23 @@ pre code {
   outline: 2px solid #b3261e;
   outline-offset: 1px;
 }
+
+.feedback-entries {
+  list-style: none;
+  padding: 0;
+}
+
+.feedback-entries li {
+  padding: 1rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-entries p {
+  margin: 0 0 0.25rem;
+  white-space: pre-wrap;
+}
+
+.feedback-entries time {
+  color: var(--muted);
+  font-size: 0.85rem;
+}

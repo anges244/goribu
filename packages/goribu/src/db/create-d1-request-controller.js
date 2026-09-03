@@ -67,14 +67,25 @@ export function createD1RequestController({
   let freshSessionOpeningError;
   let incomingBookmarkRejected = false;
   let committed = false;
+  const preparedDefaultQueries = new WeakMap();
 
   const execution = addRecorder(
     {
       prepare(sql, params) {
-        return bindStatement(getDefaultSession(), sql, params);
+        const query = {
+          sql,
+          params,
+          prepared: bindStatement(getDefaultSession(), sql, params),
+        };
+        const statement = {
+          all: () => executeDefaultStatement(query, "all"),
+          run: () => executeDefaultStatement(query, "run"),
+        };
+        preparedDefaultQueries.set(statement, query);
+        return statement;
       },
       batch(statements) {
-        return getDefaultSession().batch(statements);
+        return executeDefaultBatch(statements);
       },
     },
     recorder,
@@ -114,7 +125,9 @@ export function createD1RequestController({
     try {
       const binding = resolver();
       assertSessionsSupported(binding);
-      const constraint = incomingBookmark ?? FIRST_UNCONSTRAINED;
+      const constraint = incomingBookmarkRejected
+        ? FIRST_UNCONSTRAINED
+        : (incomingBookmark ?? FIRST_UNCONSTRAINED);
       let openedSession;
       try {
         openedSession = binding.withSession(constraint);
@@ -124,9 +137,9 @@ export function createD1RequestController({
           throw cause;
         }
 
-        // Provisional until the live-D1 verification records whether stale bookmarks are
-        // rejected here or by the first operation. Do not retry query execution based on an
-        // unverified message heuristic: replaying a write after an ambiguous failure is unsafe.
+        // Some binding implementations reject a bookmark while opening the session. Real D1
+        // currently defers this validation until the first operation; that path is handled by
+        // executeDefaultStatement/executeDefaultBatch below.
         incomingBookmarkRejected = true;
         try {
           openedSession = binding.withSession(FIRST_UNCONSTRAINED);
@@ -156,6 +169,51 @@ export function createD1RequestController({
       publicSessionOpeningError = error;
       throw error;
     }
+  }
+
+  async function executeDefaultStatement(query, method) {
+    try {
+      return await query.prepared[method]();
+    } catch (cause) {
+      if (!rejectIncomingBookmark(cause)) throw cause;
+      query.prepared = bindStatement(getDefaultSession(), query.sql, query.params);
+      return query.prepared[method]();
+    }
+  }
+
+  async function executeDefaultBatch(statements) {
+    const queries = statements.map((statement) => preparedDefaultQueries.get(statement));
+    const prepared = queries.map((query) => query.prepared);
+    try {
+      return await getDefaultSession().batch(prepared);
+    } catch (cause) {
+      if (!rejectIncomingBookmark(cause)) throw cause;
+      const fallbackSession = getDefaultSession();
+      const fallbackPrepared = queries.map((query) => {
+        query.prepared = bindStatement(fallbackSession, query.sql, query.params);
+        return query.prepared;
+      });
+      return fallbackSession.batch(fallbackPrepared);
+    }
+  }
+
+  function rejectIncomingBookmark(cause) {
+    if (
+      incomingBookmark === null ||
+      incomingBookmarkRejected ||
+      !isInvalidBookmarkError(cause)
+    ) {
+      return false;
+    }
+
+    // Verified against live D1 on 2026-09-03: withSession(bookmark) succeeds, then the
+    // first operation rejects with this specific error before any SQL executes. Retrying
+    // only that failure is therefore safe even for a write; every other query failure is
+    // left untouched because replaying an ambiguously executed write would be unsafe.
+    incomingBookmarkRejected = true;
+    session = undefined;
+    sessionOpeningError = undefined;
+    return true;
   }
 
   function getFreshSession() {
@@ -245,6 +303,17 @@ function finishRecorder(recorder) {
 function bindStatement(session, sql, params) {
   const prepared = session.prepare(sql);
   return params.length > 0 ? prepared.bind(...params) : prepared;
+}
+
+function isInvalidBookmarkError(cause) {
+  try {
+    return (
+      typeof cause?.message === "string" &&
+      cause.message.startsWith("D1_ERROR: invalid commitToken bookmark provided:")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function assertCookieJar(cookieJar) {
