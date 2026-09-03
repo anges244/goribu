@@ -1,8 +1,7 @@
 import { createHttpError } from "./http-error.js";
 
-// Ported from the previous version, with the request-scoped database facades
-// (req.d1, req.postgres) left out: data bindings are Block 6, so they are added
-// back to this same surface when that block lands rather than carried early.
+// Ported from the previous version. The D1 facade is prepared by createApp so
+// binding resolution and bookmark ownership remain request-scoped.
 const textDecoder = new TextDecoder();
 
 /**
@@ -16,7 +15,7 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object }} [runtime]
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
@@ -42,6 +41,7 @@ export function createRequest(request, params, runtime) {
     headers: request.headers,
     env: worker.env,
     cookies: worker.cookies,
+    d1: worker.d1,
     waitUntil(promise) {
       assertWaitUntilPromise(promise);
       if (typeof worker.waitUntil !== "function") {
@@ -92,7 +92,7 @@ function assertRuntime(runtime) {
   if (runtime === undefined) return {};
   if (runtime === null || typeof runtime !== "object" || Array.isArray(runtime)) {
     throw new TypeError(
-      "[Goribu] createRequest(request, params, runtime) requires runtime to contain Worker env bindings and a bound waitUntil function. Pass the values prepared by createApp().",
+      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1 facade.",
     );
   }
   if (
@@ -119,6 +119,11 @@ function assertRuntime(runtime) {
   ) {
     throw new TypeError(
       "[Goribu] createRequest(request, params, runtime) requires runtime.cookies to be the request cookie jar. Pass createCookieJar(request) from the application boundary.",
+    );
+  }
+  if (runtime.d1 !== undefined && typeof runtime.d1 !== "function") {
+    throw new TypeError(
+      "[Goribu] createRequest(request, params, runtime) requires runtime.d1 to be the request-scoped D1 facade. Pass createD1RequestController(...).d1 from the application boundary.",
     );
   }
   return runtime;

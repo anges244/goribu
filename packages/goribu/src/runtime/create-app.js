@@ -29,6 +29,8 @@ import {
   resolveGlobalResponseHeaders,
 } from "./response-headers.js";
 import { copyProtocolResponseMark } from "./protocol-response.js";
+import { createD1BindingResolver } from "../db/create-d1-binding-resolver.js";
+import { createD1RequestController } from "../db/create-d1-request-controller.js";
 
 const CALLER =
   "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig })";
@@ -46,8 +48,8 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, body helpers, Worker bindings, and a bound waitUntil
- * capability) and returns any res.* intent: res.text(), res.json(),
+ * params, query, headers, body helpers, cookies, D1, Worker bindings, and a bound
+ * waitUntil capability) and returns any res.* intent: res.text(), res.json(),
  * res.redirect(), res.render(props) to stream the route's own page with data, or
  * res.notFound(props) for the _404 page.
  *
@@ -148,10 +150,16 @@ export function createApp(options) {
       const outerUrl = new URL(request.url);
       const nonce = createResponseNonce();
       const cookieJar = createCookieJar(request);
+      const d1Controller = createD1RequestController({
+        resolver: createD1BindingResolver(env),
+        cookieJar,
+        replication: applicationConfig?.database?.replication,
+      });
       const runtime = {
         env,
         waitUntil: ctx.waitUntil.bind(ctx),
         cookies: cookieJar,
+        d1: d1Controller.d1,
       };
       let applicationRequest = request;
       let requestKind = "document";
@@ -254,6 +262,7 @@ export function createApp(options) {
         representation,
         globalHeaders,
       );
+      d1Controller.commit();
       const flushed = appendSetCookies(withGlobalHeaders, cookieJar.pending);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
@@ -453,7 +462,7 @@ export function createApp(options) {
 
   // Run one named method handler and preserve its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, body helpers, cookies, Worker bindings, and waitUntil) and the
+  // headers, body helpers, cookies, D1, Worker bindings, and waitUntil) and the
   // response builder.
   async function dispatchHandler(
     match,

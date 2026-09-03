@@ -1,3 +1,5 @@
+import { GoribuD1Error } from "./goribu-d1-error.js";
+
 const MISSING_D1_BINDING =
   "[Goribu] req.d1 was used but no D1 binding was found. Expected env.DB. Add\n" +
   "`database: { type: 'd1', name: 'your-db-name' }` to goribu.config.js. Goribu\n" +
@@ -40,7 +42,7 @@ export function createD1BindingResolver(env) {
 /** A Cloudflare-D1-shaped binding whose every supported operation teaches repair. */
 function createMissingD1Binding() {
   const fail = () => {
-    throw new Error(MISSING_D1_BINDING);
+    throw new GoribuD1Error(MISSING_D1_BINDING);
   };
 
   return Object.freeze({

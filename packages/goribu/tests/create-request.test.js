@@ -13,6 +13,7 @@ describe("createRequest", () => {
     );
     const params = { team: "Goribu" };
     const env = { DB: { binding: "primary" } };
+    const d1 = () => {};
     const waitUntil = vi.fn();
     const backgroundTask = Promise.resolve();
     Object.defineProperty(params, "__proto__", {
@@ -20,7 +21,7 @@ describe("createRequest", () => {
       value: "member/admin",
     });
 
-    const wrapped = createRequest(request, params, { env, waitUntil });
+    const wrapped = createRequest(request, params, { env, waitUntil, d1 });
 
     expect(wrapped.method).toBe("GET");
     expect(wrapped.path).toBe("/teams/member");
@@ -29,6 +30,7 @@ describe("createRequest", () => {
     expect(wrapped.headers).toBe(request.headers);
     expect(wrapped.headers.get("x-request-id")).toBe("abc");
     expect(wrapped.env).toBe(env);
+    expect(wrapped.d1).toBe(d1);
     expect(wrapped).not.toHaveProperty("ctx");
     expect(wrapped.waitUntil(backgroundTask)).toBeUndefined();
     expect(waitUntil).toHaveBeenCalledWith(backgroundTask);
@@ -36,10 +38,10 @@ describe("createRequest", () => {
     expect(Object.hasOwn(wrapped.params, "__proto__")).toBe(true);
     expect(wrapped.params.__proto__).toBe("member/admin");
     expect(Object.getPrototypeOf(wrapped.params)).toBe(Object.prototype);
-    // req.d1 and req.postgres are intentionally absent until Block 6.
     expect(Object.keys(wrapped).sort()).toEqual([
       "body",
       "cookies",
+      "d1",
       "env",
       "headers",
       "method",
