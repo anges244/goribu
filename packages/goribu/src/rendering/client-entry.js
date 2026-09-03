@@ -11,12 +11,14 @@ import {
  *
  * When the active render carries build-resolved client assets, Goribu names the
  * hashed production entry and preloads the shared and matched-page chunks.
- * Without resolved assets, `src` remains the development fallback.
+ * `<Stylesheet />` emits graph-owned CSS separately at the Document's chosen head
+ * location. Without resolved assets, `src` remains the development fallback.
  */
 export function ClientEntry(props) {
   const renderData = useContext(RenderDataContext);
   const resolved = renderData?.clientAssets ?? null;
   const src = resolved?.src ?? props?.src;
+  const nonce = renderData?.nonce ?? props?.nonce;
 
   if (typeof src !== "string" || src.length === 0) {
     throw new TypeError(
@@ -26,8 +28,6 @@ export function ClientEntry(props) {
 
   const children = [];
   if (resolved !== null) {
-    // Graph-owned styles stay inert until the Document stylesheet helper owns
-    // their placement in the next substep.
     for (const href of resolved.modulePreloads) {
       children.push(
         h("link", { key: `preload:${href}`, rel: "modulepreload", href }),
@@ -36,7 +36,7 @@ export function ClientEntry(props) {
   }
   children.push(h(InitialRouteScript, { key: "route" }));
   children.push(h(InitialPropsScript, { key: "props" }));
-  children.push(h("script", { key: "entry", type: "module", src }));
+  children.push(h("script", { key: "entry", type: "module", src, nonce }));
 
   return h(Fragment, null, ...children);
 }

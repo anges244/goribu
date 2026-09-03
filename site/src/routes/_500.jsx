@@ -1,3 +1,5 @@
+export const meta = { title: "Something went wrong - Goribu", robots: "noindex" };
+
 // The application's server-error page. It renders for an unhandled error in
 // production, receiving the request pathname and a correlation ID. The raw error
 // never reaches this page; the ID is what ties it to the logged error. Being a

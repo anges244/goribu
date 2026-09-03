@@ -1,6 +1,12 @@
 import { Link } from "goribu";
 import { useState } from "react";
 
+export const meta = {
+  title: "Goribu - a React framework for Cloudflare Workers",
+  description:
+    "A React framework built directly for Cloudflare Workers and their Web primitives.",
+};
+
 // The landing page. Hand-written JSX rather than Markdown: the landing is chrome,
 // not prose. Like the docs pages it does no per-request work, so it is served as
 // a static asset.

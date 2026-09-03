@@ -1,5 +1,12 @@
+import { assertOptionalResponseHeaders } from "./response-headers.js";
+
 const CONFIG_BRAND = new WeakSet();
-const CONFIG_FIELDS = new Set(["name", "compatibilityDate", "compatibilityFlags"]);
+const CONFIG_FIELDS = new Set([
+  "name",
+  "compatibilityDate",
+  "compatibilityFlags",
+  "responseHeaders",
+]);
 
 // Cloudflare Worker script name: lowercase letters, digits, and hyphens, not
 // starting or ending with a hyphen, up to 63 characters.
@@ -31,7 +38,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, and compatibilityFlags fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, and responseHeaders fields.",
     );
   }
 
@@ -48,7 +55,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, and compatibilityFlags.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, and responseHeaders.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -75,6 +82,10 @@ export function defineConfig(config) {
   }
 
   normalized.compatibilityFlags = assertCompatibilityFlags(normalized.compatibilityFlags);
+  assertOptionalResponseHeaders(
+    normalized.responseHeaders,
+    "Application configuration field responseHeaders",
+  );
 
   const result = Object.freeze(normalized);
   CONFIG_BRAND.add(result);

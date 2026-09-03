@@ -18,8 +18,6 @@ describe("readFormEnvelope", () => {
     ],
     [
       {
-        // A meta field from a future metadata-carrying server is tolerated and
-        // ignored; route metadata lands in a later Block 5 substep.
         type: "render",
         route: "src/routes/todos.jsx",
         props: { count: 2 },
@@ -29,6 +27,7 @@ describe("readFormEnvelope", () => {
         type: "render",
         routeId: "src/routes/todos.jsx",
         props: { count: 2 },
+        meta: { title: "Todos" },
       },
     ],
   ])("accepts one valid negotiated variant", async (body, expected) => {
@@ -83,6 +82,7 @@ describe("readFormEnvelope", () => {
     { type: "invalid", errors: null },
     { type: "invalid", errors: { title: 1 } },
     { type: "redirect", to: "" },
+    { type: "render", route: "src/routes/index.jsx", props: {} },
     { type: "render", route: "", props: {}, meta: {} },
     { type: "render", route: "src/routes/index.jsx", props: [], meta: {} },
     { type: "unknown" },

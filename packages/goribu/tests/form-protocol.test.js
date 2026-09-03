@@ -1,6 +1,6 @@
 import { createElement as h } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "goribu/server";
+import { createApp, defineConfig } from "goribu/server";
 import {
   FORM_MEDIA_TYPE,
   hasFormMediaType,
@@ -54,6 +54,10 @@ function createFormApp(options = {}) {
         FEEDBACK_ID,
         {
           default: FeedbackPage,
+          meta: ({ props, url }) => ({
+            title: props.preview ? `Preview: ${props.message}` : "Feedback",
+            canonical: url.href,
+          }),
           async POST(request, response) {
             const body = await request.body();
             const messageValue =
@@ -120,6 +124,7 @@ function createFormApp(options = {}) {
       ],
     ]),
     mode: options.mode ?? "production",
+    applicationConfig: options.applicationConfig,
   });
 }
 
@@ -254,18 +259,30 @@ describe("enhanced form negotiation", () => {
   });
 
   it("renders in place only when the Referer path equals the action", async () => {
-    const app = createFormApp();
+    const app = createFormApp({
+      applicationConfig: defineConfig({
+        name: "form-test",
+        compatibilityDate: "2026-08-31",
+        responseHeaders: () => ({ etag: '"global"', "x-global": "yes" }),
+      }),
+    });
     const response = await formRequest(app, "/feedback", {
       ...urlencoded({ message: "draft", intent: "preview" }),
-      referer: "https://example.com/feedback",
+      referer: "https://example.com/feedback?from=home",
     });
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe(FORM_MEDIA_TYPE);
+    expect(response.headers.get("etag")).toBeNull();
+    expect(response.headers.get("x-global")).toBe("yes");
     await expect(response.json()).resolves.toEqual({
       type: "render",
       route: FEEDBACK_ID,
       props: { message: "draft", preview: true },
+      meta: {
+        title: "Preview: draft",
+        canonical: "https://example.com/feedback?from=home",
+      },
     });
   });
 

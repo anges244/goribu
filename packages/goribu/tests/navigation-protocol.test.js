@@ -95,6 +95,10 @@ function createNavigationApp(options = {}) {
         POSTS_ID,
         {
           default: PostPage,
+          meta: ({ props, url }) => ({
+            title: `Post ${props.id}`,
+            canonical: url.href,
+          }),
           GET(request, response) {
             request.waitUntil(backgroundTask);
             return response.status(202).headers({ "x-page": "posts" }).render({
@@ -105,7 +109,13 @@ function createNavigationApp(options = {}) {
           },
         },
       ],
-      [IMPLICIT_ID, { default: () => h("main", null, "About") }],
+      [
+        IMPLICIT_ID,
+        {
+          default: () => h("main", null, "About"),
+          meta: { title: "About" },
+        },
+      ],
       [
         REDIRECT_ID,
         {
@@ -209,6 +219,10 @@ describe("reserved navigation protocol", () => {
         query: "full",
         scope: "goribu:client",
       },
+      meta: {
+        title: "Post 42",
+        canonical: "https://example.com/posts/42?view=full",
+      },
       status: 202,
     });
     expect(ctx.waitUntil).toHaveBeenCalledWith(backgroundTask);
@@ -223,6 +237,7 @@ describe("reserved navigation protocol", () => {
       kind: "render",
       routeId: IMPLICIT_ID,
       props: {},
+      meta: { title: "About" },
       status: 200,
     });
   });
@@ -272,6 +287,7 @@ describe("reserved navigation protocol", () => {
       kind: "render",
       routeId: HEADERS_ID,
       props: { ok: true },
+      meta: {},
       status: 302,
     });
   });
@@ -288,6 +304,7 @@ describe("reserved navigation protocol", () => {
       kind: "render",
       routeId: COOKIE_ID,
       props: { ok: true },
+      meta: {},
       status: 200,
     });
   });

@@ -1,5 +1,10 @@
 import { Form, Link } from "goribu";
 
+export const meta = {
+  title: "Feedback - Goribu",
+  description: "Send feedback through Goribu's enhanced Form runtime.",
+};
+
 // The request surface and the client runtime meeting on one route. The page is a
 // hydrated <Form>; its POST handler drives all three enhanced outcomes:
 //   - an empty message returns res.invalid(), shown in place without navigating;

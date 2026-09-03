@@ -1,4 +1,4 @@
-
+import { applyDocumentMeta } from "./apply-document-meta.js";
 import { loadClientPage } from "./load-client-page.js";
 import { readNavigationEnvelope } from "./read-navigation-envelope.js";
 import { createLocatedPage } from "../navigation/location-context.js";
@@ -25,7 +25,9 @@ export function createNavigationController(options) {
   const browserWindow = options?.browserWindow ?? globalThis.window;
   const fetchImplementation = options?.fetch ?? globalThis.fetch;
   const afterRender = options?.afterRender ?? (() => waitForPaint(browserWindow));
-  const applyMeta = options?.applyMeta ?? (() => {});
+  const applyMeta =
+    options?.applyMeta ??
+    ((metadata) => applyDocumentMeta(metadata, browserWindow.document));
 
   assertControllerInputs({
     root,

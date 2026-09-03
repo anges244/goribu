@@ -1,4 +1,5 @@
 import { isResponseResult } from "./create-response.js";
+import { markProtocolResponse } from "./protocol-response.js";
 const BODYLESS_STATUSES = new Set([204, 205, 304]);
 const REPRESENTATION_HEADERS = Object.freeze([
   "accept-ranges",
@@ -58,6 +59,7 @@ export function finalizeNavigationResult(result, options) {
         kind: "render",
         routeId,
         props: result.props,
+        meta: options?.metadata,
         status: result.status,
       },
       result.status,
@@ -110,7 +112,9 @@ function navigationJson(payload, status, values) {
   headers.set("cache-control", "no-store");
   headers.set("content-type", "application/json; charset=utf-8");
 
-  return new Response(JSON.stringify(payload), { status, headers });
+  return markProtocolResponse(
+    new Response(JSON.stringify(payload), { status, headers }),
+  );
 }
 
 function createWebHeaders(values) {

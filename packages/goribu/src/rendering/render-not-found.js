@@ -11,7 +11,7 @@ import { renderPage } from "./render-page.js";
  * that returns res.notFound(props) supplies the props (and any extra headers) for
  * the same _404 page.
  *
- * @param {{ NotFoundPage?: Function|null, Document: Function, location?: string, props?: object, headers?: object, clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * @param {{ NotFoundPage?: Function|null, Document: Function, location?: string, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function renderNotFound(options) {
@@ -31,6 +31,11 @@ export async function renderNotFound(options) {
     status: 404,
     props: options?.props ?? {},
     headers: options?.headers,
+    ...(Object.hasOwn(options ?? {}, "metadata")
+      ? { metadata: options.metadata }
+      : {}),
+    nonce: options?.nonce,
+    mode: options?.mode,
     clientAssetManifest: options?.clientAssetManifest,
     clientAssetBase: options?.clientAssetBase,
   });

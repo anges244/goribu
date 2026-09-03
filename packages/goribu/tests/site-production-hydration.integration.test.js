@@ -11,6 +11,8 @@ const clientDir = join(siteDir, "dist", "client");
 const workerConfig = join(siteDir, "dist", "goribu_site", "wrangler.json");
 const productionEntry =
   /\/_goribu\/assets\/client-entry-[A-Za-z0-9_-]{8}\.js/;
+const productionStyle =
+  /\/_goribu\/assets\/[^"/]+-[A-Za-z0-9_-]{8}\.css/;
 
 let build;
 
@@ -54,8 +56,13 @@ describe("site production hydration", () => {
     const html = readFileSync(indexFile, "utf8");
 
     expect(html).toMatch(productionEntry);
+    expect(html).toMatch(productionStyle);
+    expect(html).toContain(
+      '<title data-goribu-head="">Goribu - a React framework for Cloudflare Workers</title>',
+    );
     expect(html).toContain('rel="modulepreload"');
     expect(html).not.toContain('/src/client-entry.js');
+    expect(html).not.toContain(' nonce=');
     expect(html).toContain('aria-controls="why-goribu-details"');
     expect(html).toContain('aria-expanded="false"');
   });
@@ -70,8 +77,18 @@ describe("site production hydration", () => {
 
       expect(response.status).toBe(200);
       expect(html).toMatch(productionEntry);
+      expect(html).toMatch(productionStyle);
       expect(html).toContain('rel="modulepreload"');
       expect(html).not.toContain('/src/client-entry.js');
+      expect(html).toContain(
+        '<title data-goribu-head="">Feedback - Goribu</title>',
+      );
+
+      const nonce = /'nonce-([a-f0-9]{32})'/.exec(
+        response.headers.get("content-security-policy"),
+      )?.[1];
+      expect(nonce).toMatch(/^[a-f0-9]{32}$/);
+      expect(html.match(new RegExp(`nonce="${nonce}"`, "g"))).toHaveLength(3);
     } finally {
       await harness.close();
     }

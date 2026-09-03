@@ -8,12 +8,14 @@ describe("readNavigationEnvelope", () => {
         kind: "render",
         routeId: "src/routes/index.jsx",
         props: { ok: true },
+        meta: { title: "Home" },
         status: 202,
       },
       {
         kind: "render",
         routeId: "src/routes/index.jsx",
         props: { ok: true },
+        meta: { title: "Home" },
         status: 202,
       },
     ],
@@ -45,7 +47,7 @@ describe("readNavigationEnvelope", () => {
     ).rejects.toThrow("Navigation endpoint returned malformed JSON");
   });
 
-  it("teaches the current no-metadata render envelope shape", async () => {
+  it("requires metadata in the render envelope shape", async () => {
     await expect(
       readNavigationEnvelope(
         jsonResponse({
@@ -55,7 +57,7 @@ describe("readNavigationEnvelope", () => {
         }),
       ),
     ).rejects.toThrow(
-      'render data shaped as { kind: "render", routeId, props, status }',
+      'render data shaped as { kind: "render", routeId, props, meta, status }',
     );
   });
 
@@ -63,6 +65,7 @@ describe("readNavigationEnvelope", () => {
     null,
     {},
     { kind: "render", routeId: "", props: {}, status: 200 },
+    { kind: "render", routeId: "src/routes/index.jsx", props: {}, status: 200 },
     { kind: "render", routeId: "src/routes/index.jsx", props: [], status: 200 },
     { kind: "render", routeId: "src/routes/index.jsx", props: {} },
     { kind: "render", routeId: "src/routes/index.jsx", props: {}, status: 199 },

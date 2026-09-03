@@ -1,4 +1,5 @@
 import { hasFormMediaType } from "../forms/form-protocol.js";
+import { normalizeRouteMeta } from "../metadata/route-meta.js";
 
 /** Parse and validate one negotiated form response without consuming the original. */
 export async function readFormEnvelope(response) {
@@ -61,16 +62,20 @@ export async function readFormEnvelope(response) {
     if (
       typeof payload.route !== "string" ||
       payload.route.length === 0 ||
-      !isPlainObject(payload.props)
+      !isPlainObject(payload.props) ||
+      !Object.hasOwn(payload, "meta")
     ) {
       throw invalidEnvelope(
-        'render data shaped as { type: "render", route, props }',
+        'render data shaped as { type: "render", route, props, meta }',
       );
     }
     return Object.freeze({
       type: "render",
       routeId: payload.route,
       props: Object.freeze({ ...payload.props }),
+      meta: normalizeRouteMeta(payload.meta, {
+        source: "Form render metadata",
+      }),
     });
   }
 

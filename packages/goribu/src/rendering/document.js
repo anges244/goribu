@@ -1,5 +1,6 @@
 import { createElement as h } from "react";
 import { ClientEntry } from "./client-entry.js";
+import { Stylesheet } from "./stylesheet.js";
 
 const DEV_CLIENT_ENTRY = "/src/client-entry.js";
 
@@ -14,15 +15,15 @@ const DEV_CLIENT_ENTRY = "/src/client-entry.js";
  * and `<ClientEntry>` emits the inert render data and browser module entry after
  * that root.
  *
- * This block passes only `children`. Metadata head content and nonces are added
- * to this contract by the substep that owns them, and an existing `Document`
- * keeps working because it simply ignores props it does not read.
+ * The route-owned `head` tree contains metadata that the browser navigation
+ * runtime can replace independently. `nonce` is shared by the Document and all
+ * framework scripts for request-scoped CSP policy.
  */
-export function DefaultDocument({ children }) {
+export function DefaultDocument({ children, head }) {
   return h(
     "html",
     null,
-    h("head", null, h("meta", { charSet: "utf-8" })),
+    h("head", null, h("meta", { charSet: "utf-8" }), h(Stylesheet), head),
     h(
       "body",
       null,

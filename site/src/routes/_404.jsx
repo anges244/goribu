@@ -1,3 +1,5 @@
+export const meta = { title: "Page not found - Goribu", robots: "noindex" };
+
 export default function NotFoundPage() {
   return (
     <main className="content">

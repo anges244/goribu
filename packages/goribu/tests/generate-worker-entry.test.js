@@ -41,9 +41,12 @@ describe("writeWorkerEntry", () => {
     expect(source).toContain(
       'import { clientAssetBase, clientAssetManifest } from "virtual:goribu/client-assets"',
     );
+    expect(source).toContain('import applicationConfig from "../goribu.config.js"');
     expect(source).toContain('import * as module0 from "../src/routes/index.jsx"');
     expect(source).toContain('import * as module2 from "../src/routes/posts/[id].jsx"');
     expect(source).toContain('"pattern": "/posts/:id"');
+    expect(source.match(/"staticCandidate": true/g)).toHaveLength(2);
+    expect(source.match(/"staticCandidate": false/g)).toHaveLength(1);
     expect(source).toContain('["src/routes/index.jsx", module0]');
     expect(source).toContain(
       "const errorPages = { notFound: null, serverError: null };",
@@ -52,7 +55,7 @@ describe("writeWorkerEntry", () => {
     expect(source).toContain('const mode = "production";');
     expect(source).toContain("const middlewareByRoute = new Map([]);");
     expect(source).toContain(
-      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase });",
+      "export default createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig });",
     );
     // The absolute file path must never leak into the bundled manifest.
     expect(source).not.toContain(root);
@@ -124,6 +127,7 @@ describe("writeWorkerEntry", () => {
     expect(
       source.match(/from "\.\.\/src\/routes\/posts\/_middleware\.js";/g),
     ).toHaveLength(1);
+    expect(source.match(/"staticCandidate": false/g)).toHaveLength(2);
     expect(source).toContain(
       `const middlewareByRoute = new Map(${JSON.stringify(
         [

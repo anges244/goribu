@@ -75,4 +75,23 @@ describe("ClientEntry", () => {
     );
     expect(html).not.toContain('/src/client-entry.js');
   });
+
+  it("uses the render nonce for inert data and the executable entry", () => {
+    const html = renderToStaticMarkup(
+      h(
+        RenderDataContext.Provider,
+        {
+          value: Object.freeze({
+            routeJson: serializeRouteForScript("src/routes/index.jsx"),
+            propsJson: serializePropsForScript({}),
+            nonce: "request-nonce",
+          }),
+        },
+        h(ClientEntry, { src: "/src/client-entry.js", nonce: "stale" }),
+      ),
+    );
+
+    expect(html.match(/nonce="request-nonce"/g)).toHaveLength(3);
+    expect(html).not.toContain('nonce="stale"');
+  });
 });

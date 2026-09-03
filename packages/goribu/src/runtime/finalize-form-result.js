@@ -1,5 +1,6 @@
 import { FORM_MEDIA_TYPE } from "../forms/form-protocol.js";
 import { isResponseResult } from "./create-response.js";
+import { markProtocolResponse } from "./protocol-response.js";
 
 const BODYLESS_STATUSES = new Set([204, 205, 304]);
 const FORM_RESULT_KINDS = new Set(["json", "invalid", "redirect", "render"]);
@@ -61,6 +62,7 @@ export function finalizeFormResult(result, options) {
       type: "render",
       route: routeId,
       props: result.props,
+      meta: options?.metadata,
     };
   }
 
@@ -70,10 +72,12 @@ export function finalizeFormResult(result, options) {
   headers.set("content-type", FORM_MEDIA_TYPE);
   mergeVaryAccept(headers);
 
-  return new Response(JSON.stringify(payload), {
-    status: result.status,
-    headers,
-  });
+  return markProtocolResponse(
+    new Response(JSON.stringify(payload), {
+      status: result.status,
+      headers,
+    }),
+  );
 }
 
 export function mergeVaryAccept(headers) {

@@ -21,9 +21,17 @@ import {
   mergeVaryAccept,
 } from "./finalize-form-result.js";
 import { acceptsFormMediaType } from "../forms/form-protocol.js";
+import { resolveRouteMeta } from "../metadata/route-meta.js";
+import { isApplicationConfig } from "./application-config.js";
+import {
+  applyGlobalResponseHeaders,
+  createResponseNonce,
+  resolveGlobalResponseHeaders,
+} from "./response-headers.js";
+import { copyProtocolResponseMark } from "./protocol-response.js";
 
 const CALLER =
-  "createApp({ manifest, modules, errorPages, documentId, clientAssetManifest, clientAssetBase })";
+  "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig })";
 
 // Statuses that cannot carry a response body. A terminal helper that produced a
 // body for one of these is a handler mistake, caught here rather than shipped.
@@ -52,6 +60,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  *   mode?: "development"|"production",
  *   clientAssetManifest?: object|null,
  *   clientAssetBase?: string,
+ *   applicationConfig?: object,
  * }} options
  * @returns {{ fetch(request: Request, env: unknown, ctx: unknown): Promise<Response> }}
  */
@@ -100,16 +109,34 @@ export function createApp(options) {
   const documentId = options.documentId ?? null;
   const clientAssetManifest = options.clientAssetManifest ?? null;
   const clientAssetBase = options.clientAssetBase;
+  const applicationConfig = options.applicationConfig;
+  if (
+    applicationConfig !== undefined &&
+    !isApplicationConfig(applicationConfig)
+  ) {
+    throw new TypeError(
+      `[Goribu] ${CALLER} requires applicationConfig to be the unchanged result of defineConfig(). Import and pass the application's goribu.config.js default export from the generated Worker.`,
+    );
+  }
+  const responseHeaders = applicationConfig?.responseHeaders;
   const Document =
     documentId === null
       ? DefaultDocument
       : loadDefaultExport(modules, documentId, "_document");
   const notFoundId = errorPages.notFound ?? null;
+  const NotFoundModule =
+    notFoundId === null ? null : requireModule(modules, notFoundId, "_404 page");
   const NotFoundPage =
-    notFoundId === null ? null : loadDefaultExport(modules, notFoundId, "_404 page");
+    NotFoundModule === null
+      ? null
+      : loadDefaultExport(modules, notFoundId, "_404 page");
   const serverErrorId = errorPages.serverError ?? null;
-  const ServerErrorPage =
+  const ServerErrorModule =
     serverErrorId === null
+      ? null
+      : requireModule(modules, serverErrorId, "_500 page");
+  const ServerErrorPage =
+    ServerErrorModule === null
       ? null
       : loadDefaultExport(modules, serverErrorId, "_500 page");
   const middlewareRunners = createMiddlewareRunners(middlewareByRoute, modules);
@@ -119,76 +146,84 @@ export function createApp(options) {
       assertWorkerFetchInputs(request, env, ctx);
 
       const outerUrl = new URL(request.url);
-
-      // Canonicalize the document URL before protocol classification. Navigation
-      // targets are canonicalized below as an envelope so fetch never consumes a
-      // wire redirect that the browser runtime needs to observe explicitly.
-      const outerCanonical = canonicalPathname(outerUrl.pathname);
-      if (outerCanonical !== null) {
-        const target = new URL(outerUrl);
-        target.pathname = outerCanonical;
-        const response = Response.redirect(target.toString(), 308);
-        return request.method === "POST" ? addVaryAccept(response) : response;
-      }
-
-      const resolvedRequest = resolveNavigationRequest(request);
-      if (resolvedRequest.kind === "response") {
-        return normalizeHeadResponse(resolvedRequest.response, request);
-      }
-
-      const applicationRequest = resolvedRequest.request;
-      const url = new URL(applicationRequest.url);
-      if (resolvedRequest.kind === "navigation") {
-        const targetCanonical = canonicalPathname(url.pathname);
-        if (targetCanonical !== null) {
-          const target = new URL(url);
-          target.pathname = targetCanonical;
-          const redirect = createResponse({ canRender: false, mode })
-            .status(308)
-            .redirect(`${target.pathname}${target.search}`);
-          return normalizeHeadResponse(
-            finalizeNavigationResult(redirect),
-            request,
-          );
-        }
-      }
-
-      // An enhanced <Form> mutation is an ordinary document POST carrying the
-      // form media type in Accept with non-zero quality. It runs through normal
-      // routing and handlers, then negotiates a typed form envelope at finalization.
-      // Enhanced GET uses navigation instead. The render context lets res.render()
-      // re-render only the page the form is on (proven from a same-origin Referer),
-      // never a different route in place.
-      const formRenderContext =
-        resolvedRequest.kind === "document" &&
-        applicationRequest.method === "POST" &&
-        acceptsFormMediaType(applicationRequest.headers.get("accept"))
-          ? resolveFormRenderContext(applicationRequest)
-          : null;
-
-      const cookieJar = createCookieJar(applicationRequest);
+      const nonce = createResponseNonce();
+      const cookieJar = createCookieJar(request);
       const runtime = {
         env,
         waitUntil: ctx.waitUntil.bind(ctx),
         cookies: cookieJar,
       };
-      const match = matchRoute({
-        manifest,
-        pathname: url.pathname,
-        method: applicationRequest.method,
-      });
-
+      let applicationRequest = request;
+      let requestKind = "document";
+      let url = outerUrl;
+      let globalHeaders = new Headers();
       let response;
       try {
-        response = await resolveResponse(
-          match,
-          url,
-          applicationRequest,
-          runtime,
-          resolvedRequest.kind,
-          formRenderContext,
-        );
+        globalHeaders = resolveGlobalResponseHeaders({
+          responseHeaders,
+          request,
+          env,
+          mode,
+          nonce,
+        });
+
+        // Canonicalize the document URL before protocol classification.
+        const outerCanonical = canonicalPathname(outerUrl.pathname);
+        if (outerCanonical !== null) {
+          const target = new URL(outerUrl);
+          target.pathname = outerCanonical;
+          response = Response.redirect(target.toString(), 308);
+        } else {
+          const resolvedRequest = resolveNavigationRequest(request);
+          requestKind = resolvedRequest.kind;
+          if (resolvedRequest.kind === "response") {
+            response = resolvedRequest.response;
+          } else {
+            applicationRequest = resolvedRequest.request;
+            url = new URL(applicationRequest.url);
+
+            if (resolvedRequest.kind === "navigation") {
+              const targetCanonical = canonicalPathname(url.pathname);
+              if (targetCanonical !== null) {
+                const target = new URL(url);
+                target.pathname = targetCanonical;
+                const redirect = createResponse({ canRender: false, mode })
+                  .status(308)
+                  .redirect(`${target.pathname}${target.search}`);
+                response = finalizeNavigationResult(redirect);
+              }
+            }
+
+            if (response === undefined) {
+              // An enhanced <Form> mutation is an ordinary document POST carrying
+              // the form media type in Accept. It runs through normal routing and
+              // handlers, then negotiates a typed form envelope at finalization.
+              const formRenderContext =
+                resolvedRequest.kind === "document" &&
+                applicationRequest.method === "POST" &&
+                acceptsFormMediaType(applicationRequest.headers.get("accept"))
+                  ? resolveFormRenderContext(applicationRequest)
+                  : null;
+              const match = matchRoute({
+                manifest,
+                pathname: url.pathname,
+                method: applicationRequest.method,
+              });
+              response = await resolveResponse(
+                match,
+                url,
+                applicationRequest,
+                runtime,
+                resolvedRequest.kind,
+                formRenderContext,
+                nonce,
+              );
+            }
+          }
+        }
       } catch (error) {
+        const metadataUrl = new URL(url.origin);
+        metadataUrl.pathname = url.pathname;
         response =
           mode === "development"
             ? finalizeDevelopmentErrorResponse({
@@ -199,7 +234,11 @@ export function createApp(options) {
                 error,
                 url: url.pathname,
                 Page: ServerErrorPage,
+                meta: ServerErrorModule?.meta,
+                routeId: serverErrorId ?? "built-in _500",
+                metadataUrl,
                 Document,
+                nonce,
                 clientAssetManifest,
                 clientAssetBase,
               });
@@ -208,10 +247,14 @@ export function createApp(options) {
       // negotiated Form envelope. Mark even errors, fallbacks, and non-form
       // results so shared caches never reuse one representation for the other.
       const representation =
-        resolvedRequest.kind === "document" && applicationRequest.method === "POST"
+        requestKind === "document" && applicationRequest.method === "POST"
           ? addVaryAccept(response)
           : response;
-      const flushed = appendSetCookies(representation, cookieJar.pending);
+      const withGlobalHeaders = applyGlobalResponseHeaders(
+        representation,
+        globalHeaders,
+      );
+      const flushed = appendSetCookies(withGlobalHeaders, cookieJar.pending);
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
       // headers but never carries a body. The outer request owns this decision;
@@ -227,9 +270,16 @@ export function createApp(options) {
     runtime,
     requestKind,
     formRenderContext,
+    nonce,
   ) {
     const navigation = requestKind === "navigation";
     const form = formRenderContext !== null;
+    const renderNonce =
+      (match.kind === "page" ||
+        (match.kind === "automatic-head" && match.target?.kind === "page")) &&
+      match.route.staticCandidate === true
+        ? undefined
+        : nonce;
 
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
@@ -260,6 +310,8 @@ export function createApp(options) {
           url,
           navigation,
           form,
+          renderNonce,
+          formRenderContext?.displayedUrl ?? url.href,
         );
       }
 
@@ -275,7 +327,16 @@ export function createApp(options) {
               formRenderContext,
             )
           : createResponse({ canRender: true, formRenderContext, mode }).render({});
-        return finalizeMatchedResult(result, match, "GET", url, navigation, form);
+        return finalizeMatchedResult(
+          result,
+          match,
+          "GET",
+          url,
+          navigation,
+          form,
+          renderNonce,
+          formRenderContext?.displayedUrl ?? url.href,
+        );
       }
 
       // A matched HEAD arrives as "automatic-head" and the HEAD boundary above
@@ -313,6 +374,8 @@ export function createApp(options) {
           url,
           navigation,
           form,
+          renderNonce,
+          formRenderContext?.displayedUrl ?? url.href,
         );
       }
 
@@ -337,15 +400,22 @@ export function createApp(options) {
             });
 
       case "not-found":
-        return navigation
-          ? createNavigationReloadResponse()
-          : renderNotFound({
-              NotFoundPage,
-              Document,
-              location: url.href,
-              clientAssetManifest,
-              clientAssetBase,
-            });
+        if (navigation) return createNavigationReloadResponse();
+        return renderNotFound({
+          NotFoundPage,
+          Document,
+          location: url.href,
+          metadata: resolveRouteMeta({
+            meta: NotFoundModule?.meta,
+            props: {},
+            url,
+            routeId: notFoundId ?? "built-in _404",
+          }),
+          nonce,
+          mode,
+          clientAssetManifest,
+          clientAssetBase,
+        });
 
       default:
         throw new TypeError(
@@ -419,15 +489,40 @@ export function createApp(options) {
     return handler(req, res);
   }
 
-  function finalizeMatchedResult(result, match, method, url, navigation, form) {
+  function finalizeMatchedResult(
+    result,
+    match,
+    method,
+    url,
+    navigation,
+    form,
+    nonce,
+    metadataUrl,
+  ) {
+    const routeModule = requireModule(modules, match.route.id, "route");
+    const metadata =
+      result?.kind === "render"
+        ? resolveRouteMeta({
+            meta: routeModule.meta,
+            props: result.props,
+            url: metadataUrl,
+            routeId: match.route.id,
+          })
+        : undefined;
+
     return finalizeHandlerResult(result, {
       method,
       routeId: match.route.id,
       Document,
       NotFoundPage,
+      NotFoundMeta: NotFoundModule?.meta,
+      notFoundId: notFoundId ?? "built-in _404",
       location: url.href,
       navigation,
       form,
+      metadata,
+      nonce,
+      mode,
       clientAssetManifest,
       clientAssetBase,
       // Only a route with a default page reaches res.render(); createResponse
@@ -535,6 +630,7 @@ function resolveFormRenderContext(request) {
   const requestUrl = new URL(request.url);
   const referer = request.headers.get("referer");
   let displayedPathname = null;
+  let displayedUrl = null;
 
   if (referer !== null) {
     try {
@@ -544,6 +640,7 @@ function resolveFormRenderContext(request) {
         refererUrl.origin === requestUrl.origin
       ) {
         displayedPathname = refererUrl.pathname;
+        displayedUrl = refererUrl.href;
       }
     } catch {
       // res.render() fails closed when the displayed pathname cannot be proven.
@@ -553,6 +650,7 @@ function resolveFormRenderContext(request) {
   return Object.freeze({
     actionPathname: requestUrl.pathname,
     displayedPathname,
+    displayedUrl,
   });
 }
 
@@ -589,7 +687,10 @@ async function finalizeHandlerResult(result, options) {
   }
 
   if (options.navigation) {
-    return finalizeNavigationResult(result, { routeId: options.routeId });
+    return finalizeNavigationResult(result, {
+      routeId: options.routeId,
+      metadata: options.metadata,
+    });
   }
 
   // An enhanced form request negotiates a typed JSON envelope for the res.*
@@ -598,7 +699,10 @@ async function finalizeHandlerResult(result, options) {
   // browser Form then reads a non-form content type and falls back to a full
   // document load, so an unenhanceable response is never silently swallowed.
   if (options.form && isFormResponseResult(result)) {
-    return finalizeFormResult(result, { routeId: options.routeId });
+    return finalizeFormResult(result, {
+      routeId: options.routeId,
+      metadata: options.metadata,
+    });
   }
 
   if (
@@ -644,6 +748,9 @@ async function finalizeHandlerResult(result, options) {
       props: result.props,
       status: result.status,
       headers: result.headers,
+      metadata: options.metadata,
+      nonce: options.nonce,
+      mode: options.mode,
       clientAssetManifest: options.clientAssetManifest,
       clientAssetBase: options.clientAssetBase,
     });
@@ -652,12 +759,21 @@ async function finalizeHandlerResult(result, options) {
   // res.notFound(props) renders the application's _404 page (or the built-in one)
   // through the same boundary a route miss uses, always with a 404 status.
   if (result.kind === "not-found") {
+    const metadata = resolveRouteMeta({
+      meta: options.NotFoundMeta,
+      props: result.props,
+      url: options.location,
+      routeId: options.notFoundId,
+    });
     return renderNotFound({
       NotFoundPage: options.NotFoundPage,
       Document: options.Document,
       location: options.location,
       props: result.props,
       headers: result.headers,
+      metadata,
+      nonce: options.nonce,
+      mode: options.mode,
       clientAssetManifest: options.clientAssetManifest,
       clientAssetBase: options.clientAssetBase,
     });
@@ -684,11 +800,14 @@ function normalizeHeadResponse(response, request) {
 function addVaryAccept(response) {
   const headers = new Headers(response.headers);
   mergeVaryAccept(headers);
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return copyProtocolResponseMark(
+    response,
+    new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    }),
+  );
 }
 
 function toWebHeaders(values) {
@@ -708,14 +827,7 @@ function toWebHeaders(values) {
  * message that points at the exact route source that is misconfigured.
  */
 function loadDefaultExport(modules, id, role) {
-  if (!modules.has(id)) {
-    throw new Error(
-      `[Goribu] The ${role} module "${id}" was matched but is not in the loaded module map. ` +
-        "Rebuild so every manifest route has a loaded module.",
-    );
-  }
-
-  const component = modules.get(id)?.default;
+  const component = requireModule(modules, id, role).default;
   if (typeof component !== "function") {
     throw new TypeError(
       `[Goribu] The ${role} module "${id}" has no default-exported React component. ` +
@@ -724,4 +836,15 @@ function loadDefaultExport(modules, id, role) {
   }
 
   return component;
+}
+
+function requireModule(modules, id, role) {
+  if (!modules.has(id)) {
+    throw new Error(
+      `[Goribu] The ${role} module "${id}" was matched but is not in the loaded module map. ` +
+        "Rebuild so every manifest route has a loaded module.",
+    );
+  }
+
+  return modules.get(id);
 }

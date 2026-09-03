@@ -27,6 +27,25 @@ describe("defineConfig", () => {
     expect(Object.isFrozen(config.compatibilityFlags)).toBe(true);
   });
 
+  it("accepts only a callback-shaped responseHeaders policy", () => {
+    const responseHeaders = () => ({ "x-frame-options": "DENY" });
+    expect(
+      defineConfig({
+        name: "app",
+        compatibilityDate: "2024-01-01",
+        responseHeaders,
+      }).responseHeaders,
+    ).toBe(responseHeaders);
+
+    expect(() =>
+      defineConfig({
+        name: "app",
+        compatibilityDate: "2024-01-01",
+        responseHeaders: { "x-frame-options": "DENY" },
+      }),
+    ).toThrow(/responseHeaders callback/);
+  });
+
   it("rejects names that are not valid Cloudflare Worker names", () => {
     for (const name of ["MyApp", "app-", "-app", "under_score", ""]) {
       expect(() =>

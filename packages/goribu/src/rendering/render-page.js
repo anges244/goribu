@@ -7,6 +7,7 @@ import {
 } from "./render-context.js";
 import { createLocatedPage } from "../navigation/location-context.js";
 import { resolveClientAssets } from "./resolve-client-assets.js";
+import { createRouteHead } from "./route-head.js";
 
 /**
  * Stream one matched route page into a Worker HTML Response.
@@ -19,7 +20,7 @@ import { resolveClientAssets } from "./resolve-client-assets.js";
  * channel for browser hydration. Matched pages also carry their canonical route
  * ID so the browser selects the same component from the generated loader map.
  *
- * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object, clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function renderPage(options) {
@@ -27,6 +28,10 @@ export async function renderPage(options) {
   const Document = options?.Document;
   const status = options?.status ?? 200;
   const props = options?.props ?? {};
+  const hasMetadata =
+    options !== null &&
+    typeof options === "object" &&
+    Object.hasOwn(options, "metadata");
   const hasRouteId =
     options !== null &&
     typeof options === "object" &&
@@ -41,7 +46,7 @@ export async function renderPage(options) {
   if (typeof Document !== "function") {
     throw new TypeError(
       "[Goribu] Cannot render HTML because Document is not a React component. " +
-        "Default-export a component that accepts { children } from src/routes/_document.jsx, or remove _document.jsx to use the default.",
+        "Default-export a component that accepts { children, head, nonce } from src/routes/_document.jsx, or remove _document.jsx to use the default.",
     );
   }
 
@@ -57,12 +62,16 @@ export async function renderPage(options) {
             routeId: hasRouteId ? options.routeId : null,
             base: options.clientAssetBase,
           }),
+    mode: options?.mode,
+    nonce: options?.nonce,
   });
   const tree = h(
     RenderDataContext.Provider,
     { value: renderData },
     h(Document, {
       children: createLocatedPage(Page, props, options?.location),
+      head: hasMetadata ? createRouteHead(options.metadata) : null,
+      nonce: options?.nonce,
     }),
   );
 
@@ -70,7 +79,10 @@ export async function renderPage(options) {
   try {
     // Do not await stream.allReady: returning as soon as React has a shell is
     // what preserves streaming behavior on Cloudflare Workers.
-    stream = await renderToReadableStream(tree);
+    stream = await renderToReadableStream(
+      tree,
+      options?.nonce === undefined ? undefined : { nonce: options.nonce },
+    );
   } catch (cause) {
     throw new Error(
       "[Goribu] Could not start streaming the rendered page. " +

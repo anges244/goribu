@@ -1,6 +1,6 @@
 import { Suspense, createElement as h, use } from "react";
 import { describe, expect, it } from "vitest";
-import { ClientEntry } from "goribu";
+import { ClientEntry, Stylesheet } from "goribu";
 import {
   PROPS_SCRIPT_ID,
   ROUTE_SCRIPT_ID,
@@ -121,6 +121,54 @@ describe("renderPage hydration data", () => {
     resolveContent("Ready");
     html += await readRemaining(reader);
     expect(html).toContain("Ready");
+  });
+
+  it("passes route head and nonce to Document and emits graph-owned styles", async () => {
+    let documentProps;
+    function Document(props) {
+      documentProps = props;
+      return h(
+        "html",
+        null,
+        h("head", null, h(Stylesheet), props.head),
+        h(
+          "body",
+          null,
+          h("div", { id: "root" }, props.children),
+          h(ClientEntry, { src: "/src/client-entry.js" }),
+        ),
+      );
+    }
+
+    const response = await renderPage({
+      Page: () => h("h1", null, "Metadata"),
+      Document,
+      routeId: "src/routes/index.jsx",
+      metadata: { title: "Route title", description: "Route description" },
+      nonce: "request-nonce",
+      clientAssetManifest: {
+        entry: {
+          file: "_goribu/assets/client-hash.js",
+          imports: [],
+          css: ["_goribu/assets/app-hash.css"],
+        },
+        pages: {},
+      },
+    });
+    const html = await response.text();
+
+    expect(Object.keys(documentProps)).toEqual(["children", "head", "nonce"]);
+    expect(documentProps.nonce).toBe("request-nonce");
+    expect(html).toContain(
+      '<link rel="stylesheet" href="/_goribu/assets/app-hash.css"/>',
+    );
+    expect(html).toContain(
+      '<title data-goribu-head="">Route title</title>',
+    );
+    expect(html).toContain(
+      '<meta name="description" content="Route description" data-goribu-head=""/>',
+    );
+    expect(html.match(/nonce="request-nonce"/g)).toHaveLength(3);
   });
 });
 

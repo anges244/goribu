@@ -9,7 +9,7 @@ import { renderPage } from "./render-page.js";
  * fallback. This renderer accepts only public page props so raw error details
  * cannot cross into production HTML.
  *
- * @param {{ url: string, errorId: string, Page?: Function|null, Document: Function, clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * @param {{ url: string, errorId: string, Page?: Function|null, Document: Function, metadata?: object, nonce?: string, mode?: "production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function renderServerError(options) {
@@ -41,6 +41,11 @@ export async function renderServerError(options) {
     Document: options?.Document,
     props: { url, errorId },
     status: 500,
+    ...(Object.hasOwn(options ?? {}, "metadata")
+      ? { metadata: options.metadata }
+      : {}),
+    nonce: options?.nonce,
+    mode: options?.mode,
     clientAssetManifest: options?.clientAssetManifest,
     clientAssetBase: options?.clientAssetBase,
   });

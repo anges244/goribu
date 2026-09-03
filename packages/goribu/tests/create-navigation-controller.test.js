@@ -1,3 +1,5 @@
+/** @vitest-environment jsdom */
+
 import { describe, expect, it, vi } from "vitest";
 import { createNavigationController } from "../src/browser/create-navigation-controller.js";
 import { LocationContext } from "../src/navigation/location-context.js";
@@ -43,7 +45,7 @@ describe("createNavigationController", () => {
     });
     expect(init.headers).not.toHaveProperty("X-Goribu");
     expect(loader).toHaveBeenCalledOnce();
-    expect(applyMeta).toHaveBeenCalledWith(undefined);
+    expect(applyMeta).toHaveBeenCalledWith({});
     expect(browser.history.pushState).toHaveBeenCalledOnce();
     expect(browser.history.state.app).toBe("preserved");
     expect(browser.location.href).toBe(
@@ -467,7 +469,7 @@ describe("createNavigationController", () => {
     await controller.renderInPlace(
       "src/routes/todos.jsx",
       { todos: ["one"] },
-      undefined,
+      {},
       { signal: new AbortController().signal },
     );
 
@@ -658,17 +660,13 @@ function fakeBrowser(initialHref, options = {}) {
       currentUrl = new URL(value, currentUrl);
     }),
   };
+  const browserDocument = document.implementation.createHTMLDocument();
+  browserDocument.getElementById = (id) => hashTargets[id] ?? null;
+  browserDocument.getElementsByName = () => [];
   const window = {
     location,
     history,
-    document: {
-      getElementById(id) {
-        return hashTargets[id] ?? null;
-      },
-      getElementsByName() {
-        return [];
-      },
-    },
+    document: browserDocument,
     scrollX: 0,
     scrollY: 0,
     scrollTo: vi.fn((x, y) => {
@@ -701,7 +699,11 @@ function fakeBrowser(initialHref, options = {}) {
 }
 
 function jsonResponse(body) {
-  return new Response(JSON.stringify(body), {
+  const payload =
+    body?.kind === "render" && !Object.hasOwn(body, "meta")
+      ? { ...body, meta: {} }
+      : body;
+  return new Response(JSON.stringify(payload), {
     headers: { "content-type": "application/json; charset=utf-8" },
   });
 }

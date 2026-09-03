@@ -1,6 +1,8 @@
 import { createElement as h } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/runtime/create-app.js";
+import { defineConfig } from "goribu/server";
+import { ClientEntry } from "goribu";
 
 // Minimal manifest entries in the shape generateManifest() produces. Matching
 // only needs id, segments, methods, and hasDefaultExport.
@@ -111,6 +113,75 @@ describe("createApp().fetch", () => {
     expect(body).toContain("<html>");
     expect(body).toContain('<div id="root">');
     expect(body).toContain("<h1>Home</h1>");
+  });
+
+  it("shares route metadata and one response-policy nonce across the document boundary", async () => {
+    let documentNonce;
+    const request = get("/?source=test");
+    const env = { POLICY: "strict" };
+    const applicationConfig = defineConfig({
+      name: "test-app",
+      compatibilityDate: "2026-08-31",
+      responseHeaders(context) {
+        expect(context.request).toBe(request);
+        expect(context.env).toBe(env);
+        expect(context.mode).toBe("production");
+        expect(Object.isFrozen(context)).toBe(true);
+        return {
+          "content-security-policy": `script-src 'nonce-${context.nonce}'`,
+          "x-policy": context.env.POLICY,
+        };
+      },
+    });
+    function Document({ children, head, nonce }) {
+      documentNonce = nonce;
+      return h(
+        "html",
+        null,
+        h("head", null, head),
+        h(
+          "body",
+          null,
+          h("div", { id: "root" }, children),
+          h(ClientEntry, { src: "/src/client-entry.js" }),
+        ),
+      );
+    }
+    const app = build({
+      applicationConfig,
+      documentId: "doc",
+      modules: new Map([
+        [
+          "index",
+          {
+            default: () => h("h1", null, "Home"),
+            meta: ({ url }) => ({
+              title: "Home metadata",
+              canonical: url.href,
+            }),
+          },
+        ],
+        ["about", pageModule("About")],
+        ["post", pageModule("A post")],
+        ["doc", { default: Document }],
+      ]),
+    });
+
+    const response = await app.fetch(request, env, CTX());
+    const html = await response.text();
+    const nonce = /'nonce-([a-f0-9]{32})'/.exec(
+      response.headers.get("content-security-policy"),
+    )?.[1];
+
+    expect(response.headers.get("x-policy")).toBe("strict");
+    expect(documentNonce).toBe(nonce);
+    expect(html).toContain(
+      '<title data-goribu-head="">Home metadata</title>',
+    );
+    expect(html).toContain(
+      '<link rel="canonical" href="https://example.com/?source=test" data-goribu-head=""/>',
+    );
+    expect(html.match(new RegExp(`nonce="${nonce}"`, "g"))).toHaveLength(3);
   });
 
   it("threads production assets through matched pages and entry-only 404 renders", async () => {

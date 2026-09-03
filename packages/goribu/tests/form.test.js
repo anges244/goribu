@@ -395,9 +395,7 @@ describe("Form", () => {
     expect(runtime.renderInPlace).toHaveBeenCalledWith(
       "src/routes/current.jsx",
       { count: 2 },
-      // Route metadata is deferred to a later Block 5 substep, so the trimmed
-      // form envelope carries no meta and the controller receives undefined.
-      undefined,
+      { title: "Count 2" },
       { signal: expect.any(AbortSignal), version: 0 },
     );
   });
@@ -962,7 +960,11 @@ function installRuntime(overrides = {}) {
 }
 
 function formResponse(body, options = {}) {
-  const response = new Response(JSON.stringify(body), {
+  const payload =
+    body?.type === "render" && !Object.hasOwn(body, "meta")
+      ? { ...body, meta: {} }
+      : body;
+  const response = new Response(JSON.stringify(payload), {
     status: options.status ?? 200,
     headers: { "content-type": FORM_MEDIA_TYPE },
   });

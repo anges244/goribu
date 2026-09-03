@@ -1,4 +1,4 @@
-
+import { normalizeRouteMeta } from "../metadata/route-meta.js";
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /** Parse and validate the reserved Worker's kind-tagged navigation response. */
@@ -34,16 +34,20 @@ export async function readNavigationEnvelope(response) {
       typeof payload.routeId !== "string" ||
       payload.routeId.length === 0 ||
       !isPlainObject(payload.props) ||
+      !Object.hasOwn(payload, "meta") ||
       !isHttpStatus(payload.status)
     ) {
       throw invalidEnvelope(
-        'render data shaped as { kind: "render", routeId, props, status }',
+        'render data shaped as { kind: "render", routeId, props, meta, status }',
       );
     }
     return Object.freeze({
       kind: "render",
       routeId: payload.routeId,
       props: payload.props,
+      meta: normalizeRouteMeta(payload.meta, {
+        source: "Navigation render metadata",
+      }),
       status: payload.status,
     });
   }

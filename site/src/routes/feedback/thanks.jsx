@@ -1,5 +1,7 @@
 import { Link } from "goribu";
 
+export const meta = { title: "Thanks - Goribu" };
+
 // The confirmation page the feedback POST redirects to. It lives under
 // /feedback, so the folder middleware applies to it too — the x-mw-order header
 // is present on this page as well.
