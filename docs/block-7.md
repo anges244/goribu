@@ -9,7 +9,7 @@ build. The production id is attached to the emitted binding before D1
 migrations and Worker upload. Existing namespaces produce no change message.
 
 The fixture initially exercised the raw binding through `req.env.KV`; the second
-substep moves it to `req.kv`. Real site use, consistency guidance, and the
+substep moves it to `req.kv`. Real site use and the
 provisioning-layer assessment remain later substeps. This block is not complete
 or deployed.
 
@@ -41,6 +41,20 @@ unchanged. The platform contracts are described in Cloudflare's
 [read](https://developers.cloudflare.com/kv/api/read-key-value-pairs/),
 [write](https://developers.cloudflare.com/kv/api/write-key-value-pairs/), and
 [list](https://developers.cloudflare.com/kv/api/list-keys/) references.
+
+## Third substep — eventual-consistency guidance
+
+`docs/kv.md` and the site's `/docs/kv` page lead with the absence of an immediate
+read-after-write or read-after-delete guarantee. They cover cached misses,
+propagation delays without a fixed deadline, cache TTL versus key expiration,
+stale listings, lost concurrent updates, and confirmations that do not depend on
+rereading KV. The guide points to D1 for correctness-sensitive state and states
+that local integration tests do not prove global propagation timing.
+
+The site navigation and guided-tour links include the new page. This substep
+documents the consistency boundary explicitly requested before real site KV use;
+the complete usage guide remains part of the block's closing documentation after
+that consumer exists. The page has not yet been deployed.
 
 ## Request-runtime review notes
 
@@ -99,6 +113,15 @@ unchanged. The platform contracts are described in Cloudflare's
    `res.status(204).text("")`, which the existing response boundary correctly
    rejected. It now returns a normal text acknowledgement; the integration test
    then reads the key to prove deletion. No framework response change was needed.
+10. **Immediate local visibility is not the production contract.** Cloudflare's
+    consistency reference explicitly declines to guarantee even same-location
+    visibility and describes delays of 60 seconds or more elsewhere. The guide
+    uses that contract rather than promising a fixed propagation deadline or
+    promoting a passing local round trip into a consistency guarantee.
+11. **The linked D1 site guide retained superseded deployment advice.** Its last
+    paragraph still said deploy never applies migrations, contradicting the
+    settled Block 6 decision and the migration guide. It now states the existing
+    provision/migrate/upload ordering. This was a prose correction only.
 
 ## Validation so far
 
@@ -125,3 +148,10 @@ stable missing-binding errors, per-request isolation, middleware/handler sharing
 and propagation through the development error boundary. The first sandboxed
 integration attempt could not open workerd's local listening port; rerunning
 with local-port permission passed. No deployment was performed.
+
+For the consistency-documentation substep, the site production integration check
+passed all **4 tests**, including compilation and static output of `/docs/kv`
+with managed metadata and client assets. The linked D1 migration wording was
+corrected and the check rerun successfully. `git diff --check` passed. Framework
+runtime code was unchanged, so the broader suite was not rerun for this prose
+and documentation-route change. Live publication remains maintainer-owned.

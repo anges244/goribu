@@ -16,6 +16,7 @@ const NAV = [
   { href: "/docs/forms", label: "Forms" },
   { href: "/docs/d1", label: "D1" },
   { href: "/docs/migrations", label: "Migrations" },
+  { href: "/docs/kv", label: "KV" },
   { href: "/docs/metadata", label: "Metadata & Document" },
   { href: "/docs/static-routes", label: "Static routes" },
   { href: "/docs/javascript", label: "JavaScript" },

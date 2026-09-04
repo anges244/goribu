@@ -103,4 +103,4 @@ then uploads the Worker. There is no schema-missing route window. There is no
 already gives full timing control without allowing known pending schema to be
 skipped.
 
-**Next:** [Metadata & Document](/docs/metadata).
+**Next:** [KV](/docs/kv).

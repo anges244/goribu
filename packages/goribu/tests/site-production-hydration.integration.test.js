@@ -85,6 +85,7 @@ describe("site production hydration", () => {
       ["forms", "Forms"],
       ["d1", "D1"],
       ["migrations", "Migrations"],
+      ["kv", "KV"],
       ["metadata", "Metadata &amp; Document"],
     ]) {
       const file = join(clientDir, "docs", `${page}.html`);
