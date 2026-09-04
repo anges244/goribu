@@ -14,6 +14,13 @@ function runCli(args) {
 }
 
 describe("goribu CLI", () => {
+  it("lists the complete migration verb set in help", () => {
+    const { status, stdout } = runCli(["--help"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("migrate:down");
+    expect(stdout).toContain("migrate:seed");
+  });
+
   it("prints the version", () => {
     const { status, stdout } = runCli(["--version"]);
     expect(status).toBe(0);
@@ -61,6 +68,25 @@ describe("goribu CLI", () => {
     const { status, stderr } = runCli(["migrate", "--bogus"]);
     expect(status).toBe(1);
     expect(stderr).toMatch(/accepts only --local \(default\) or --remote/);
+  });
+
+  it("dispatches migrate:down through migration target validation", () => {
+    const { status, stderr } = runCli(["migrate:down", "--bogus"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/`goribu migrate:down` accepts only --local/);
+  });
+
+  it("rejects migrate:seed --remote at the CLI safety boundary", () => {
+    const { status, stderr } = runCli(["migrate:seed", "--remote"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/never runs against production/);
+  });
+
+  it("dispatches migrate:seed locally by default", () => {
+    const { status, stderr } = runCli(["migrate:seed"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/goribu\.config\.js.*is missing/);
+    expect(stderr).not.toMatch(/never runs against production/);
   });
 
   it("requires a name for migrate:new", () => {

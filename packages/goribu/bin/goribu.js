@@ -10,7 +10,9 @@ import { runCheck } from "../src/build/run-check.js";
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
+import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
 import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
+import { runMigrateSeed } from "../src/build/migrations/run-migrate-seed.js";
 import { runMigrateStatus } from "../src/build/migrations/run-migrate-status.js";
 
 const COMMANDS = {
@@ -19,7 +21,9 @@ const COMMANDS = {
   check: "Preview production resources without changing them.",
   deploy: "Build and deploy to Cloudflare.",
   migrate: "Apply pending D1 migrations (default local; --remote for production).",
+  "migrate:down": "Roll back the last applied migration (default local; --remote supported).",
   "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
+  "migrate:seed": "Run migrations/seed.sql against local D1 only.",
   "migrate:status": "Show applied and pending migrations without changing anything.",
 };
 
@@ -120,6 +124,28 @@ function resolveTarget(command, rest) {
   return target ?? "local";
 }
 
+// Seed data is deliberately local-only. Reject production before the runner loads
+// application config so the safety rail is independent of project validity.
+function resolveSeedTarget(rest) {
+  for (const argument of rest) {
+    if (argument === "--remote") {
+      console.error(
+        "[Goribu] `goribu migrate:seed` never runs against production. Remove --remote and run it against local D1; use a migration for production data changes.",
+      );
+      process.exitCode = 1;
+      return null;
+    }
+    if (argument !== "--local") {
+      console.error(
+        `[Goribu] \`goribu migrate:seed\` accepts only --local (the default), but received ${JSON.stringify(argument)}.`,
+      );
+      process.exitCode = 1;
+      return null;
+    }
+  }
+  return "local";
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
 
@@ -169,11 +195,26 @@ function main(argv) {
     return;
   }
 
-  if (command === "migrate" || command === "migrate:status") {
+  if (command === "migrate" || command === "migrate:down" || command === "migrate:status") {
     const target = resolveTarget(command, rest);
     if (target === null) return;
-    const run = command === "migrate" ? runMigrate : runMigrateStatus;
+    const run =
+      command === "migrate"
+        ? runMigrate
+        : command === "migrate:down"
+          ? runMigrateDown
+          : runMigrateStatus;
     run({ projectRoot: process.cwd(), target }).catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+    return;
+  }
+
+  if (command === "migrate:seed") {
+    const target = resolveSeedTarget(rest);
+    if (target === null) return;
+    runMigrateSeed({ projectRoot: process.cwd(), target }).catch((error) => {
       console.error(error);
       process.exitCode = 1;
     });
