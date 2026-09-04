@@ -1,10 +1,8 @@
-import { readMigrations, TRACKING_TABLE } from "./read-migrations.js";
+import { readMigrations } from "./read-migrations.js";
 import { planMigrations } from "./plan-migrations.js";
 import { resolveMigrationContext } from "./migration-context.js";
-import { executeD1, lastResultRows } from "./wrangler-d1.js";
-
-const TABLE_EXISTS =
-  `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${TRACKING_TABLE}'`;
+import { readAppliedMigrations } from "./inspect-applied.js";
+import { executeD1 } from "./wrangler-d1.js";
 
 /**
  * Print applied, pending, and drifted migrations for the target without changing anything.
@@ -32,20 +30,7 @@ export async function runMigrateStatus(options) {
   };
 
   const migrations = readMigrations({ migrationsDir: context.migrationsDir });
-
-  const existence = await execute({ ...shared, command: TABLE_EXISTS, json: true });
-  let appliedRows = [];
-  if (lastResultRows(existence).length > 0) {
-    const appliedResult = await execute({
-      ...shared,
-      command: `SELECT name, checksum FROM ${TRACKING_TABLE} ORDER BY name`,
-      json: true,
-    });
-    appliedRows = lastResultRows(appliedResult).map((row) => ({
-      name: String(row.name),
-      checksum: String(row.checksum),
-    }));
-  }
+  const appliedRows = await readAppliedMigrations({ execute, shared });
 
   const plan = planMigrations({ migrations, appliedRows });
   stdout.write(formatStatus(target, plan));

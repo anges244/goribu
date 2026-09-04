@@ -84,6 +84,50 @@ describe("executeD1", () => {
     ).rejects.toThrow(/Wrangler could not run the local D1 SQL/);
   });
 
+  it("labels failures for the calling command and reassures a read-only caller", async () => {
+    await expect(
+      executeD1({
+        ...base,
+        command: "SELECT 1",
+        json: true,
+        spawn: fakeSpawn({ code: 1 }),
+        errorLabel: "goribu check",
+        readOnly: true,
+      }),
+    ).rejects.toThrow(/for `goribu check`[\s\S]*No resources were changed\./);
+
+    // The default keeps the migrate-specific wording every migrate command relies on.
+    await expect(
+      executeD1({ ...base, command: "SELECT 1", json: true, spawn: fakeSpawn({ code: 1 }) }),
+    ).rejects.toThrow(/for `goribu migrate`[\s\S]*No migration was recorded/);
+  });
+
+  it("reassures a read-only caller when Wrangler is missing or returns unreadable JSON", async () => {
+    await expect(
+      executeD1({
+        ...base,
+        command: "SELECT 1",
+        json: true,
+        resolveBin: () => {
+          throw new Error("not found");
+        },
+        errorLabel: "goribu check",
+        readOnly: true,
+      }),
+    ).rejects.toThrow(/which `goribu check` uses[\s\S]*No resources were changed\./);
+
+    await expect(
+      executeD1({
+        ...base,
+        command: "SELECT 1",
+        json: true,
+        spawn: fakeSpawn({ output: "not json" }),
+        errorLabel: "goribu check",
+        readOnly: true,
+      }),
+    ).rejects.toThrow(/unreadable JSON while `goribu check`[\s\S]*No resources were changed\./);
+  });
+
   it("requires exactly one of file or command", async () => {
     await expect(executeD1({ ...base, spawn: fakeSpawn() })).rejects.toThrow(
       /exactly one of file or command/,

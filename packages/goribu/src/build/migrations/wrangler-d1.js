@@ -21,11 +21,18 @@ import { resolveWranglerBin } from "../resolve-wrangler-bin.js";
  *   persistTo?: string,
  *   spawn?: Function,
  *   resolveBin?: Function,
+ *   errorLabel?: string,
+ *   readOnly?: boolean,
  * }} options
  * @returns {Promise<Array<{ results: unknown[], success: boolean, meta?: object }> | undefined>}
  */
 export async function executeD1(options) {
   const { projectRoot, configPath, database, target } = options ?? {};
+  // Which command's errors these are, and whether a failure could have changed state.
+  // `goribu check` inspects read-only, so its failures must not talk about migrations
+  // or claim a mutation was rolled back.
+  const errorLabel = options?.errorLabel ?? "goribu migrate";
+  const readOnly = options?.readOnly === true;
   if (typeof projectRoot !== "string" || projectRoot.length === 0) {
     throw new TypeError(
       "[Goribu] executeD1({ projectRoot }) requires the application project root.",
@@ -55,7 +62,8 @@ export async function executeD1(options) {
     wranglerBin = resolveBin();
   } catch (cause) {
     throw new Error(
-      "[Goribu] Could not find Wrangler, which `goribu migrate` uses to run D1 SQL. Install dependencies (for example `pnpm install`) and try again.",
+      `[Goribu] Could not find Wrangler, which \`${errorLabel}\` uses to run D1 SQL. Install dependencies (for example \`pnpm install\`) and try again.` +
+        (readOnly ? " No resources were changed." : ""),
       { cause },
     );
   }
@@ -84,7 +92,7 @@ export async function executeD1(options) {
       stdio: ["ignore", "pipe", "inherit"],
     });
   } catch (cause) {
-    throw wranglerError(target, cause);
+    throw wranglerError(target, errorLabel, readOnly, cause);
   }
 
   let output = "";
@@ -93,12 +101,12 @@ export async function executeD1(options) {
   });
 
   const { code, signal } = await new Promise((resolvePromise, rejectPromise) => {
-    child.on("error", (cause) => rejectPromise(wranglerError(target, cause)));
+    child.on("error", (cause) => rejectPromise(wranglerError(target, errorLabel, readOnly, cause)));
     child.on("close", (exitCode, terminatingSignal) =>
       resolvePromise({ code: exitCode, signal: terminatingSignal }),
     );
   });
-  if (signal !== null || code !== 0) throw wranglerError(target);
+  if (signal !== null || code !== 0) throw wranglerError(target, errorLabel, readOnly);
 
   if (options.json !== true) return undefined;
   let parsed;
@@ -106,11 +114,12 @@ export async function executeD1(options) {
     parsed = JSON.parse(output);
   } catch (cause) {
     throw new Error(
-      "[Goribu] Wrangler returned unreadable JSON while `goribu migrate` inspected D1. Update Wrangler and try again.",
+      `[Goribu] Wrangler returned unreadable JSON while \`${errorLabel}\` inspected D1. Update Wrangler and try again.` +
+        (readOnly ? " No resources were changed." : ""),
       { cause },
     );
   }
-  return assertResultShape(parsed);
+  return assertResultShape(parsed, errorLabel, readOnly);
 }
 
 /**
@@ -121,7 +130,7 @@ export async function executeD1(options) {
  * `results`) must never be read as "no rows": treating a lost ledger as empty would
  * replay already-applied migrations.
  */
-function assertResultShape(parsed) {
+function assertResultShape(parsed, errorLabel, readOnly) {
   const valid =
     Array.isArray(parsed) &&
     parsed.length > 0 &&
@@ -134,9 +143,9 @@ function assertResultShape(parsed) {
     );
   if (!valid) {
     throw new Error(
-      "[Goribu] Wrangler returned an unexpected D1 result shape for `goribu migrate`. " +
+      `[Goribu] Wrangler returned an unexpected D1 result shape for \`${errorLabel}\`. ` +
         "Expected a non-empty array of successful statement results. Update Wrangler and try " +
-        "again; this was a read, so no migration state was changed.",
+        `again; this was a read, so ${readOnly ? "no resources were changed" : "no migration state was changed"}.`,
     );
   }
   return parsed;
@@ -147,11 +156,13 @@ export function lastResultRows(result) {
   return result[result.length - 1].results;
 }
 
-function wranglerError(target, cause) {
+function wranglerError(target, errorLabel, readOnly, cause) {
   return new Error(
-    `[Goribu] Wrangler could not run the ${target} D1 SQL for \`goribu migrate\`. ` +
+    `[Goribu] Wrangler could not run the ${target} D1 SQL for \`${errorLabel}\`. ` +
       "Read the Wrangler error above, fix authentication or the SQL, then rerun the command. " +
-      "No migration was recorded for a statement that did not complete.",
+      (readOnly
+        ? "No resources were changed."
+        : "No migration was recorded for a statement that did not complete."),
     cause === undefined ? undefined : { cause },
   );
 }

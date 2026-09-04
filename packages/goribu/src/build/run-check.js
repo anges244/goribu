@@ -1,8 +1,13 @@
 import { spawn as nodeSpawn } from "node:child_process";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { isApplicationConfig } from "../runtime/application-config.js";
 import { loadApplicationConfig } from "./load-application-config.js";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
+import { resolveMigrationContext } from "./migrations/migration-context.js";
+import { readMigrations, MIGRATIONS_DIRNAME } from "./migrations/read-migrations.js";
+import { readAppliedMigrations } from "./migrations/inspect-applied.js";
+import { planMigrations } from "./migrations/plan-migrations.js";
+import { executeD1 } from "./migrations/wrangler-d1.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -29,15 +34,57 @@ export async function runCheck(options) {
 
   const loadConfig = options?.loadConfig ?? loadApplicationConfig;
   const inspectD1 = options?.inspectD1 ?? listRemoteD1Databases;
+  const inspectMigrations = options?.inspectMigrations ?? inspectRemoteMigrations;
   const appConfig = await loadConfig({ projectRoot });
-  const remoteDatabases =
-    appConfig.database === undefined
-      ? []
-      : await inspectD1({ projectRoot });
-  const plan = createCheckPlan({ appConfig, remoteDatabases });
+
+  const hasDatabase = appConfig.database !== undefined;
+  const remoteDatabases = hasDatabase ? await inspectD1({ projectRoot }) : [];
+
+  // Read the local migration files whenever a database is declared, so the plan can
+  // report pending work even before the database exists. A malformed file fails closed
+  // here — a pre-deploy check must never paper over a broken migration.
+  const migrations = hasDatabase
+    ? readMigrations({ migrationsDir: join(resolve(projectRoot), MIGRATIONS_DIRNAME) })
+    : [];
+
+  // Only reach for the production ledger once the database is known to exist; querying a
+  // database that has not been created yet would fail for the wrong reason. Existence is
+  // derived from the same validated inventory the plan uses, so the two cannot disagree.
+  const existing = hasDatabase
+    ? findDeclaredDatabase({ appConfig, remoteDatabases })
+    : undefined;
+  const appliedRows =
+    existing === undefined ? [] : await inspectMigrations({ projectRoot, appConfig });
+
+  const plan = createCheckPlan({ appConfig, remoteDatabases, migrations, appliedRows });
 
   stdout.write(formatCheckPlan(plan));
   return plan;
+}
+
+/**
+ * Read the production migration ledger read-only, reusing the already-loaded config.
+ *
+ * Its Wrangler failures are labeled for `goribu check` and state that no resources were
+ * changed, because this is inspection, not migration.
+ */
+export async function inspectRemoteMigrations(options) {
+  const { projectRoot, appConfig } = options ?? {};
+  const execute = options?.execute ?? executeD1;
+  const context = await resolveMigrationContext({
+    projectRoot,
+    loadConfig: async () => appConfig,
+  });
+  const shared = {
+    projectRoot,
+    configPath: context.configPath,
+    database: context.database,
+    persistTo: context.persistTo,
+    target: "remote",
+    errorLabel: "goribu check",
+    readOnly: true,
+  };
+  return readAppliedMigrations({ execute, shared });
 }
 
 /** Use pinned Wrangler authentication to list remote D1 databases without mutation. */
@@ -120,29 +167,51 @@ function wranglerStartError(cause) {
   );
 }
 
+/**
+ * Find the declared database in the validated remote inventory.
+ *
+ * Returns the existing remote record, or undefined when the declaration has no match.
+ * Both the plan and the ledger-inspection gate derive existence from here, so they can
+ * never act on contradictory views of what exists.
+ */
+export function findDeclaredDatabase({ appConfig, remoteDatabases } = {}) {
+  const declaration = appConfig?.database;
+  if (declaration === undefined) return undefined;
+  const databases = normalizeRemoteD1Databases(remoteDatabases);
+  const matches = databases.filter((database) => database.name === declaration.name);
+  if (matches.length > 1) {
+    throw new Error(
+      `[Goribu] Cloudflare returned more than one D1 database named ${JSON.stringify(declaration.name)}. ` +
+        "Goribu cannot choose safely; resolve the duplicate resources in Cloudflare and rerun `goribu check`. No resources were changed.",
+    );
+  }
+  return matches[0];
+}
+
 /** Compare one declared D1 resource with the read-only remote inventory. */
-export function createCheckPlan({ appConfig, remoteDatabases } = {}) {
+export function createCheckPlan({ appConfig, remoteDatabases, migrations = [], appliedRows = [] } = {}) {
   if (!isApplicationConfig(appConfig)) {
     throw new TypeError(
       "[Goribu] createCheckPlan({ appConfig }) requires the defineConfig() result loaded from goribu.config.js.",
     );
   }
-  const databases = normalizeRemoteD1Databases(remoteDatabases);
   const declaration = appConfig.database;
   let resources = [];
   let bindings = [];
   let costWarnings = [];
+  let migrationsPlan = Object.freeze({ declared: false });
 
   if (declaration !== undefined) {
-    const matches = databases.filter((database) => database.name === declaration.name);
-    if (matches.length > 1) {
-      throw new Error(
-        `[Goribu] Cloudflare returned more than one D1 database named ${JSON.stringify(declaration.name)}. ` +
-          "Goribu cannot choose safely; resolve the duplicate resources in Cloudflare and rerun `goribu check`. No resources were changed.",
-      );
-    }
-
-    const existing = matches[0];
+    const existing = findDeclaredDatabase({ appConfig, remoteDatabases });
+    const applied = planMigrations({ migrations, appliedRows });
+    migrationsPlan = Object.freeze({
+      declared: true,
+      databaseExists: existing !== undefined,
+      defined: migrations.length,
+      applied: Object.freeze(applied.applied.map((migration) => migration.name)),
+      pending: Object.freeze(applied.pending.map((migration) => migration.name)),
+      drift: Object.freeze(applied.drift.map((entry) => Object.freeze({ ...entry }))),
+    });
     resources = [
       Object.freeze({
         kind: "D1 database",
@@ -176,6 +245,7 @@ export function createCheckPlan({ appConfig, remoteDatabases } = {}) {
     resources: Object.freeze(resources),
     bindings: Object.freeze(bindings),
     costWarnings: Object.freeze(costWarnings),
+    migrations: migrationsPlan,
   });
 }
 
@@ -204,6 +274,9 @@ export function formatCheckPlan(plan) {
     ...(plan.bindings.length === 0
       ? ["  none"]
       : plan.bindings.map((binding) => `  ${binding.name} -> ${binding.resource}`)),
+    "",
+    "Migrations (production)",
+    ...formatMigrations(plan.migrations),
     "",
     "Cost warnings",
     ...(plan.costWarnings.length === 0
@@ -260,6 +333,58 @@ export function normalizeRemoteD1Databases(databases) {
       });
     }),
   );
+}
+
+/**
+ * Render the production migration status: what is defined, what production has applied,
+ * what remains, and any drift. The status always states that deploy will not apply the
+ * pending work — the one production risk `goribu check` exists to expose.
+ */
+function formatMigrations(migrations) {
+  if (!migrations.declared) {
+    return ["  none (no database declared)"];
+  }
+
+  const lines = [`  Defined: ${migrations.defined === 0 ? "none" : migrations.defined}`];
+
+  // The database has not been created yet, so nothing can be applied. A ledger read never
+  // happens here, so there is no applied state or drift to report — only pending work.
+  if (!migrations.databaseExists) {
+    if (migrations.defined > 0) {
+      lines.push(
+        "  Applied: unknown (the database does not exist yet)",
+        `  Pending: ${migrations.pending.length} (all — goribu deploy creates the database but does not apply migrations)`,
+        ...migrations.pending.map((name) => `    - ${name}`),
+      );
+    }
+    lines.push(
+      "  goribu deploy does not apply migrations. Once the database exists, apply them with `goribu migrate --remote`.",
+    );
+    return lines;
+  }
+
+  // The database exists: report the real applied/pending split and any drift. Drift can be
+  // present even with no local files (a deleted file whose migration was already applied),
+  // so it is rendered regardless of the defined count.
+  lines.push(`  Applied: ${countOrNone(migrations.applied)}`);
+  lines.push(...migrations.applied.map((name) => `    - ${name}`));
+  lines.push(`  Pending: ${countOrNone(migrations.pending)}`);
+  lines.push(...migrations.pending.map((name) => `    - ${name}`));
+  if (migrations.drift.length > 0) {
+    lines.push(`  Drift (${migrations.drift.length}):`);
+    lines.push(...migrations.drift.map((entry) => `    - ${entry.name}: ${entry.reason}`));
+    lines.push("  Resolve drift before migrating: restore the original files or add a new forward migration.");
+  }
+  // Always stated when a database is declared: deploy will not apply migrations, whatever
+  // the inventory. This is the one production risk check exists to expose.
+  lines.push(
+    "  goribu deploy does not apply migrations. Apply pending migrations to production with `goribu migrate --remote`.",
+  );
+  return lines;
+}
+
+function countOrNone(names) {
+  return names.length === 0 ? "none" : String(names.length);
 }
 
 function formatResources(resources) {

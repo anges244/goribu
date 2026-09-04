@@ -1,9 +1,13 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import {
   createCheckPlan,
   formatCheckPlan,
+  inspectRemoteMigrations,
   listRemoteD1Databases,
   runCheck,
 } from "../src/build/run-check.js";
@@ -181,5 +185,185 @@ describe("goribu check", () => {
     expect(output.join("")).toContain("Resources\n  Existing: none");
     expect(output.join("")).toContain("Bindings\n  none");
     expect(output.join("")).toContain("Cost warnings\n  none");
+  });
+
+  it("renders a Migrations block reading none when no database is declared", () => {
+    const config = defineConfig({ name: "plain-app", compatibilityDate: "2026-09-03" });
+    const output = formatCheckPlan(createCheckPlan({ appConfig: config, remoteDatabases: [] }));
+
+    expect(output).toContain("Migrations (production)\n  none (no database declared)");
+  });
+});
+
+describe("goribu check — production migration status", () => {
+  const remote = [{ name: "goribu-site-db", uuid: "database-id" }];
+  const migrations = [
+    { name: "0001_a", sequence: 1, checksum: "aa" },
+    { name: "0002_b", sequence: 2, checksum: "bb" },
+  ];
+
+  it("splits applied and pending against the production ledger and warns deploy will not apply", () => {
+    const plan = createCheckPlan({
+      appConfig,
+      remoteDatabases: remote,
+      migrations,
+      appliedRows: [{ name: "0001_a", checksum: "aa" }],
+    });
+
+    expect(plan.migrations).toEqual({
+      declared: true,
+      databaseExists: true,
+      defined: 2,
+      applied: ["0001_a"],
+      pending: ["0002_b"],
+      drift: [],
+    });
+
+    const output = formatCheckPlan(plan);
+    expect(output).toContain("Migrations (production)");
+    expect(output).toContain("Defined: 2");
+    expect(output).toContain("Applied: 1");
+    expect(output).toContain("Pending: 1");
+    expect(output).toContain("- 0002_b");
+    expect(output).toContain("goribu deploy does not apply migrations.");
+    expect(output).toContain("`goribu migrate --remote`");
+  });
+
+  it("reports drift as information without throwing", () => {
+    const plan = createCheckPlan({
+      appConfig,
+      remoteDatabases: remote,
+      migrations: [{ name: "0001_a", sequence: 1, checksum: "new" }],
+      appliedRows: [{ name: "0001_a", checksum: "old" }],
+    });
+
+    expect(plan.migrations.drift).toEqual([{ name: "0001_a", reason: "modified" }]);
+    const output = formatCheckPlan(plan);
+    expect(output).toContain("Drift (1):");
+    expect(output).toContain("- 0001_a: modified");
+    expect(output).toContain("Resolve drift before migrating");
+  });
+
+  it("treats every migration as pending when the database does not exist yet", () => {
+    const plan = createCheckPlan({
+      appConfig,
+      remoteDatabases: [],
+      migrations,
+      appliedRows: [],
+    });
+
+    expect(plan.migrations).toMatchObject({ databaseExists: false, pending: ["0001_a", "0002_b"] });
+    const output = formatCheckPlan(plan);
+    expect(output).toContain("Applied: unknown (the database does not exist yet)");
+    expect(output).toContain(
+      "Pending: 2 (all — goribu deploy creates the database but does not apply migrations)",
+    );
+    expect(output).toContain("goribu deploy does not apply migrations.");
+    expect(output).toContain("Once the database exists, apply them with `goribu migrate --remote`");
+  });
+
+  it("reads none when a database is declared but no migration files exist", () => {
+    const output = formatCheckPlan(
+      createCheckPlan({ appConfig, remoteDatabases: remote, migrations: [], appliedRows: [] }),
+    );
+    expect(output).toContain("Migrations (production)\n  Defined: none");
+  });
+
+  it("still renders drift when the ledger has an applied migration whose file was deleted", () => {
+    const plan = createCheckPlan({
+      appConfig,
+      remoteDatabases: remote,
+      migrations: [],
+      appliedRows: [{ name: "0001_a", checksum: "aa" }],
+    });
+
+    expect(plan.migrations).toMatchObject({ defined: 0, drift: [{ name: "0001_a", reason: "missing" }] });
+    const output = formatCheckPlan(plan);
+    expect(output).toContain("Defined: none");
+    expect(output).toContain("Drift (1):");
+    expect(output).toContain("- 0001_a: missing");
+    expect(output).toContain("Resolve drift before migrating");
+  });
+
+  it("states the deploy/migrate guidance even when production is fully up to date", () => {
+    const output = formatCheckPlan(
+      createCheckPlan({
+        appConfig,
+        remoteDatabases: remote,
+        migrations: [{ name: "0001_a", sequence: 1, checksum: "aa" }],
+        appliedRows: [{ name: "0001_a", checksum: "aa" }],
+      }),
+    );
+
+    expect(output).toContain("Pending: none");
+    expect(output).toContain(
+      "goribu deploy does not apply migrations. Apply pending migrations to production with `goribu migrate --remote`.",
+    );
+  });
+
+  it("queries the production ledger only when the database exists, reusing the loaded config", async () => {
+    const inspectMigrations = vi.fn(async () => [{ name: "0001_a", checksum: "aa" }]);
+
+    await runCheck({
+      projectRoot: "/app",
+      loadConfig: async () => appConfig,
+      inspectD1: async () => remote,
+      inspectMigrations,
+      stdout: { write() {} },
+    });
+    expect(inspectMigrations).toHaveBeenCalledTimes(1);
+    expect(inspectMigrations).toHaveBeenCalledWith({ projectRoot: "/app", appConfig });
+
+    inspectMigrations.mockClear();
+    await runCheck({
+      projectRoot: "/app",
+      loadConfig: async () => appConfig,
+      inspectD1: async () => [],
+      inspectMigrations,
+      stdout: { write() {} },
+    });
+    expect(inspectMigrations).not.toHaveBeenCalled();
+  });
+});
+
+describe("goribu check — migration inspection failures fail closed", () => {
+  let root;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "goribu-check-"));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("refuses to plan when a migration file is malformed", async () => {
+    mkdirSync(join(root, "migrations"), { recursive: true });
+    writeFileSync(join(root, "migrations", "nope.sql"), "-- migrate:up\n-- migrate:down\n");
+
+    await expect(
+      runCheck({
+        projectRoot: root,
+        loadConfig: async () => appConfig,
+        inspectD1: async () => [],
+        inspectMigrations: async () => [],
+        stdout: { write() {} },
+      }),
+    ).rejects.toThrow(/does not match the required name/);
+  });
+
+  it("inspectRemoteMigrations reads the remote ledger read-only under the check label", async () => {
+    const calls = [];
+    const execute = async (options) => {
+      calls.push(options);
+      if (typeof options.command === "string" && options.command.includes("sqlite_master")) {
+        return [{ results: [{ name: "_goribu_migrations" }], success: true }];
+      }
+      return [{ results: [{ name: "0001_a", checksum: "aa" }], success: true }];
+    };
+
+    const rows = await inspectRemoteMigrations({ projectRoot: root, appConfig, execute });
+
+    expect(rows).toEqual([{ name: "0001_a", checksum: "aa" }]);
+    expect(calls.every((call) => call.target === "remote")).toBe(true);
+    expect(calls.every((call) => call.errorLabel === "goribu check" && call.readOnly === true)).toBe(true);
   });
 });
