@@ -1,29 +1,34 @@
 ---
 title: Deploying
-description: Deploy to Cloudflare with one command.
+description: Deploy D1, KV, migrations, and a Worker through one command.
 ---
 
-Goribu deploys through
-[Wrangler](https://developers.cloudflare.com/workers/wrangler/), Cloudflare's own
-tool. You run the deploy yourself; there is no automated per-commit pipeline.
-Every deploy first runs the production build, so the Worker and static assets you
-upload are exactly what the build produced.
+Goribu deploys through [Wrangler](https://developers.cloudflare.com/workers/wrangler/),
+Cloudflare's own tool. You run the deploy yourself; there is no automated
+per-commit pipeline. Every deploy checks credentials and account selection before
+building. The Worker and static assets you upload are exactly what that build
+produced.
 
 ## Prerequisites
 
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up).
 
-Wrangler ships as a Goribu dependency, so there is nothing extra to install. You
-do not run Wrangler directly — Goribu runs its own copy — so authenticate one of
-these ways:
+Wrangler ships as a Goribu dependency, so there is nothing extra to install.
+Authenticate one of these ways:
 
-- **Interactive (local):** just run `goribu deploy`. If you are not already
-  authenticated, Wrangler opens your browser to authorize your Cloudflare account
-  and then continues; the login is remembered for later runs.
-- **Non-interactive (no browser, e.g. a server):** set `CLOUDFLARE_API_TOKEN` in
-  the environment (add `CLOUDFLARE_ACCOUNT_ID` if the token can reach more than
-  one account). Create the token from the "Edit Cloudflare Workers" template in
-  the Cloudflare dashboard.
+- **Interactive (local):** run Wrangler's `login` once to authorize your
+  Cloudflare account in the browser. From the app directory, use the bundled
+  copy with `pnpm --dir node_modules/goribu exec wrangler login`. The login is
+  remembered for later runs.
+- **Non-interactive (no browser, e.g. a server):** set `CLOUDFLARE_API_TOKEN`
+  in the environment (add `CLOUDFLARE_ACCOUNT_ID` if the token can reach more
+  than one account). Create the token from the "Edit Cloudflare Workers"
+  template in the Cloudflare dashboard.
+
+Deploy fails before building if authentication or account selection fails; it
+does not launch an interactive login itself. Repair the reported problem, then
+rerun `goribu deploy`. Standalone `goribu build` does not require Cloudflare
+authentication.
 
 ## Deploy to production
 
@@ -33,43 +38,108 @@ From the app directory:
 goribu deploy
 ```
 
-This builds the app, prepares declared resources, then runs `wrangler deploy`.
+This validates configuration, checks Wrangler credentials and account selection,
+builds the app, prepares declared resources, then runs `wrangler deploy`.
 The app is served from its `workers.dev` URL (and any custom domain you have
 configured), under the `name` from `goribu.config.js`. Re-running `goribu deploy`
 replaces what production serves.
 
-## D1 and migration status
+## Deploying with D1 and KV
 
-Declare one database in `goribu.config.js`, then inspect production before
-deploying:
+Declare either or both resources in `goribu.config.js`; the application owns
+their names while Goribu owns the generated `DB` and `KV` bindings:
 
-```sh
+```js
+import { defineConfig } from "goribu/server";
+
+export default defineConfig({
+  name: "my-app",
+  compatibilityDate: "2026-09-03",
+  database: { type: "d1", name: "my-app-db" },
+  kv: { name: "my-app-kv" },
+});
+```
+
+Do not add `d1_databases` or `kv_namespaces` to a Wrangler file alongside the
+corresponding Goribu declaration. A duplicate declaration fails the build with
+instructions to remove it, including declarations under Wrangler environments.
+
+Before deployment, inspect the plan from the application directory:
+
+```
 goribu check
 ```
 
-Check is read-only. It reports whether the database exists, the generated `DB`
-binding, cost information, and real production applied, pending, and drifted
-migrations. A missing tracking table is read as nothing applied and is not
-created by inspection.
+`check` is read-only. It reports the production Worker target, whether each D1/KV
+resource exists or will be created, the `DB`/`KV` mappings, cost warnings, and
+the production migration state. Applied, pending, and drifted migrations come
+from a read-only ledger query; a missing database or tracking table is reported
+without creating either. It finishes by confirming that no resources changed.
 
-Deploy creates a missing database, verifies migration history, and applies every
-pending file before it uploads the new Worker. Drift or failed SQL aborts the
-upload. To advance a compatible production schema earlier, run:
+On `goribu deploy`, Goribu validates binding ownership, checks authentication,
+and completes the production build before changing any production resources.
+The credential/account result is reused by both provisioners within that deploy;
+it is not stored by Goribu. Authentication checks also run for apps with no D1
+or KV declaration. They do not prove every later operation has permission or
+guarantee credentials and connectivity remain valid. Goribu then:
+
+1. Creates the declared database when it is missing, enabling replication in the
+   same request unless `replication: false` was declared.
+2. Reconciles an explicit `replication: true` or `replication: false` on an
+   existing database. When the field is omitted, existing replication policy is
+   left untouched.
+3. Creates the declared KV namespace if missing, or reuses the exact matching
+   namespace title. Ambiguous resource matches fail closed.
+4. Writes both resolved resource ids into the generated production bindings.
+5. Verifies D1 migration history and applies every pending migration in order.
+   Drift or failed SQL aborts before the Worker upload.
+6. Hands the completed Worker and static assets to Wrangler for deployment.
+
+Undeclared resources are skipped. A KV-only app has no migration step.
+
+Re-running the command finds and reuses resources by name; deploying new code
+does not recreate or erase their data. Changing a declared name selects a
+different resource; it does not rename or delete the old one. Removing a
+declaration does not delete the Cloudflare resource either.
+
+Authentication must be able to deploy the Worker and read/write the declared
+D1 and Workers KV Storage resources. If Wrangler can access more than one
+Cloudflare account, set `CLOUDFLARE_ACCOUNT_ID` so Goribu does not have to guess.
+
+Development uses local D1 and KV stores keyed by their declared names. It does
+not connect development requests to production data. See [KV](/docs/kv) for the
+runtime API and eventual-consistency limits; deploying a Worker does not flush
+KV's distributed read caches.
+
+### Migration ordering
+
+`goribu deploy` applies pending migration SQL after D1 exists and before the new
+Worker is uploaded. That closes the first-deploy gap where code could become live
+before its tables existed. If migration history has drifted or a pending file
+fails, the new Worker is not uploaded. Resources created earlier in the command
+and any earlier migration files that completed successfully can remain. The
+command does not roll back resource creation if a later operation fails.
+
+You can still advance production schema deliberately before a deploy:
 
 ```sh
 goribu migrate --remote
 ```
 
-There is no deploy skip flag; the explicit command is the timing control, and a
-later deploy simply verifies there is nothing pending. Worker upload and schema
-change are still not one transaction: the old Worker serves while migrations
-run, so use compatible expand changes and defer destructive contract changes to
-a later release. See [Migrations](/docs/migrations) for the complete sequence.
+There is no `--no-migrations` deploy flag. Running the explicit command first is
+the canonical timing control; the following deploy verifies the same history and
+finds nothing pending. A Worker deployment and D1 migration still cannot share
+one transaction. The previously deployed Worker continues serving while schema
+changes and upload run, so pending migrations must be compatible with it. See
+[Migrations](/docs/migrations) for the complete expand-and-contract sequence.
 
 ## What to expect
 
 - `goribu deploy` prints Wrangler's own output, including the resulting URL.
-- D1 provisioning prints only changes it made; an existing database is reused.
+- D1/KV provisioning prints only changes it made; an existing matching resource is
+  reused without a creation message.
 - A failed or interrupted deploy exits non-zero and does not report success.
-- The build output lives in `dist/`; the deploy target is resolved from the
-  generated Wrangler configuration under `.goribu/`. Neither is committed.
+- The build output lives in `dist/`; `.wrangler/deploy/config.json` redirects
+  Wrangler to the emitted Worker configuration and static assets there. The
+  redirect, build output, and `.goribu/` build inputs are generated and are not
+  committed.

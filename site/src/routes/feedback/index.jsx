@@ -97,7 +97,7 @@ export default function FeedbackPage({
         </section>
 
         <p>
-          <Link href="/">Back to home</Link>
+          <Link href="/community">Community feedback</Link> · <Link href="/">Back to home</Link>
         </p>
       </article>
     </main>

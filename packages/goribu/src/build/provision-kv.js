@@ -1,6 +1,6 @@
 import { isApplicationConfig } from "../runtime/application-config.js";
 import { findDeclaredKVNamespace, listRemoteKVNamespaces, normalizeKVNamespaces } from "./inspect-kv.js";
-import { getCloudflareAccess } from "./provision-d1.js";
+import { getCloudflareAccess } from "./cloudflare-access.js";
 
 /** Create or reuse the single declared namespace. Existing namespaces need no update. */
 export async function provisionKV(options) {

@@ -18,6 +18,7 @@ function scenario(failure) {
     options: {
       projectRoot: "/app", loadConfig: async () => appConfig,
       guard: stage("guard D1"), guardKV: stage("guard KV"), build: stage("build"),
+      getAccess: stage("auth", { accountId: "account", headers: {} }),
       provision: stage("provision D1", { name: "app-db", uuid: "db-id" }),
       provisionKV: stage("provision KV", { title: "app-kv", id: "a".repeat(32) }),
       finalize: stage("finalize D1"), finalizeKV: stage("finalize KV"),
@@ -29,18 +30,26 @@ describe("deploy with D1 and KV", () => {
   it("builds before provisioning both resources and attaches both before migrations and upload", async () => {
     const { options, events } = scenario();
     await expect(runDeploy(options)).resolves.toBe(0);
-    expect(events).toEqual(["guard D1", "guard KV", "build", "provision D1", "provision KV", "finalize KV", "finalize D1", "migrate", "upload"]);
+    expect(events).toEqual(["guard D1", "guard KV", "auth", "build", "provision D1", "provision KV", "finalize KV", "finalize D1", "migrate", "upload"]);
+    const d1Access = await options.provision.mock.calls[0][0].getAccess();
+    const kvAccess = await options.provisionKV.mock.calls[0][0].getAccess();
+    expect(d1Access).toBe(options.getAccess.mock.results[0].value);
+    expect(kvAccess).toBe(d1Access);
+    expect(options.getAccess).toHaveBeenCalledOnce();
   });
 
   it("aborts upload on KV failure and avoids schema mutation until bindings are finalized", async () => {
-    for (const failure of ["guard KV", "build", "provision KV", "finalize KV"]) {
+    for (const failure of ["guard KV", "auth", "build", "provision KV", "finalize KV"]) {
       const { options } = scenario(failure);
       await expect(runDeploy(options)).rejects.toThrow(`${failure} failed`);
       expect(options.deploy).not.toHaveBeenCalled();
       expect(options.migrate).not.toHaveBeenCalled();
-      if (["guard KV", "build"].includes(failure)) {
+      if (["guard KV", "auth", "build"].includes(failure)) {
         expect(options.provision).not.toHaveBeenCalled();
         expect(options.provisionKV).not.toHaveBeenCalled();
+      }
+      if (["guard KV", "auth"].includes(failure)) {
+        expect(options.build).not.toHaveBeenCalled();
       }
     }
   });

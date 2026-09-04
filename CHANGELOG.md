@@ -12,6 +12,18 @@ Unreleased.
 
 ### Added
 
+- Deploy authentication preflight — validates Wrangler credentials and account
+  selection before building, including apps without D1/KV. Both provisioners
+  reuse the result; standalone builds remain authentication-free. Failure teaches
+  explicit login or token setup instead of waiting until after the build.
+- Zero-config KV — one `kv: { name }` declaration, read-only production
+  inspection, namespace creation/reuse, and generated local/production `KV`
+  bindings alongside D1. Deploy attaches both bindings before D1 migrations and
+  Worker upload.
+- Request-scoped KV — lazy `req.kv.get`, `put`, `list`, and `delete`, native
+  values, TTLs, metadata, and cursor pages with actionable missing-binding errors.
+  The site caches a public community-feedback snapshot from D1; KV's eventual
+  consistency and the absence of a read-your-writes guarantee are documented.
 - Zero-config D1 — declare one database in `goribu.config.js`; `goribu check`
   reads the production plan without mutation, `goribu deploy` creates or
   reconciles the database and synthesizes the `DB` binding, and development uses

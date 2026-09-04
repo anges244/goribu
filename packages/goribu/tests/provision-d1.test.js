@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import {
-  getCloudflareAccess,
   provisionD1,
   requestCloudflareD1,
 } from "../src/build/provision-d1.js";
+import { getCloudflareAccess } from "../src/build/cloudflare-access.js";
 
 function config(replication) {
   return defineConfig({
@@ -140,7 +140,7 @@ describe("D1 provisioning", () => {
   });
 });
 
-describe("Cloudflare D1 access", () => {
+describe("Cloudflare access and D1 API", () => {
   it("uses Wrangler's token and the unambiguous authenticated account", async () => {
     const runJson = vi
       .fn()
@@ -168,6 +168,32 @@ describe("Cloudflare D1 access", () => {
     await expect(
       getCloudflareAccess({ projectRoot: "/app", runJson, accountId: undefined }),
     ).rejects.toThrow(/more than one Cloudflare account.*CLOUDFLARE_ACCOUNT_ID/);
+  });
+
+  it("honors an explicit account with OAuth, API tokens, and API key credentials", async () => {
+    for (const [credentials, headers] of [
+      [{ type: "oauth", token: "secret" }, { Authorization: "Bearer secret" }],
+      [{ type: "api_token", token: "secret" }, { Authorization: "Bearer secret" }],
+      [{ type: "api_key", key: "secret", email: "user@example.com" }, { "X-Auth-Key": "secret", "X-Auth-Email": "user@example.com" }],
+    ]) {
+      const runJson = vi.fn()
+        .mockResolvedValueOnce(credentials)
+        .mockResolvedValueOnce({ accounts: [{ id: "one" }, { id: "two" }] });
+      await expect(getCloudflareAccess({ projectRoot: "/app", accountId: "two", runJson }))
+        .resolves.toEqual({ accountId: "two", headers });
+    }
+  });
+
+  it("rejects missing accounts, inaccessible account selection, and unsupported credentials", async () => {
+    for (const [credentials, accounts, accountId, message] of [
+      [{ type: "oauth", token: "secret" }, [], undefined, /no Cloudflare accounts.*wrangler login/],
+      [{ type: "oauth", token: "secret" }, [{ id: "one" }], "two", /not available.*Select an accessible account/],
+      [{ type: "oauth", token: "" }, [{ id: "one" }], undefined, /unsupported Cloudflare credentials.*log in again/],
+    ]) {
+      const runJson = vi.fn().mockResolvedValueOnce(credentials).mockResolvedValueOnce({ accounts });
+      await expect(getCloudflareAccess({ projectRoot: "/app", accountId, runJson }))
+        .rejects.toThrow(message);
+    }
   });
 
   it("sends the requested API mutation and fails closed on rejection", async () => {

@@ -8,10 +8,11 @@ import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { provisionKV } from "./provision-kv.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
+import { getCloudflareAccess } from "./cloudflare-access.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
-/** Validate and build locally, provision, attach bindings, migrate, and deploy. */
+/** Validate, authenticate, build, provision, attach bindings, migrate, and deploy. */
 export async function runDeploy(options) {
   const projectRoot = options?.projectRoot;
   if (typeof projectRoot !== "string" || projectRoot.length === 0) {
@@ -39,17 +40,23 @@ export async function runDeploy(options) {
   // `goribu build` has the same protection.
   await guard({ projectRoot, appConfig });
   await (options?.guardKV ?? assertNoDuplicateKVDeclaration)({ projectRoot, appConfig });
+  // Authentication is read-only remote work, not provisioning. Fail before an
+  // expensive build even when the application declares no managed resources.
+  const access = await (options?.getAccess ?? getCloudflareAccess)({ projectRoot });
+  const getAccess = async () => access;
   await build();
 
   const database = await provision({
     projectRoot,
     appConfig,
+    getAccess,
     stdout: options?.stdout ?? process.stdout,
   });
 
   const namespace = await (options?.provisionKV ?? provisionKV)({
     projectRoot,
     appConfig,
+    getAccess,
     stdout: options?.stdout ?? process.stdout,
   });
 

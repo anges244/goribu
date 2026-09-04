@@ -34,10 +34,12 @@ goribu build
 
 ## `goribu deploy`
 
-Build, reconcile the declared D1 database, apply pending production migrations,
-then deploy to Cloudflare with Wrangler. The Worker is uploaded only after the
-schema step succeeds. Wrangler handles authentication, prompting the first time
-it is needed. See [deploy.md](./deploy.md) for authentication and details.
+Check Wrangler credentials and account selection before building, provision
+declared D1/KV resources, apply pending production D1 migrations, then deploy to
+Cloudflare. Authentication failure stops before the build, including for apps
+without resources; log in with Wrangler or configure credentials, then retry.
+Standalone `goribu build` needs no authentication. The Worker is uploaded only
+after the schema step succeeds. See [deploy.md](./deploy.md) for authentication and details.
 
 ```
 goribu deploy
@@ -48,7 +50,7 @@ goribu deploy
 ## `goribu check`
 
 Inspect the production deployment plan without changing resources. Check reports
-the Worker target, declared D1 database and binding, cost warning, and real
+the Worker target, declared D1/KV resources and bindings, cost warnings, and real
 production applied, pending, and drifted migration state.
 
 ```sh

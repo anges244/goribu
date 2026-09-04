@@ -204,6 +204,30 @@ describe("site production hydration", () => {
       await expect(afterNativeWrite.text()).resolves.toContain(
         "Stored through native multipart",
       );
+
+      // The public feed fills KV from D1, then serves the saved snapshot even
+      // while newer feedback exists. The submission page stays read-your-writes.
+      expect(existsSync(join(clientDir, "community.html"))).toBe(false);
+      const feed = await worker.fetch("https://goribu.test/community");
+      expect(feed.status).toBe(200);
+      expect(feed.headers.get("cache-control")).toBe("no-store");
+      expect(await feed.text()).toContain("Stored through native multipart");
+      const cached = await env.KV.get("community-feedback:v1", "json");
+      expect(cached.entries).toHaveLength(2);
+      expect(cached.generatedAt).toEqual(expect.any(String));
+
+      await env.DB.prepare("INSERT INTO feedback (message, created_at) VALUES (?, ?)")
+        .bind("Newer than the saved snapshot", new Date().toISOString()).run();
+      const stillCached = await worker.fetch("https://goribu.test/community");
+      const cachedHtml = await stillCached.text();
+      expect(stillCached.status).toBe(200);
+      expect(cachedHtml).toContain(cached.generatedAt);
+      expect(cachedHtml).not.toContain("Newer than the saved snapshot");
+
+      await env.KV.delete("community-feedback:v1");
+      const refreshed = await worker.fetch("https://goribu.test/community");
+      expect(refreshed.status).toBe(200);
+      expect(await refreshed.text()).toContain("Newer than the saved snapshot");
     } finally {
       await harness.close();
     }

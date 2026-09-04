@@ -25,6 +25,7 @@ function fakeSpawn(drive) {
 }
 
 const resolveBin = () => FAKE_BIN;
+const fakeAccess = async () => ({ accountId: "account", headers: {} });
 
 describe("runWranglerDeploy", () => {
   it("launches the resolved Wrangler binary with deploy in the project root", async () => {
@@ -99,7 +100,7 @@ describe("runWranglerDeploy", () => {
 });
 
 describe("runDeploy", () => {
-  it("guards and builds before provisioning, then finalizes before migrating and deploying", async () => {
+  it("guards and authenticates before building, then provisions, finalizes, migrates, and deploys", async () => {
     const events = [];
     const appConfig = defineConfig({
       name: "app",
@@ -126,6 +127,10 @@ describe("runDeploy", () => {
         build,
         loadConfig: async () => appConfig,
         guard,
+        getAccess: async () => {
+          events.push("auth");
+          return fakeAccess();
+        },
         provision,
         migrate,
         finalize,
@@ -135,6 +140,7 @@ describe("runDeploy", () => {
     ).resolves.toBe(0);
     expect(events).toEqual([
       "guard",
+      "auth",
       "build",
       "provision",
       "finalize",
@@ -173,6 +179,7 @@ describe("runDeploy", () => {
         build: async () => {},
         loadConfig: async () => appConfig,
         guard: async () => {},
+        getAccess: fakeAccess,
         provision: async () => ({ name: "app-db", uuid: "database-id" }),
         migrate: async () => {
           throw migrationError;
@@ -200,6 +207,7 @@ describe("runDeploy", () => {
         build: async () => {},
         loadConfig: async () => appConfig,
         guard: async () => {},
+        getAccess: fakeAccess,
         provision: async () => ({ name: "app-db", uuid: "database-id" }),
         finalize: () => {
           throw new Error("invalid deploy artifact");
@@ -221,11 +229,13 @@ describe("runDeploy", () => {
     const build = vi.fn();
     const provision = vi.fn();
     const deploy = vi.fn();
+    const getAccess = vi.fn(fakeAccess);
 
     await expect(
       runDeploy({
         projectRoot: "/app",
         build,
+        getAccess,
         loadConfig: async () => appConfig,
         guard: async () => {
           throw new Error("duplicate d1_databases");
@@ -235,6 +245,7 @@ describe("runDeploy", () => {
       }),
     ).rejects.toThrow(/duplicate d1_databases/);
     expect(build).not.toHaveBeenCalled();
+    expect(getAccess).not.toHaveBeenCalled();
     expect(provision).not.toHaveBeenCalled();
     expect(deploy).not.toHaveBeenCalled();
 
@@ -246,15 +257,17 @@ describe("runDeploy", () => {
         },
         loadConfig: async () => appConfig,
         guard: async () => {},
+        getAccess,
         provision,
         deploy,
       }),
     ).rejects.toThrow(/build failed/);
+    expect(getAccess).toHaveBeenCalledOnce();
     expect(provision).not.toHaveBeenCalled();
     expect(deploy).not.toHaveBeenCalled();
   });
 
-  it("builds and deploys without resource work when no database is declared", async () => {
+  it("authenticates, builds, and deploys without resource work when no resources are declared", async () => {
     const appConfig = defineConfig({
       name: "app",
       compatibilityDate: "2026-09-03",
@@ -262,10 +275,12 @@ describe("runDeploy", () => {
     const finalize = vi.fn();
     const migrate = vi.fn();
     const deploy = vi.fn(async () => 0);
+    const getAccess = vi.fn(fakeAccess);
 
     await runDeploy({
       projectRoot: "/app",
       build: async () => {},
+      getAccess,
       loadConfig: async () => appConfig,
       provision: async () => null,
       migrate,
@@ -275,6 +290,27 @@ describe("runDeploy", () => {
 
     expect(migrate).not.toHaveBeenCalled();
     expect(finalize).not.toHaveBeenCalled();
+    expect(getAccess).toHaveBeenCalledWith({ projectRoot: "/app" });
     expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app" });
+  });
+
+  it("stops before building or remote mutations when authentication fails, even without resources", async () => {
+    const build = vi.fn();
+    const provision = vi.fn();
+    const provisionKV = vi.fn();
+    const migrate = vi.fn();
+    const deploy = vi.fn();
+    const failure = new Error("[Goribu] Wrangler is not authenticated. Run `wrangler login`.");
+
+    await expect(runDeploy({
+      projectRoot: "/app",
+      loadConfig: async () => defineConfig({ name: "app", compatibilityDate: "2026-09-05" }),
+      getAccess: async () => { throw failure; },
+      build, provision, provisionKV, migrate, deploy,
+    })).rejects.toBe(failure);
+
+    for (const stage of [build, provision, provisionKV, migrate, deploy]) {
+      expect(stage).not.toHaveBeenCalled();
+    }
   });
 });

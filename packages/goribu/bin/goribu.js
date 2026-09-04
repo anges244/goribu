@@ -73,7 +73,7 @@ async function runDev() {
   server.printUrls();
 }
 
-// Build, provision declared resources, apply production migrations, then deploy
+// Authenticate, build, provision resources, apply production migrations, then deploy
 // through Wrangler. The build writes a deploy-redirect at .wrangler/deploy/config.json
 // that points Wrangler at the generated Worker bundle and static assets, so the final
 // upload uses exactly what the build produced. Wrangler owns Cloudflare authentication.

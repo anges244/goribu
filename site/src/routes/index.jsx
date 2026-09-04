@@ -26,6 +26,7 @@ export default function LandingPage() {
           <Link className="button" href="/docs">
             Read the docs
           </Link>
+          {" "}<Link href="/community">Community feedback</Link>
         </p>
       </header>
 
@@ -41,8 +42,8 @@ export default function LandingPage() {
           <h2>Static where it can be</h2>
           <p>
             A route whose first response needs no Worker is built once and served
-            from Static Assets. This whole site proves it: the pages are static,
-            served without invoking the Worker.
+            from Static Assets. This landing page and the docs are static;
+            feedback and the community feed run on the Worker.
           </p>
         </div>
         <div className="pillar">
