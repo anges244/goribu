@@ -132,7 +132,7 @@ describe("goribu build static output (workerd)", () => {
     }
   });
 
-  it("round-trips values through the fixture's synthesized local KV binding", async () => {
+  it("round-trips req.kv values, TTL, metadata, cursors, and deletion in the emitted Worker", async () => {
     const config = JSON.parse(readFileSync(workerConfig, "utf8"));
     expect(config.kv_namespaces).toEqual([
       expect.objectContaining({ binding: "KV", preview_id: "goribu-basic-app-kv" }),
@@ -146,6 +146,31 @@ describe("goribu build static output (workerd)", () => {
       const response = await worker.fetch("https://goribu.test/kv");
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ value: "local namespace proof" });
+
+      const before = Math.floor(Date.now() / 1000);
+      for (const key of ["runtime:a", "runtime:b"]) {
+        const result = await worker.fetch(`https://goribu.test/kv?key=${key}`, {
+          method: "POST", body: JSON.stringify({ key }),
+        });
+        expect(result.status).toBe(200);
+      }
+      const withMetadata = await worker.fetch("https://goribu.test/kv?key=runtime:a&metadata");
+      expect(withMetadata.status).toBe(200);
+      expect(await withMetadata.json()).toMatchObject({ value: { key: "runtime:a" }, metadata: { source: "fixture" } });
+      let page = await (await worker.fetch("https://goribu.test/kv?list&prefix=runtime:")).json();
+      expect(page.keys).toHaveLength(1);
+      expect(page.list_complete).toBe(false);
+      expect(page.keys[0]).toMatchObject({ name: "runtime:a", metadata: { source: "fixture" } });
+      expect(page.keys[0].expiration).toBeGreaterThanOrEqual(before + 120);
+      expect(page.keys[0].expiration).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 120);
+      page = await (await worker.fetch(`https://goribu.test/kv?list&prefix=runtime:&cursor=${encodeURIComponent(page.cursor)}`)).json();
+      expect(page.keys.map((key) => key.name)).toEqual(["runtime:b"]);
+      expect(page.list_complete).toBe(true);
+      const deleted = await worker.fetch("https://goribu.test/kv?key=runtime:a", { method: "DELETE" });
+      expect(deleted.status).toBe(200);
+      expect(await deleted.text()).toBe("Deleted");
+      const missing = await worker.fetch("https://goribu.test/kv?key=runtime:a&metadata");
+      expect(await missing.json()).toMatchObject({ value: null, metadata: null });
     } finally {
       await harness.close();
     }

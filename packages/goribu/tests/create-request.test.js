@@ -44,6 +44,7 @@ describe("createRequest", () => {
       "d1",
       "env",
       "headers",
+      "kv",
       "method",
       "params",
       "path",

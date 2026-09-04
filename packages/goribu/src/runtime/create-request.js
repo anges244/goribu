@@ -1,7 +1,7 @@
 import { createHttpError } from "./http-error.js";
 
-// Ported from the previous version. The D1 facade is prepared by createApp so
-// binding resolution and bookmark ownership remain request-scoped.
+// Ported from the previous version. Resource facades are prepared by createApp
+// so binding resolution and D1 bookmark ownership remain request-scoped.
 const textDecoder = new TextDecoder();
 
 /**
@@ -15,7 +15,7 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function }} [runtime]
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
@@ -42,6 +42,7 @@ export function createRequest(request, params, runtime) {
     env: worker.env,
     cookies: worker.cookies,
     d1: worker.d1,
+    kv: worker.kv,
     waitUntil(promise) {
       assertWaitUntilPromise(promise);
       if (typeof worker.waitUntil !== "function") {
@@ -92,7 +93,7 @@ function assertRuntime(runtime) {
   if (runtime === undefined) return {};
   if (runtime === null || typeof runtime !== "object" || Array.isArray(runtime)) {
     throw new TypeError(
-      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1 facade.",
+      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV facades.",
     );
   }
   if (
@@ -124,6 +125,15 @@ function assertRuntime(runtime) {
   if (runtime.d1 !== undefined && typeof runtime.d1 !== "function") {
     throw new TypeError(
       "[Goribu] createRequest(request, params, runtime) requires runtime.d1 to be the request-scoped D1 facade. Pass createD1RequestController(...).d1 from the application boundary.",
+    );
+  }
+  if (
+    runtime.kv !== undefined &&
+    (runtime.kv === null || typeof runtime.kv !== "object" ||
+      ["get", "put", "list", "delete"].some((method) => typeof runtime.kv[method] !== "function"))
+  ) {
+    throw new TypeError(
+      "[Goribu] createRequest requires runtime.kv to be the request-scoped KV facade. Pass createKV(env) from the application boundary.",
     );
   }
   return runtime;

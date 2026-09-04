@@ -31,6 +31,7 @@ import {
 import { copyProtocolResponseMark } from "./protocol-response.js";
 import { createD1BindingResolver } from "../db/create-d1-binding-resolver.js";
 import { createD1RequestController } from "../db/create-d1-request-controller.js";
+import { createKV } from "./create-kv.js";
 
 const CALLER =
   "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig })";
@@ -48,7 +49,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, body helpers, cookies, D1, Worker bindings, and a bound
+ * params, query, headers, body helpers, cookies, D1, KV, Worker bindings, and a bound
  * waitUntil capability) and returns any res.* intent: res.text(), res.json(),
  * res.redirect(), res.render(props) to stream the route's own page with data, or
  * res.notFound(props) for the _404 page.
@@ -160,6 +161,7 @@ export function createApp(options) {
         waitUntil: ctx.waitUntil.bind(ctx),
         cookies: cookieJar,
         d1: d1Controller.d1,
+        kv: createKV(env),
       };
       let applicationRequest = request;
       let requestKind = "document";
@@ -462,7 +464,7 @@ export function createApp(options) {
 
   // Run one named method handler and preserve its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, body helpers, cookies, D1, Worker bindings, and waitUntil) and the
+  // headers, body helpers, cookies, D1, KV, Worker bindings, and waitUntil) and the
   // response builder.
   async function dispatchHandler(
     match,
