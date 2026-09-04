@@ -72,5 +72,13 @@ function synthesizeWranglerConfig(appConfig) {
     ];
   }
 
+  if (appConfig.kv !== undefined) {
+    config.kv_namespaces = [{
+      binding: "KV",
+      // A stable local store key; the production id arrives only during deploy.
+      preview_id: appConfig.kv.name,
+    }];
+  }
+
   return config;
 }

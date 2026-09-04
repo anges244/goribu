@@ -8,6 +8,7 @@ import { readMigrations, MIGRATIONS_DIRNAME } from "./migrations/read-migrations
 import { readAppliedMigrations } from "./migrations/inspect-applied.js";
 import { planMigrations } from "./migrations/plan-migrations.js";
 import { executeD1 } from "./migrations/wrangler-d1.js";
+import { findDeclaredKVNamespace, listRemoteKVNamespaces } from "./inspect-kv.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -39,6 +40,8 @@ export async function runCheck(options) {
 
   const hasDatabase = appConfig.database !== undefined;
   const remoteDatabases = hasDatabase ? await inspectD1({ projectRoot }) : [];
+  const inspectKV = options?.inspectKV ?? listRemoteKVNamespaces;
+  const remoteNamespaces = appConfig.kv === undefined ? [] : await inspectKV({ projectRoot });
 
   // Read the local migration files whenever a database is declared, so the plan can
   // report pending work even before the database exists. A malformed file fails closed
@@ -56,7 +59,7 @@ export async function runCheck(options) {
   const appliedRows =
     existing === undefined ? [] : await inspectMigrations({ projectRoot, appConfig });
 
-  const plan = createCheckPlan({ appConfig, remoteDatabases, migrations, appliedRows });
+  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations, appliedRows });
 
   stdout.write(formatCheckPlan(plan));
   return plan;
@@ -188,8 +191,8 @@ export function findDeclaredDatabase({ appConfig, remoteDatabases } = {}) {
   return matches[0];
 }
 
-/** Compare one declared D1 resource with the read-only remote inventory. */
-export function createCheckPlan({ appConfig, remoteDatabases, migrations = [], appliedRows = [] } = {}) {
+/** Compare declared resources with the read-only remote inventories. */
+export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations = [], appliedRows = [] } = {}) {
   if (!isApplicationConfig(appConfig)) {
     throw new TypeError(
       "[Goribu] createCheckPlan({ appConfig }) requires the defineConfig() result loaded from goribu.config.js.",
@@ -231,6 +234,24 @@ export function createCheckPlan({ appConfig, remoteDatabases, migrations = [], a
       "D1 reads, writes, and storage can incur usage charges after the account plan's included limits. " +
         `Review current pricing before deploy: ${D1_PRICING_URL}`,
     ];
+  }
+
+  if (appConfig.kv !== undefined) {
+    const existing = findDeclaredKVNamespace({ appConfig, remoteNamespaces });
+    resources.push(Object.freeze({
+      kind: "KV namespace",
+      name: appConfig.kv.name,
+      state: existing === undefined ? "missing" : "existing",
+      action: existing === undefined ? "create" : "none",
+      id: existing?.id,
+    }));
+    bindings.push(Object.freeze({
+      name: "KV", resource: `KV namespace ${JSON.stringify(appConfig.kv.name)}`,
+    }));
+    costWarnings.push(
+      "KV reads, writes, deletes, lists, and storage can incur usage charges after the account plan's included limits. " +
+      "Review current pricing before deploy: https://developers.cloudflare.com/kv/platform/pricing/",
+    );
   }
 
   return Object.freeze({

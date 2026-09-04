@@ -9,6 +9,7 @@ import {
 } from "./create-client-boundary-plugin.js";
 import { createClientPageManifestPlugin } from "./create-client-page-manifest-plugin.js";
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
+import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { writeWranglerConfig } from "./generate-wrangler-config.js";
 import { loadApplicationConfig } from "./load-application-config.js";
@@ -77,6 +78,7 @@ function createGoribuPlugin() {
       writeWorkerEntry({ projectRoot: root, mode });
       const appConfig = await loadApplicationConfig({ projectRoot: root });
       await assertNoDuplicateD1Declaration({ projectRoot: root, appConfig });
+      await assertNoDuplicateKVDeclaration({ projectRoot: root, appConfig });
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
         envPrefix: PUBLIC_ENV_PREFIX,

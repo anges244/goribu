@@ -132,6 +132,25 @@ describe("goribu build static output (workerd)", () => {
     }
   });
 
+  it("round-trips values through the fixture's synthesized local KV binding", async () => {
+    const config = JSON.parse(readFileSync(workerConfig, "utf8"));
+    expect(config.kv_namespaces).toEqual([
+      expect.objectContaining({ binding: "KV", preview_id: "goribu-basic-app-kv" }),
+    ]);
+    const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
+    await harness.listen();
+    try {
+      const worker = harness.getWorker();
+      const stored = await worker.fetch("https://goribu.test/kv", { method: "POST", body: "local namespace proof" });
+      expect(stored.status).toBe(200);
+      const response = await worker.fetch("https://goribu.test/kv");
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ value: "local namespace proof" });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("uses the production _500 boundary and preserves safe HttpError responses", async () => {
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();

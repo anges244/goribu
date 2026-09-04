@@ -5,6 +5,9 @@ import { loadApplicationConfig } from "./load-application-config.js";
 import { runMigrate } from "./migrations/run-migrate.js";
 import { provisionD1 } from "./provision-d1.js";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
+import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
+import { provisionKV } from "./provision-kv.js";
+import { finalizeKVBinding } from "./finalize-kv-binding.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
@@ -35,6 +38,7 @@ export async function runDeploy(options) {
   // remote mutation. The Vite plugin repeats the ownership guard so standalone
   // `goribu build` has the same protection.
   await guard({ projectRoot, appConfig });
+  await (options?.guardKV ?? assertNoDuplicateKVDeclaration)({ projectRoot, appConfig });
   await build();
 
   const database = await provision({
@@ -42,6 +46,16 @@ export async function runDeploy(options) {
     appConfig,
     stdout: options?.stdout ?? process.stdout,
   });
+
+  const namespace = await (options?.provisionKV ?? provisionKV)({
+    projectRoot,
+    appConfig,
+    stdout: options?.stdout ?? process.stdout,
+  });
+
+  if (namespace !== null) {
+    (options?.finalizeKV ?? finalizeKVBinding)({ projectRoot, appConfig, namespace });
+  }
 
   if (database !== null) {
     // Finish the local deploy artifact as soon as provisioning provides the UUID. A malformed

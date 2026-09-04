@@ -22,6 +22,7 @@ beforeAll(async () => {
     name: "local-d1-app",
     compatibilityDate: "2026-09-03",
     database: { type: "d1", name: "local-d1-app-db" },
+    kv: { name: "local-d1-app-kv" },
   });
   const { outputFile } = writeWranglerConfig({ projectRoot: root, appConfig });
   const config = JSON.parse(readFileSync(outputFile, "utf8"));
@@ -62,8 +63,9 @@ beforeAll(async () => {
     export default {
       async fetch(request, env, ctx) {
         if (new URL(request.url).pathname === "/binding") {
+          await env.KV.put("proof", "local");
           await env.DB.exec("CREATE TABLE IF NOT EXISTS direct_proof (value TEXT)");
-          await env.DB.prepare("INSERT INTO direct_proof (value) VALUES (?)").bind("local").run();
+          await env.DB.prepare("INSERT INTO direct_proof (value) VALUES (?)").bind(await env.KV.get("proof")).run();
           const row = await env.DB.prepare("SELECT value FROM direct_proof LIMIT 1").first();
           return Response.json(row);
         }
@@ -82,7 +84,7 @@ afterAll(async () => {
 });
 
 describe("local D1 binding", () => {
-  it("executes SQL through the synthesized DB binding", async () => {
+  it("reads local KV and executes SQL through both synthesized bindings", async () => {
     const response = await worker.fetch("https://goribu.test/binding");
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ value: "local" });

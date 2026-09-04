@@ -53,6 +53,18 @@ afterEach(() => {
 });
 
 describe("goribu()", () => {
+  it("rejects duplicate KV ownership during both development and production setup", async () => {
+    for (const command of ["serve", "build"]) {
+      const root = makeProject();
+      writeMinimalProject(root);
+      writeFileSync(join(root, "goribu.config.js"),
+        `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
+        'export default defineConfig({ name: "test-app", compatibilityDate: "2026-09-04", kv: { name: "test-kv" } });\n');
+      writeFileSync(join(root, "wrangler.json"), '{"kv_namespaces":[]}');
+      await expect(goribuPlugin().config({ root }, { command })).rejects.toThrow(/Remove the kv_namespaces declaration/);
+    }
+  });
+
   it("rejects options with a teaching error", () => {
     expect(() => goribu({})).toThrow(/does not accept options/);
   });

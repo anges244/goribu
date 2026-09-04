@@ -125,7 +125,7 @@ export async function getCloudflareAccess(options) {
   const accounts = identity?.accounts;
   if (!Array.isArray(accounts) || accounts.length === 0) {
     throw new Error(
-      "[Goribu] Wrangler returned no Cloudflare accounts for D1 provisioning. Run `wrangler login`, confirm account access, then rerun `goribu deploy`.",
+      "[Goribu] Wrangler returned no Cloudflare accounts for resource provisioning. Run `wrangler login`, confirm account access, then rerun `goribu deploy`.",
     );
   }
   const requestedAccountId = Object.prototype.hasOwnProperty.call(
@@ -147,13 +147,13 @@ export async function getCloudflareAccess(options) {
     [account] = accounts;
   } else {
     throw new Error(
-      "[Goribu] Wrangler's credentials can access more than one Cloudflare account, so Goribu cannot safely choose where to provision D1. " +
+      "[Goribu] Wrangler's credentials can access more than one Cloudflare account, so Goribu cannot safely choose where to provision resources. " +
         "Set CLOUDFLARE_ACCOUNT_ID to the intended account and rerun `goribu deploy`.",
     );
   }
   if (typeof account?.id !== "string" || account.id.length === 0) {
     throw new Error(
-      "[Goribu] Wrangler returned an invalid Cloudflare account for D1 provisioning. Update Wrangler, log in again, and rerun `goribu deploy`.",
+      "[Goribu] Wrangler returned an invalid Cloudflare account for resource provisioning. Update Wrangler, log in again, and rerun `goribu deploy`.",
     );
   }
 
@@ -232,7 +232,7 @@ async function runWranglerJson(options) {
     wranglerBin = resolveBin();
   } catch (cause) {
     throw new Error(
-      "[Goribu] Could not find Wrangler for D1 provisioning. Install dependencies (for example `pnpm install`) and rerun `goribu deploy`.",
+      "[Goribu] Could not find Wrangler for resource provisioning. Install dependencies (for example `pnpm install`) and rerun `goribu deploy`.",
       { cause },
     );
   }
@@ -270,7 +270,7 @@ async function runWranglerJson(options) {
 
 function wranglerProvisionError(description, cause) {
   return new Error(
-    `[Goribu] Could not ${description} for D1 provisioning. Read the Wrangler error above, repair authentication, then rerun \`goribu deploy\`.`,
+    `[Goribu] Could not ${description} for resource provisioning. Read the Wrangler error above, repair authentication, then rerun \`goribu deploy\`.`,
     { cause },
   );
 }
@@ -296,7 +296,7 @@ function authHeaders(credentials) {
     });
   }
   throw new Error(
-    "[Goribu] Wrangler returned unsupported Cloudflare credentials for D1 provisioning. Update Wrangler, log in again, and rerun `goribu deploy`.",
+    "[Goribu] Wrangler returned unsupported Cloudflare credentials for resource provisioning. Update Wrangler, log in again, and rerun `goribu deploy`.",
   );
 }
 

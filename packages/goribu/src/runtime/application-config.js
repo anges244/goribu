@@ -7,6 +7,7 @@ const CONFIG_FIELDS = new Set([
   "compatibilityFlags",
   "responseHeaders",
   "database",
+  "kv",
 ]);
 const D1_DATABASE_FIELDS = new Set(["type", "name", "replication"]);
 
@@ -21,7 +22,7 @@ const DATABASE_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]{0,62}$/;
  *
  * The returned value is a frozen snapshot. The config carries only Node-loadable
  * data: the deploy fields Wrangler synthesis needs today, and runtime data fields
- * (responseHeaders, database) added to this same validator as later blocks land
+ * (responseHeaders, database, kv) added to this same validator as later blocks land
  * their consumers. Render modules never live here — a `Document` field is rejected
  * with a pointer to `src/routes/_document.jsx` (see docs/decisions.md).
  */
@@ -41,7 +42,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, responseHeaders, and database fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, responseHeaders, database, and kv fields.",
     );
   }
 
@@ -58,7 +59,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, responseHeaders, and database.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, responseHeaders, database, and kv.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -92,10 +93,40 @@ export function defineConfig(config) {
   if (normalized.database !== undefined) {
     normalized.database = assertD1DatabaseConfig(normalized.database);
   }
+  if (normalized.kv !== undefined) {
+    normalized.kv = assertKVConfig(normalized.kv);
+  }
 
   const result = Object.freeze(normalized);
   CONFIG_BRAND.add(result);
   return result;
+}
+
+function assertKVConfig(kv) {
+  if (
+    kv === null || typeof kv !== "object" ||
+    Object.getPrototypeOf(kv) !== Object.prototype ||
+    Object.getOwnPropertySymbols(kv).length > 0
+  ) {
+    throw new TypeError(
+      '[Goribu] Application configuration field kv must be a plain object containing only name. Set kv: { name: "your-app-kv" } in goribu.config.js.',
+    );
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(kv);
+  for (const [field, descriptor] of Object.entries(descriptors)) {
+    if (field !== "name" || !("value" in descriptor) || descriptor.enumerable !== true) {
+      throw new TypeError(
+        `[Goribu] Application configuration field kv.${field} is unsupported or is not an ordinary enumerable value. Use only kv: { name: "your-app-kv" }; Goribu owns the binding and namespace id.`,
+      );
+    }
+  }
+  const name = descriptors.name?.value;
+  if (typeof name !== "string" || !/^[a-z0-9][a-z0-9_-]{0,62}$/.test(name)) {
+    throw new TypeError(
+      "[Goribu] Application configuration field kv.name must start with a lowercase letter or digit and contain only lowercase letters, digits, hyphens, or underscores, up to 63 characters. Rename the namespace in goribu.config.js.",
+    );
+  }
+  return Object.freeze({ name });
 }
 
 /** Validate the one D1 declaration this block currently supports. */
