@@ -337,8 +337,8 @@ export function normalizeRemoteD1Databases(databases) {
 
 /**
  * Render the production migration status: what is defined, what production has applied,
- * what remains, and any drift. The status always states that deploy will not apply the
- * pending work — the one production risk `goribu check` exists to expose.
+ * what remains, and any drift. The status makes deploy's schema ordering explicit: pending
+ * migrations run before a new Worker is uploaded.
  */
 function formatMigrations(migrations) {
   if (!migrations.declared) {
@@ -353,12 +353,12 @@ function formatMigrations(migrations) {
     if (migrations.defined > 0) {
       lines.push(
         "  Applied: unknown (the database does not exist yet)",
-        `  Pending: ${migrations.pending.length} (all — goribu deploy creates the database but does not apply migrations)`,
+        `  Pending: ${migrations.pending.length} (all)`,
         ...migrations.pending.map((name) => `    - ${name}`),
       );
     }
     lines.push(
-      "  goribu deploy does not apply migrations. Once the database exists, apply them with `goribu migrate --remote`.",
+      "  goribu deploy will create the database, apply pending migrations, and then upload the Worker.",
     );
     return lines;
   }
@@ -374,11 +374,13 @@ function formatMigrations(migrations) {
     lines.push(`  Drift (${migrations.drift.length}):`);
     lines.push(...migrations.drift.map((entry) => `    - ${entry.name}: ${entry.reason}`));
     lines.push("  Resolve drift before migrating: restore the original files or add a new forward migration.");
+    lines.push("  goribu deploy will refuse this drift before uploading the Worker.");
+    return lines;
   }
-  // Always stated when a database is declared: deploy will not apply migrations, whatever
-  // the inventory. This is the one production risk check exists to expose.
+  // Always state deploy's ordering when a database is declared, even when there is no
+  // pending work. The old Worker can remain live while migrations and upload complete.
   lines.push(
-    "  goribu deploy does not apply migrations. Apply pending migrations to production with `goribu migrate --remote`.",
+    "  goribu deploy will verify migration history and apply pending migrations before uploading the Worker.",
   );
   return lines;
 }

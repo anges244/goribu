@@ -225,8 +225,9 @@ describe("goribu check — production migration status", () => {
     expect(output).toContain("Applied: 1");
     expect(output).toContain("Pending: 1");
     expect(output).toContain("- 0002_b");
-    expect(output).toContain("goribu deploy does not apply migrations.");
-    expect(output).toContain("`goribu migrate --remote`");
+    expect(output).toContain(
+      "goribu deploy will verify migration history and apply pending migrations before uploading the Worker.",
+    );
   });
 
   it("reports drift as information without throwing", () => {
@@ -242,6 +243,8 @@ describe("goribu check — production migration status", () => {
     expect(output).toContain("Drift (1):");
     expect(output).toContain("- 0001_a: modified");
     expect(output).toContain("Resolve drift before migrating");
+    expect(output).toContain("goribu deploy will refuse this drift before uploading the Worker.");
+    expect(output).not.toContain("apply pending migrations before uploading");
   });
 
   it("treats every migration as pending when the database does not exist yet", () => {
@@ -255,11 +258,10 @@ describe("goribu check — production migration status", () => {
     expect(plan.migrations).toMatchObject({ databaseExists: false, pending: ["0001_a", "0002_b"] });
     const output = formatCheckPlan(plan);
     expect(output).toContain("Applied: unknown (the database does not exist yet)");
+    expect(output).toContain("Pending: 2 (all)");
     expect(output).toContain(
-      "Pending: 2 (all — goribu deploy creates the database but does not apply migrations)",
+      "goribu deploy will create the database, apply pending migrations, and then upload the Worker.",
     );
-    expect(output).toContain("goribu deploy does not apply migrations.");
-    expect(output).toContain("Once the database exists, apply them with `goribu migrate --remote`");
   });
 
   it("reads none when a database is declared but no migration files exist", () => {
@@ -283,6 +285,7 @@ describe("goribu check — production migration status", () => {
     expect(output).toContain("Drift (1):");
     expect(output).toContain("- 0001_a: missing");
     expect(output).toContain("Resolve drift before migrating");
+    expect(output).toContain("goribu deploy will refuse this drift before uploading the Worker.");
   });
 
   it("states the deploy/migrate guidance even when production is fully up to date", () => {
@@ -297,7 +300,7 @@ describe("goribu check — production migration status", () => {
 
     expect(output).toContain("Pending: none");
     expect(output).toContain(
-      "goribu deploy does not apply migrations. Apply pending migrations to production with `goribu migrate --remote`.",
+      "goribu deploy will verify migration history and apply pending migrations before uploading the Worker.",
     );
   });
 

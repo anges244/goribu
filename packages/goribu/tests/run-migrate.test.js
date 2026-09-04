@@ -80,6 +80,21 @@ describe("runMigrate", () => {
     );
   });
 
+  it("attributes every Wrangler operation to the invoking command", async () => {
+    migration("0001_first", "CREATE TABLE a (x);");
+    const execute = fakeExecute();
+
+    await runMigrate({
+      projectRoot: root,
+      loadConfig,
+      execute,
+      stdout: capture(),
+      errorLabel: "goribu deploy",
+    });
+
+    expect(execute.calls.every((call) => call.errorLabel === "goribu deploy")).toBe(true);
+  });
+
   it("does nothing and reports when already up to date", async () => {
     migration("0001_first", "CREATE TABLE a (x);");
     const [applied] = readMigrations({ migrationsDir: join(root, "migrations") });

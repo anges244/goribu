@@ -128,7 +128,6 @@ export async function POST(req, res) {
     return res.render({ message, preview: true, entries });
   }
 
-  await ensureSchema(req.d1);
   await req.d1`
     INSERT INTO feedback (message, created_at)
     VALUES (${message}, ${new Date().toISOString()})
@@ -142,23 +141,10 @@ function readField(body, name) {
 }
 
 async function loadRecentFeedback(d1) {
-  await ensureSchema(d1);
   return d1`
     SELECT id, message, created_at AS createdAt
     FROM feedback
     ORDER BY id DESC
     LIMIT 10
   `.all();
-}
-
-async function ensureSchema(d1) {
-  // Pre-migration interim: Slice 2 will adopt this table through the migration
-  // ledger. Until then, idempotent DDL lets the first real D1 path own its schema.
-  await d1`
-    CREATE TABLE IF NOT EXISTS feedback (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      message TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    )
-  `.run();
 }

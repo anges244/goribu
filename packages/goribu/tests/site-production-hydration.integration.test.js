@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readMigrations } from "../src/build/migrations/read-migrations.js";
 
 const cliPath = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
 const siteDir = fileURLToPath(new URL("../../../site", import.meta.url));
@@ -82,6 +83,8 @@ describe("site production hydration", () => {
     for (const [page, title] of [
       ["navigation", "Navigation"],
       ["forms", "Forms"],
+      ["d1", "D1"],
+      ["migrations", "Migrations"],
       ["metadata", "Metadata &amp; Document"],
     ]) {
       const file = join(clientDir, "docs", `${page}.html`);
@@ -103,6 +106,14 @@ describe("site production hydration", () => {
     await harness.listen();
     const worker = harness.getWorker();
     try {
+      // Production routes no longer bootstrap schema during requests. Apply the site's
+      // real migration to the otherwise-empty test binding before exercising /feedback.
+      const [migration] = readMigrations({
+        migrationsDir: join(siteDir, "migrations"),
+      });
+      const env = await worker.getEnv();
+      await env.DB.prepare(migration.upSql).run();
+
       const response = await worker.fetch("https://goribu.test/feedback");
       const html = await response.text();
 

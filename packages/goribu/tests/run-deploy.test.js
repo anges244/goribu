@@ -99,7 +99,7 @@ describe("runWranglerDeploy", () => {
 });
 
 describe("runDeploy", () => {
-  it("guards and builds before provisioning, then finalizes and deploys", async () => {
+  it("guards and builds before provisioning, then finalizes before migrating and deploying", async () => {
     const events = [];
     const appConfig = defineConfig({
       name: "app",
@@ -113,6 +113,7 @@ describe("runDeploy", () => {
       return database;
     });
     const build = vi.fn(async () => events.push("build"));
+    const migrate = vi.fn(async () => events.push("migrate"));
     const finalize = vi.fn(() => events.push("finalize"));
     const deploy = vi.fn(async () => {
       events.push("deploy");
@@ -126,18 +127,89 @@ describe("runDeploy", () => {
         loadConfig: async () => appConfig,
         guard,
         provision,
+        migrate,
         finalize,
         deploy,
         stdout: { write() {} },
       }),
     ).resolves.toBe(0);
-    expect(events).toEqual(["guard", "build", "provision", "finalize", "deploy"]);
+    expect(events).toEqual([
+      "guard",
+      "build",
+      "provision",
+      "finalize",
+      "migrate",
+      "deploy",
+    ]);
     expect(guard).toHaveBeenCalledWith({ projectRoot: "/app", appConfig });
+    expect(migrate).toHaveBeenCalledWith({
+      projectRoot: "/app",
+      target: "remote",
+      loadConfig: expect.any(Function),
+      errorLabel: "goribu deploy",
+      stdout: expect.any(Object),
+    });
+    await expect(migrate.mock.calls[0][0].loadConfig()).resolves.toBe(appConfig);
     expect(finalize).toHaveBeenCalledWith({
       projectRoot: "/app",
       appConfig,
       database,
     });
+  });
+
+  it("does not upload the Worker when a production migration fails", async () => {
+    const appConfig = defineConfig({
+      name: "app",
+      compatibilityDate: "2026-09-03",
+      database: { type: "d1", name: "app-db" },
+    });
+    const migrationError = new Error("migration failed");
+    const finalize = vi.fn();
+    const deploy = vi.fn();
+
+    await expect(
+      runDeploy({
+        projectRoot: "/app",
+        build: async () => {},
+        loadConfig: async () => appConfig,
+        guard: async () => {},
+        provision: async () => ({ name: "app-db", uuid: "database-id" }),
+        migrate: async () => {
+          throw migrationError;
+        },
+        finalize,
+        deploy,
+      }),
+    ).rejects.toBe(migrationError);
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(deploy).not.toHaveBeenCalled();
+  });
+
+  it("does not migrate or upload when the built binding cannot be finalized", async () => {
+    const appConfig = defineConfig({
+      name: "app",
+      compatibilityDate: "2026-09-03",
+      database: { type: "d1", name: "app-db" },
+    });
+    const migrate = vi.fn();
+    const deploy = vi.fn();
+
+    await expect(
+      runDeploy({
+        projectRoot: "/app",
+        build: async () => {},
+        loadConfig: async () => appConfig,
+        guard: async () => {},
+        provision: async () => ({ name: "app-db", uuid: "database-id" }),
+        finalize: () => {
+          throw new Error("invalid deploy artifact");
+        },
+        migrate,
+        deploy,
+      }),
+    ).rejects.toThrow(/invalid deploy artifact/);
+    expect(migrate).not.toHaveBeenCalled();
+    expect(deploy).not.toHaveBeenCalled();
   });
 
   it("does not mutate remote state when local validation or build fails", async () => {
@@ -188,6 +260,7 @@ describe("runDeploy", () => {
       compatibilityDate: "2026-09-03",
     });
     const finalize = vi.fn();
+    const migrate = vi.fn();
     const deploy = vi.fn(async () => 0);
 
     await runDeploy({
@@ -195,10 +268,12 @@ describe("runDeploy", () => {
       build: async () => {},
       loadConfig: async () => appConfig,
       provision: async () => null,
+      migrate,
       finalize,
       deploy,
     });
 
+    expect(migrate).not.toHaveBeenCalled();
     expect(finalize).not.toHaveBeenCalled();
     expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app" });
   });

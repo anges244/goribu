@@ -20,7 +20,7 @@ const CREATE_TRACKING_TABLE =
  * one Wrangler batch, so a failed migration records nothing and is safe to retry. The
  * command refuses to touch the database while any drift exists.
  *
- * @param {{ projectRoot: string, target?: "local" | "remote", stdout?: { write(text: string): void }, loadConfig?: Function, execute?: Function }} options
+ * @param {{ projectRoot: string, target?: "local" | "remote", stdout?: { write(text: string): void }, loadConfig?: Function, execute?: Function, errorLabel?: string }} options
  */
 export async function runMigrate(options) {
   const target = options?.target ?? "local";
@@ -36,6 +36,7 @@ export async function runMigrate(options) {
     database: context.database,
     persistTo: context.persistTo,
     target,
+    ...(options?.errorLabel === undefined ? {} : { errorLabel: options.errorLabel }),
   };
 
   const migrations = readMigrations({ migrationsDir: context.migrationsDir });

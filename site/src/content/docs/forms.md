@@ -82,4 +82,4 @@ document load rather than partial state.
 The site's [feedback page](/feedback) exercises validation, same-page preview,
 cookie transport, and redirect navigation.
 
-**Next:** [Metadata & Document](/docs/metadata).
+**Next:** [D1](/docs/d1).

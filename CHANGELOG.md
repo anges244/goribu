@@ -12,6 +12,18 @@ Unreleased.
 
 ### Added
 
+- Zero-config D1 — declare one database in `goribu.config.js`; `goribu check`
+  reads the production plan without mutation, `goribu deploy` creates or
+  reconciles the database and synthesizes the `DB` binding, and development uses
+  a matching local database without an author-owned Wrangler file.
+- Request-scoped D1 — lazy `req.d1` tagged queries, terminal result methods,
+  atomic batches, normalized failures, primary/public freshness modes, and
+  replica bookmark cookies that carry read-your-writes across redirects.
+- D1 migrations — one numbered SQL shape and tracking table, local-by-default
+  `migrate`, `migrate:new`, `migrate:status`, one-step `migrate:down`, and
+  local-only `migrate:seed`; production status is included in `goribu check`,
+  deploy applies pending files before Worker upload, drift fails closed for
+  mutations, and per-file SQL is batched with its ledger change.
 - Client hydration — every route ships an audited browser graph, hydrates the
   fixed `#root` from escaped inert route/props data, and resolves production
   entries, route chunks, module preloads, and CSS by content-hashed manifest.

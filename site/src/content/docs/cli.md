@@ -1,6 +1,6 @@
 ---
 title: The CLI
-description: dev, build, and deploy — the three commands.
+description: Develop, build, inspect, deploy, and migrate from one front door.
 ---
 
 The CLI is Goribu's front door. Run it from the application directory (where
@@ -37,13 +37,43 @@ goribu build
 
 ## `goribu deploy`
 
-Build, then deploy to Cloudflare with Wrangler. The build output — the Worker and
-its static assets — is uploaded as-is. Wrangler handles authentication, prompting
-the first time it is needed. See [Deploying](/docs/deploy) for details.
+Build, reconcile D1, apply pending production migrations, then deploy to
+Cloudflare with Wrangler. The Worker is uploaded only after the schema step
+succeeds. See [Deploying](/docs/deploy) for details.
 
 ```
 goribu deploy
 ```
+
+## `goribu check`
+
+Read the production deployment plan without changing resources. It reports the
+Worker target, D1 resource and binding, cost warning, and real production
+migration status.
+
+```sh
+goribu check
+```
+
+## Migration commands
+
+Local D1 is the default; `--remote` selects production:
+
+```sh
+goribu migrate
+goribu migrate --remote
+goribu migrate:status
+goribu migrate:status --remote
+goribu migrate:down
+goribu migrate:down --remote
+goribu migrate:new create posts
+goribu migrate:seed
+```
+
+Seed is local-only. Deploy applies pending production migrations before Worker
+upload; `goribu migrate --remote` can advance a compatible schema earlier. See
+[Migrations](/docs/migrations) for the file format, drift behavior, and safe
+production order.
 
 ## Exit codes
 

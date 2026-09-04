@@ -34,16 +34,50 @@ goribu build
 
 ## `goribu deploy`
 
-Build, then deploy to Cloudflare with Wrangler. The build output — the Worker and
-its static assets — is uploaded as-is. Wrangler handles authentication, prompting
-the first time it is needed. See [deploy.md](./deploy.md) for authentication and
-details.
+Build, reconcile the declared D1 database, apply pending production migrations,
+then deploy to Cloudflare with Wrangler. The Worker is uploaded only after the
+schema step succeeds. Wrangler handles authentication, prompting the first time
+it is needed. See [deploy.md](./deploy.md) for authentication and details.
 
 ```
 goribu deploy
 ```
 
 `goribu deploy` takes no arguments.
+
+## `goribu check`
+
+Inspect the production deployment plan without changing resources. Check reports
+the Worker target, declared D1 database and binding, cost warning, and real
+production applied, pending, and drifted migration state.
+
+```sh
+goribu check
+```
+
+`goribu check` takes no arguments. Its migration section states whether deploy
+will create the database and which pending files it will apply before uploading
+the Worker.
+
+## Migration commands
+
+Migration commands target local D1 unless `--remote` is passed:
+
+```sh
+goribu migrate                         # apply pending locally
+goribu migrate --remote                # apply pending in production
+goribu migrate:status                  # inspect local status
+goribu migrate:status --remote         # inspect production status
+goribu migrate:down                    # roll back one local migration
+goribu migrate:down --remote           # roll back one production migration
+goribu migrate:new create posts        # scaffold the next migration
+goribu migrate:seed                    # run migrations/seed.sql locally
+```
+
+`migrate:seed` is local-only and rejects `--remote` before SQL runs. See
+[migrations.md](./migrations.md) for file naming, drift, rollback safety, and
+deploy ordering. `goribu migrate --remote` remains useful when an expand
+migration should land before the corresponding Worker deploy.
 
 ## Exit codes
 

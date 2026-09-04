@@ -1,0 +1,169 @@
+# Migrations
+
+Goribu keeps D1 schema history in SQL files under `migrations/`. Migration
+commands run against the local development database by default. Add `--remote`
+only when you deliberately intend to inspect or change production. `goribu
+deploy` applies pending production migrations after provisioning D1 and before
+uploading the new Worker.
+
+## Create a migration
+
+Scaffold the next numbered file from the application directory:
+
+```sh
+goribu migrate:new create posts
+```
+
+This creates `migrations/0001_create-posts.sql`:
+
+```sql
+-- create-posts
+-- Write the forward SQL under migrate:up. The migrate:down section is optional;
+-- leave it empty when the change cannot be honestly reversed.
+
+-- migrate:up
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- migrate:down
+DROP TABLE posts;
+```
+
+A filename is a four-digit sequence, an underscore, and a lowercase
+hyphen-separated slug. Every file needs exactly one `-- migrate:up` marker
+followed by exactly one `-- migrate:down` marker. The down section may be empty;
+the marker may not be omitted.
+
+Migration files are ordered history. Once a migration has run anywhere, do not
+edit, delete, or insert an earlier-numbered file. Create a new forward migration
+for the correction.
+
+## Apply migrations
+
+Apply every pending migration to local D1:
+
+```sh
+goribu migrate
+```
+
+Apply pending migrations to production ahead of a deploy when you deliberately
+want to advance a backward-compatible schema first:
+
+```sh
+goribu migrate --remote
+```
+
+Goribu creates one `_goribu_migrations` tracking table and records each applied
+filename with its checksum. A migration's up SQL and tracking row run in one D1
+batch: if any statement fails, its schema changes and ledger insert are rolled
+back together. Each migration is its own batch; a later migration failing does
+not undo earlier migrations that completed successfully.
+
+An empty up section is refused before D1 is touched. Filling in an already
+recorded empty scaffold later would change its checksum and make history
+untrustworthy.
+
+## Inspect status
+
+Inspect local status without changing the tracking table:
+
+```sh
+goribu migrate:status
+```
+
+Inspect production:
+
+```sh
+goribu migrate:status --remote
+```
+
+The command reports applied, pending, and drifted migrations. It first checks
+whether `_goribu_migrations` exists; an absent table means nothing has been
+applied and is not created as a side effect.
+
+`goribu check` includes the same production status in its read-only deployment
+plan. If the database does not exist yet, check reports every local migration as
+pending and explains that deploy will create the database, apply those files,
+and then upload the Worker.
+
+Drift means the files can no longer prove the history D1 recorded:
+
+- **modified** — an applied file's checksum changed;
+- **missing** — a recorded migration file was deleted;
+- **out-of-order** — a pending file is sequenced before an applied file.
+
+Status and check report drift as information. `migrate` and `migrate:down` refuse
+to mutate until the original files are restored from version control or a new
+forward migration is used instead.
+
+## Roll back one migration
+
+Roll back exactly the last applied local migration:
+
+```sh
+goribu migrate:down
+```
+
+Use `goribu migrate:down --remote` only for a deliberate production rollback.
+The down SQL and ledger deletion run in one D1 batch, so a failed rollback leaves
+both the schema and tracking row intact.
+
+`down` does not mean a change is reversible. If the last migration has an empty
+down section, Goribu refuses to delete its ledger row and tells you to write a
+new forward migration. Even when down SQL exists, it may discard data. Read it
+before running it; Goribu does not infer whether a rollback is safe.
+
+## Seed local data
+
+Put repeatable development or test data in `migrations/seed.sql`, then run:
+
+```sh
+goribu migrate:seed
+```
+
+The seed file is executed against local D1 and never enters the migration
+ledger. Write it so running it more than once has the result you intend. Seeds
+are not production data changes: `migrate:seed --remote` is rejected at both the
+CLI and runner boundaries, before configuration loads or SQL runs.
+
+## Deploy ordering is not a transaction
+
+There is no atomic boundary across a Worker deployment and a D1 migration.
+`goribu deploy` orders the operations safely—build, provision D1, verify and
+apply migrations, then upload—but Cloudflare cannot commit the schema and Worker
+version as one unit. The previously deployed Worker continues serving while the
+migrations and upload run.
+
+If a migration fails, Goribu does not upload the new Worker. Each completed
+migration file is still durable because files are separate D1 batches, and a
+database created earlier in the deploy remains available for retry. Fix the SQL
+or history and rerun `goribu deploy`.
+
+For an existing production database, use expand and contract:
+
+1. Add an **expand** migration that is compatible with the currently deployed
+   Worker—for example, add a nullable column or a new table. `goribu deploy`
+   applies it before uploading code that uses the expanded shape. You may instead
+   run `goribu migrate --remote` earlier when you want time between those steps.
+2. Let the deployed code use the expanded schema while remaining compatible
+   with the old representation during the rollout.
+3. In a later deploy, stop reading or writing the old column or table.
+4. Only then add a **contract** migration that removes the old shape; the next
+   deploy applies it before uploading that release.
+
+Do not commit an expand and its destructive contract migration as simultaneously
+pending files: deploy and `goribu migrate` both apply every pending migration in
+order.
+
+For the first deployment of a database-backed app, one `goribu deploy` creates
+the missing database, applies its initial migration, and only then uploads the
+Worker. There is no schema-missing Worker window.
+
+There is deliberately no `goribu deploy --no-migrations` flag. When you need
+full timing control, run `goribu migrate --remote` first; deploy still verifies
+history before uploading and reports that it is already up to date. A bypass
+would allow code to go live with known pending schema and would weaken the safe
+default without enabling a workflow the explicit command cannot express.

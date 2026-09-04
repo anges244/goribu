@@ -2,12 +2,13 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { finalizeD1Binding } from "./finalize-d1-binding.js";
 import { loadApplicationConfig } from "./load-application-config.js";
+import { runMigrate } from "./migrations/run-migrate.js";
 import { provisionD1 } from "./provision-d1.js";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
-/** Validate and build locally, provision, attach concrete bindings, and deploy. */
+/** Validate and build locally, provision, attach bindings, migrate, and deploy. */
 export async function runDeploy(options) {
   const projectRoot = options?.projectRoot;
   if (typeof projectRoot !== "string" || projectRoot.length === 0) {
@@ -25,6 +26,7 @@ export async function runDeploy(options) {
   const loadConfig = options?.loadConfig ?? loadApplicationConfig;
   const guard = options?.guard ?? assertNoDuplicateD1Declaration;
   const provision = options?.provision ?? provisionD1;
+  const migrate = options?.migrate ?? runMigrate;
   const finalize = options?.finalize ?? finalizeD1Binding;
   const deploy = options?.deploy ?? runWranglerDeploy;
   const appConfig = await loadConfig({ projectRoot });
@@ -42,7 +44,20 @@ export async function runDeploy(options) {
   });
 
   if (database !== null) {
+    // Finish the local deploy artifact as soon as provisioning provides the UUID. A malformed
+    // artifact should stop here, before pending SQL changes production schema.
     finalize({ projectRoot, appConfig, database });
+
+    // Production schema is ready before the new Worker becomes reachable. Reusing the
+    // loaded config keeps deploy on one view of the application, while runMigrate's
+    // drift guard ensures a changed or missing applied file blocks the upload.
+    await migrate({
+      projectRoot,
+      target: "remote",
+      loadConfig: async () => appConfig,
+      errorLabel: "goribu deploy",
+      stdout: options?.stdout ?? process.stdout,
+    });
   }
   return deploy({ projectRoot });
 }

@@ -14,6 +14,8 @@ const NAV = [
   { href: "/docs/errors", label: "Errors" },
   { href: "/docs/navigation", label: "Navigation" },
   { href: "/docs/forms", label: "Forms" },
+  { href: "/docs/d1", label: "D1" },
+  { href: "/docs/migrations", label: "Migrations" },
   { href: "/docs/metadata", label: "Metadata & Document" },
   { href: "/docs/static-routes", label: "Static routes" },
   { href: "/docs/javascript", label: "JavaScript" },

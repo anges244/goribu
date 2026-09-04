@@ -19,7 +19,7 @@ const COMMANDS = {
   dev: "Start the local development server.",
   build: "Produce the production Worker and client bundles.",
   check: "Preview production resources without changing them.",
-  deploy: "Build and deploy to Cloudflare.",
+  deploy: "Build, apply production migrations, and deploy to Cloudflare.",
   migrate: "Apply pending D1 migrations (default local; --remote for production).",
   "migrate:down": "Roll back the last applied migration (default local; --remote supported).",
   "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
@@ -73,11 +73,10 @@ async function runDev() {
   server.printUrls();
 }
 
-// Build, then deploy through Wrangler. The build writes a deploy-redirect at
-// .wrangler/deploy/config.json that points Wrangler at the generated Worker
-// bundle and static assets, so `wrangler deploy` from the project root uploads
-// exactly what the build produced. Wrangler owns Cloudflare authentication and
-// prompts for it when needed.
+// Build, provision declared resources, apply production migrations, then deploy
+// through Wrangler. The build writes a deploy-redirect at .wrangler/deploy/config.json
+// that points Wrangler at the generated Worker bundle and static assets, so the final
+// upload uses exactly what the build produced. Wrangler owns Cloudflare authentication.
 async function runDeploy() {
   const exitCode = await deployApplication({
     projectRoot: process.cwd(),

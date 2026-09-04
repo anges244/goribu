@@ -29,10 +29,10 @@ From the app directory:
 goribu deploy
 ```
 
-This builds the app, then runs `wrangler deploy`. The app is served from its
-`workers.dev` URL (and any custom domain you have configured), under the `name`
-from `goribu.config.js`. Re-running `goribu deploy` replaces what production
-serves.
+This builds the app, prepares declared resources, then runs `wrangler deploy`.
+The app is served from its `workers.dev` URL (and any custom domain you have
+configured), under the `name` from `goribu.config.js`. Re-running `goribu deploy`
+replaces what production serves.
 
 ## Deploying with D1
 
@@ -59,8 +59,10 @@ goribu check
 ```
 
 `check` is read-only. It reports the production Worker target, whether the D1
-database exists or will be created, the `DB` mapping, and the D1 cost warning.
-It finishes by confirming that no resources changed.
+database exists or will be created, the `DB` mapping, the D1 cost warning, and
+the production migration state. Applied, pending, and drifted migrations come
+from a read-only ledger query; a missing database or tracking table is reported
+without creating either. It finishes by confirming that no resources changed.
 
 On `goribu deploy`, Goribu validates binding ownership and completes the
 production build before making a remote change. It then:
@@ -71,7 +73,9 @@ production build before making a remote change. It then:
    existing database. When the field is omitted, existing replication policy is
    left untouched.
 3. Writes the resolved database UUID into the generated production `DB` binding.
-4. Hands the completed Worker and static assets to Wrangler for deployment.
+4. Verifies migration history and applies every pending migration in order. Drift
+   or failed SQL aborts before the Worker upload.
+5. Hands the completed Worker and static assets to Wrangler for deployment.
 
 Re-running the command finds and reuses the database by name; deploying new code
 does not recreate or erase its data. Authentication must be able to deploy the
@@ -80,6 +84,27 @@ account, set `CLOUDFLARE_ACCOUNT_ID` so Goribu does not have to guess.
 
 Development uses a local D1 database keyed by the declared name. It does not
 connect development requests to production data.
+
+### Migration ordering
+
+`goribu deploy` applies pending migration SQL after D1 exists and before the new
+Worker is uploaded. That closes the first-deploy gap where code could become live
+before its tables existed. If migration history has drifted or a pending file
+fails, the new Worker is not uploaded. A database created earlier in the command
+and any earlier migration files that completed successfully can remain.
+
+You can still advance production schema deliberately before a deploy:
+
+```sh
+goribu migrate --remote
+```
+
+There is no `--no-migrations` deploy flag. Running the explicit command first is
+the canonical timing control; the following deploy verifies the same history and
+finds nothing pending. A Worker deployment and D1 migration still cannot share
+one transaction. The previously deployed Worker continues serving while schema
+changes and upload run, so pending migrations must be compatible with it. See
+[Migrations](./migrations.md) for the complete expand-and-contract sequence.
 
 ## What to expect
 
