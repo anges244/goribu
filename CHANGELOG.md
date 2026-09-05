@@ -12,6 +12,9 @@ Unreleased.
 
 ### Added
 
+- Getting-started guide for the unpublished rebuild's real local-package path,
+  from scaffolding through browser checks and production deployment. The site
+  keeps its existing getting-started URL and links to it from the homepage.
 - Local, unpublished `create-goribu` scaffolder: generates the canonical
   JavaScript/Tailwind starter from a self-contained packed template, assigns app
   identity and pnpm build permissions, and refuses to overwrite existing targets.

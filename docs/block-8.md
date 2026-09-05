@@ -3,8 +3,9 @@
 The first substep is complete and live at
 https://goribu-starter.aggelos-gesoulis.workers.dev. The independent installation,
 cold-start browser checks, production build, and maintainer deployment all passed.
-The scaffolder substep is complete; the getting-started guide and second-app
-proof have not started. No public npm package has changed.
+The scaffolder and getting-started guide substeps are complete; the second-app
+proof has not started.
+No public npm package has changed.
 
 ## First substep — the in-repository starter
 
@@ -191,3 +192,48 @@ the scaffolder substep, not the whole block.
 
 The getting-started guide and second small app remain later substeps. This block
 does not publish replacements for the existing npm packages automatically.
+
+## Third substep — getting started
+
+`docs/getting-started.md` now follows the actual unpublished setup path: obtain
+this rebuild's checkout, install its dependencies, pack the framework to a
+durable sibling directory, build and run the local scaffolder, install the
+generated app, exercise both page types, build/check, authenticate with bundled
+Wrangler, and run `pnpm run deploy`. It explicitly distinguishes these packages
+from their published predecessors, explains the local archive's lifetime and
+independent dependency behavior, and records the Node/version, target-directory,
+authentication, and pnpm command-collision pitfalls found during validation.
+
+The public guide retains its existing `/docs/installation` URL and site content
+location, replacing the obsolete hand-assembly instructions rather than adding
+a second onboarding route. A focused test keeps the repository and site versions
+synchronized apart from headings, front matter, and link forms; it checks local
+onward links and parses the actual shell blocks without executing installs or
+deployment. The old repository installation page remains a minimal-file
+reference and directs new apps to the guide. The homepage now links directly to
+getting started, and the introduction no longer implies this unpublished path
+is one command.
+
+Validation: the guide contract and packed-scaffolder tests passed **2 files and
+4 tests**. `pnpm --dir site exec goribu build` passed and statically output all
+18 routes, including the updated guide. JSDOM checks against that production
+output confirmed the managed title, single heading, actual command text, local
+onward links, and homepage call to action. No framework source or dependency
+changes were needed. The full suite was not rerun for this documentation-only
+slice; the previous full result remains 82 files and 631 tests.
+
+The maintainer's first guide deployment succeeded. Live HTTP checks confirmed
+the updated homepage call to action, guide content, title, and browser asset,
+but exposed a D1 onward link still written as `./d1.md`. The link conversion and
+its test had only matched letters and hyphens, missing the digit in `d1`. The
+site link is now `/docs/d1`; the contract test handles digits and rejects any
+remaining relative Markdown links in the public guide. The corrected test and
+site build passed, and rendered-HTML validation confirmed all six internal
+onward links, including D1.
+
+Maintainer redeployment `2284c0e9-3431-4250-a54f-522cbaca2997` closed this substep.
+Live HTTP checks confirmed the corrected D1 URL, all six internal onward links
+returning HTTP 200, the guide's title and current command text, and the homepage
+call to action. The guide is live at
+https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation. Only the second
+small app's end-to-end proof remains before the block can close.

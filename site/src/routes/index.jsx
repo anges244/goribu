@@ -19,12 +19,12 @@ export default function LandingPage() {
         <span className="wordmark">Goribu</span>
         <h1>A React framework for Cloudflare Workers.</h1>
         <p className="lede">
-          The platform's own primitives are first-class, not adapted. A real app
-          goes from one command to a public URL.
+          The platform's own primitives are first-class, not adapted. Start with
+          JavaScript and Tailwind, then deploy your app to a public URL.
         </p>
         <p className="cta">
-          <Link className="button" href="/docs">
-            Read the docs
+          <Link className="button" href="/docs/installation">
+            Get started
           </Link>
           {" "}<Link href="/community">Community feedback</Link>
         </p>

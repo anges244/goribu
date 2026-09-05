@@ -9,11 +9,16 @@
 
 ## Status
 
-Goribu is pre-release. It is not yet published to a registry, and there is no
-project scaffolder yet (a template and `create-goribu` come later). For now you
-assemble a project by hand — the pieces are small, and this page lists all of
-them. A complete, working example lives in `fixtures/basic-app` in this
-repository.
+This rebuild is unpublished, but its JavaScript/Tailwind starter and local
+`create-goribu` scaffolder are ready. Follow [Getting started](./getting-started.md)
+for the canonical path from a checkout to an independently generated, deployed
+app. The npm packages with these names still belong to the older implementation;
+do not install them for this rebuild.
+
+The rest of this page is a reference for the minimal framework files, not a
+second setup procedure. The starter adds Tailwind, a custom Document, and a
+request-time greeting to these fundamentals. `fixtures/basic-app` is a regression
+test target, not the starter to copy.
 
 ## Dependencies
 
