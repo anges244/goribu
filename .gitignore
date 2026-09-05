@@ -5,3 +5,4 @@ dist/
 .wrangler/
 .goribu/
 .DS_Store
+/examples/.artifacts/

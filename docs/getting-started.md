@@ -44,7 +44,7 @@ pnpm --dir packages/create-goribu run build
 ```
 
 If `../goribu-apps` already exists, choose a different new directory name in both
-lines; do not empty or overwrite it. Packing creates `goribu-0.0.0.tgz`.
+lines; do not empty or overwrite it. Packing creates `goribu-0.7.0.tgz`.
 Building the scaffolder prepares its template; it does not install anything.
 
 ## 2. Generate your app
@@ -55,7 +55,7 @@ must not already exist—even an empty directory is refused.
 
 ```sh
 cd "$GORIBU_APPS"
-node "$GORIBU_REPO/packages/create-goribu/bin/create-goribu.js" my-first-app --goribu-tarball "$GORIBU_APPS/goribu-0.0.0.tgz"
+node "$GORIBU_REPO/packages/create-goribu/bin/create-goribu.js" my-first-app --goribu-tarball "$GORIBU_APPS/goribu-0.7.0.tgz"
 cd my-first-app
 pnpm install
 pnpm dev

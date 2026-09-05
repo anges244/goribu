@@ -1,8 +1,20 @@
 {
   "name": "goribu",
-  "version": "0.0.0",
+  "version": "0.7.0",
   "description": "A full-stack React framework for Cloudflare Workers.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anges244/goribu3.git",
+    "directory": "packages/goribu"
+  },
+  "homepage": "https://goribu-site.aggelos-gesoulis.workers.dev",
+  "bugs": "https://github.com/anges244/goribu3/issues",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"

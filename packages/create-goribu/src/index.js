@@ -6,7 +6,7 @@ const HELP = `Usage: create-goribu <project-name> [--goribu-tarball <path>]
 Creates a new JavaScript app with Tailwind. The directory must not exist.
 Project names: 1–50 lowercase letters, digits or hyphens, starting with a letter.
 
-  --goribu-tarball <path>  Use a local packed Goribu .tgz (required before release).
+  --goribu-tarball <path>  Use a local packed Goribu .tgz for development.
   --help, -h              Show this help.
 
 Does not install dependencies, initialize Git, log in, provision, or deploy.`;

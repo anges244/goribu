@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.goribu/
+.wrangler/
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+.DS_Store

@@ -1,13 +1,24 @@
 {
   "name": "create-goribu",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.7.0",
   "description": "Create a JavaScript Goribu app for Cloudflare Workers.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anges244/goribu3.git",
+    "directory": "packages/create-goribu"
+  },
+  "homepage": "https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation",
+  "bugs": "https://github.com/anges244/goribu3/issues",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
   "engines": { "node": ">=22" },
   "bin": { "create-goribu": "./bin/create-goribu.js" },
-  "files": ["bin", "src", "dist"],
+  "files": ["bin", "src", "dist/template.json"],
   "scripts": {
     "build": "node scripts/build-template.js",
     "prepack": "node scripts/build-template.js"

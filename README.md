@@ -4,7 +4,10 @@ A React framework for Cloudflare Workers. Server-rendered and hydrated by
 default, with the platform's own primitives — workerd, Static Assets, Wrangler —
 as first-class parts of the pipeline rather than adapted afterwards.
 
-Pre-release and under active development.
+Under active development. This checkout is preparing `goribu@0.7.0` and
+`create-goribu@0.7.0`; neither replacement has been published yet. Follow the
+[getting-started guide](docs/getting-started.md) for the current local-package
+setup. See [Releasing](docs/releasing.md) for the shared version policy.
 
 ## Commands
 
@@ -39,7 +42,8 @@ pnpm exec goribu dev
 
 ## Docs
 
-- [Installation](docs/installation.md) — requirements and project setup.
+- [Getting started](docs/getting-started.md) — create and deploy a starter app.
+- [Installation reference](docs/installation.md) — requirements and project files.
 - [CLI reference](docs/cli.md) — every command in detail.
 - [Deploying](docs/deploy.md) — authentication and deploys.
 

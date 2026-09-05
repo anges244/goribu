@@ -1,11 +1,14 @@
-# Block 8 — Starting an app (in progress)
+# Block 8 — Starting an app
 
-The first substep is complete and live at
-https://goribu-starter.aggelos-gesoulis.workers.dev. The independent installation,
-cold-start browser checks, production build, and maintainer deployment all passed.
-The scaffolder and getting-started guide substeps are complete; the second-app
-proof has not started.
-No public npm package has changed.
+Complete and live. The starter, local scaffolder, getting-started guide, and
+independently generated second app all passed their recorded checks. The final
+proof is https://goribu-split.aggelos-gesoulis.workers.dev: a small app created
+through the documented path, customized without changing framework source, and
+deployed by the maintainer. The original starter remains live at
+https://goribu-starter.aggelos-gesoulis.workers.dev.
+
+This closes the usability gate, not a public release. Both rebuild packages
+remain unpublished; no package versions or release tags were changed.
 
 ## First substep — the in-repository starter
 
@@ -237,3 +240,57 @@ returning HTTP 200, the guide's title and current command text, and the homepage
 call to action. The guide is live at
 https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation. Only the second
 small app's end-to-end proof remains before the block can close.
+
+## Fourth substep — a minimal second app
+
+The maintainer requested a minimal app to deploy. `examples/goribu-split` was
+generated with the documented local scaffolder and a newly packed framework,
+then customized into a bill splitter. Its home page calculates shares in whole
+cents, distributes the remainder without changing the total, validates input,
+and announces results accessibly. The starter greeting became a static About
+page, giving client navigation a real consumer. Both pages need no per-request
+data, and no D1/KV, API endpoint, or new dependency was added.
+
+The app is tracked but deliberately outside the root pnpm workspace. It retains
+the generated independent workspace/build permissions and uses the framework
+archive under ignored `examples/.artifacts/`. Its generated absolute tarball
+reference was made relative for a movable source checkout; no runtime wiring
+changed. The app README records packing, installation, tests, build/check, and
+maintainer-owned deployment to the intended `goribu-split` Worker.
+
+The app's two Node test-runner tests passed: exact totals across even/uneven,
+tiny/large splits, and repair messages for invalid input. All three route files
+parsed successfully and `git diff --check` passed. These are source/calculation
+checks only.
+
+After maintainer installation, the two calculation tests passed again, and
+resolution checks confirmed that Goribu, React, Vite, and Tailwind came from
+the example's independent installation. Its normal dev command and headless
+Chrome passed uneven and tiny-bill calculations, invalid-input feedback, Reset,
+document-preserving About navigation, managed route titles, and a 390px layout
+without horizontal overflow. No browser exceptions or console errors occurred.
+The dev server and browser were stopped afterward.
+
+The production build passed and statically output `index.html` and `about.html`.
+The app's installed Wrangler test harness verified both pages, their titles,
+the initial €42.00 / 3 calculation, compiled Tailwind, and absence of D1/KV
+bindings, then closed. `pnpm check` passed with no resources or migrations.
+A read-only Wrangler lookup returned code 10007, confirming `goribu-split` did
+not already exist on the selected account. These checks did not deploy or
+provision anything.
+
+On 2026-09-05 the maintainer deployed version
+`53565380-a22f-4e64-b9cc-eaa825872c4e` to
+https://goribu-split.aggelos-gesoulis.workers.dev with only the `ASSETS` binding.
+Live HTTP checks confirmed the home and About pages, managed titles, initial
+calculation, immutable CSS/JS assets, and 404 handling. Headless Chrome against
+the public URL passed uneven and tiny-bill splits, invalid-input feedback,
+Reset, document-preserving navigation, route title changes, and mobile layout,
+with no console errors or browser exceptions. The browser was closed afterward.
+
+The second app required no new framework API or dependency. Its only
+checkout-specific adjustment was making the generated local archive reference
+relative, recorded above. This satisfies the block's final proof: the documented
+scaffolder path produced a useful independent app at a public URL. Further work
+is post-gate and maintainer-selected; publishing either npm replacement is not
+implied by completion.

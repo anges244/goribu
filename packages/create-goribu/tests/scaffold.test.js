@@ -10,6 +10,8 @@ const templateDir = fileURLToPath(new URL("../../../templates/basic-app/", impor
 const taskDir = mkdtempSync(join(tmpdir(), "goribu-scaffold-test-"));
 const cli = join(taskDir, "package/bin/create-goribu.js");
 const frameworkArchive = join(taskDir, "framework with spaces.tgz");
+const scaffolderVersion = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")).version;
+const frameworkVersion = JSON.parse(readFileSync(new URL("../../goribu/package.json", import.meta.url), "utf8")).version;
 
 function resolveRepositoryRoot() {
   // Corepack chooses the pinned pnpm before processing --dir.
@@ -31,12 +33,22 @@ beforeAll(() => {
   // Run the actual pack lifecycle, then use only its extracted artifact. This
   // catches missing payloads/dotfiles and accidental runtime workspace imports.
   succeeds(command("pnpm", ["--dir", packageDir, "pack", "--pack-destination", taskDir], resolveRepositoryRoot()));
-  succeeds(command("tar", ["-xzf", join(taskDir, "create-goribu-0.0.0.tgz"), "-C", taskDir]));
+  succeeds(command("tar", ["-xzf", join(taskDir, `create-goribu-${scaffolderVersion}.tgz`), "-C", taskDir]));
   // Generation records this file, but never installs or executes its contents.
   writeFileSync(frameworkArchive, "fixture: generator does not install this archive");
 }, 30000);
 
 afterAll(() => rmSync(taskDir, { recursive: true, force: true }));
+
+it("generates an app pinned to the matching framework release by default", () => {
+  const result = generate("release-app");
+  succeeds(result);
+  const pkg = JSON.parse(readFileSync(join(taskDir, "release-app/package.json"), "utf8"));
+  expect(pkg.dependencies.goribu).toBe(frameworkVersion);
+  expect(existsSync(join(taskDir, "release-app/node_modules"))).toBe(false);
+  expect(readFileSync(join(taskDir, "package/LICENSE"), "utf8"))
+    .toBe(readFileSync(new URL("../../../LICENSE", import.meta.url), "utf8"));
+});
 
 it("generates from the packed canonical template without installing or leaking local state", () => {
   const result = generate("my-app", "--goribu-tarball", "framework with spaces.tgz");
@@ -85,14 +97,38 @@ it("rejects existing targets, including empty directories and symlinks, without 
   expect(readFileSync(join(taskDir, "file"), "utf8")).toBe("maintainer file");
 });
 
-it("fails before creating files for bad arguments, missing tarballs and the unpublished default", () => {
-  for (const args of [[], ["../escape"], ["Uppercase"], ["bad", "--ts"], ["bad", "extra"], ["bad", "--goribu-tarball"], ["bad", "--goribu-tarball", "missing.tgz"], ["bad"]]) {
+it("fails before creating files for bad arguments and missing tarballs", () => {
+  for (const args of [[], ["../escape"], ["Uppercase"], ["bad", "--ts"], ["bad", "extra"], ["bad", "--goribu-tarball"], ["bad", "--goribu-tarball", "missing.tgz"]]) {
     const result = generate(...args);
     expect(result.status, JSON.stringify(args)).toBe(1);
-    expect(result.stderr).toMatch(/\[Goribu\].*(Supply|Unexpected|needs|Cannot use|unpublished)/);
+    expect(result.stderr).toMatch(/\[Goribu\].*(Supply|Unexpected|needs|Cannot use)/);
   }
   expect(existsSync(join(taskDir, "bad"))).toBe(false);
   expect(existsSync(join(taskDir, "escape"))).toBe(false);
   succeeds(generate("--help"));
   expect(generate("--help").stdout).toContain("JavaScript");
+});
+
+it("refuses to package mismatched versions or versions outside the single release channel", () => {
+  // Exercise the real build script in a source fixture, before it reads any
+  // template files. Never change the workspace manifests or generated payload.
+  const source = join(taskDir, "invalid-release");
+  const scripts = join(source, "packages/create-goribu/scripts");
+  mkdirSync(scripts, { recursive: true });
+  mkdirSync(join(source, "packages/goribu"), { recursive: true });
+  const build = join(scripts, "build-template.js");
+  writeFileSync(build, readFileSync(join(packageDir, "scripts/build-template.js")));
+  for (const [framework, scaffolder] of [
+    ["0.7.0", "0.7.1"],
+    ["0.7.0-alpha.1", "0.7.0-alpha.1"],
+    ["0.0.0", "0.0.0"],
+    ["latest", "latest"],
+  ]) {
+    writeFileSync(join(source, "packages/goribu/package.json"), JSON.stringify({ version: framework }));
+    writeFileSync(join(source, "packages/create-goribu/package.json"), JSON.stringify({ type: "module", version: scaffolder }));
+    const result = command(process.execPath, [build], source);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/\[Goribu\] Cannot package.*Set both package versions/);
+    expect(existsSync(join(source, "packages/create-goribu/dist"))).toBe(false);
+  }
 });

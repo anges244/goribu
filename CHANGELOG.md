@@ -5,13 +5,20 @@ changes land, not retrofitted at release time.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The
-first tagged release will be `0.1.0-alpha`; until then everything lives under
-Unreleased.
+rebuild's first npm release will be `0.7.0` for both `goribu` and
+`create-goribu`, published together to `latest`. Until publication succeeds,
+everything lives under Unreleased.
 
 ## [Unreleased]
 
 ### Added
 
+- Release preparation for the shared `0.7.0` version: public npm metadata,
+  package READMEs, and a template packaging guard that rejects mismatched or
+  prerelease versions. No replacement package has been published yet.
+- Minimal independent bill-splitter app at `examples/goribu-split`, generated
+  from the canonical starter, with exact-cent arithmetic, accessible input
+  validation, and two static hydrated pages. It requires no data resources.
 - Getting-started guide for the unpublished rebuild's real local-package path,
   from scaffolding through browser checks and production deployment. The site
   keeps its existing getting-started URL and links to it from the homepage.

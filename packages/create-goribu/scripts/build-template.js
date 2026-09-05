@@ -5,6 +5,14 @@ import { fileURLToPath } from "node:url";
 const source = fileURLToPath(new URL("../../../templates/basic-app/", import.meta.url));
 const output = fileURLToPath(new URL("../dist/template.json", import.meta.url));
 const framework = JSON.parse(await readFile(new URL("../../goribu/package.json", import.meta.url), "utf8"));
+const scaffolder = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+// A published starter must select the framework from the same release.
+if (framework.version !== scaffolder.version ||
+    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(framework.version) ||
+    framework.version === "0.0.0") {
+  throw new Error(`[Goribu] Cannot package create-goribu@${scaffolder.version} with goribu@${framework.version}. Set both package versions to the same nonzero release version (major.minor.patch, without a prerelease suffix), then rebuild the template.`);
+}
 const files = {};
 
 async function collect(relativePath) {
