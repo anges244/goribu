@@ -37,6 +37,8 @@ importers:
         specifier: ^8.2.2
         version: 8.2.2(esbuild@0.28.1)(jiti@2.7.0)
 
+  packages/create-goribu: {}
+
   packages/goribu:
     dependencies:
       '@babel/parser':

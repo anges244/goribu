@@ -1,0 +1,15 @@
+{
+  "name": "create-goribu",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Create a JavaScript Goribu app for Cloudflare Workers.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "bin": { "create-goribu": "./bin/create-goribu.js" },
+  "files": ["bin", "src", "dist"],
+  "scripts": {
+    "build": "node scripts/build-template.js",
+    "prepack": "node scripts/build-template.js"
+  }
+}

@@ -3,7 +3,8 @@
 The first substep is complete and live at
 https://goribu-starter.aggelos-gesoulis.workers.dev. The independent installation,
 cold-start browser checks, production build, and maintainer deployment all passed.
-The remaining block substeps have not started. No public npm package has changed.
+The scaffolder substep is complete; the getting-started guide and second-app
+proof have not started. No public npm package has changed.
 
 ## First substep — the in-repository starter
 
@@ -124,6 +125,69 @@ route. Headless Chrome against the public URL confirmed the hydrated counter,
 36px Tailwind heading, and document-preserving greeting round trip without
 browser exceptions or console errors. The browser was closed after verification.
 
-The `create-goribu` assessment, getting-started guide, and second-app proof remain
-later substeps. This block does not publish replacements for the existing npm
-packages automatically.
+## Second substep — create-goribu
+
+The independent starter exercise justified a generator: manually filtering local
+state, replacing `workspace:*`, choosing package/Worker/resource names, and adding
+pnpm's build permissions were repeatable setup work. Those tasks now belong to
+`packages/create-goribu`, not a sequence of undocumented copying steps.
+
+The published predecessor was inspected as reference, as directed by the source
+mapping. Its copying path is coupled to TypeScript erasure, language-specific
+overrides, and the older runtime/template. No module was ported. The new CLI is
+plain JavaScript with no dependencies and one output format. It accepts a single
+project name and an optional local framework tarball, prepares all substitutions
+before writing, exclusively creates a new target, and refuses existing files,
+directories, and symlinks. There is no force mode, automatic install, Git setup,
+login, provisioning, or deployment. Interrupted writes remain available for
+inspection rather than triggering recursive cleanup.
+
+The template is still authored only at `templates/basic-app/`. A build/prepack
+script snapshots an explicit set of app source roots into ignored
+`dist/template.json`, encoding file bytes so dotfiles survive package packing.
+Symlinks and special files fail packaging. The packed CLI carries this payload
+and does not reach back into the repository. Generated apps retain the same
+route code, Tailwind, and agent instructions; repository-only README guidance
+is removed using explicit markers, and pnpm build permissions are supplied.
+
+The snapshot records the exact sibling framework version. While it is `0.0.0`,
+generation requires `--goribu-tarball`; no `latest` fallback can accidentally
+select the incompatible published predecessor. Relative archive paths resolve
+from the caller's directory and become absolute `file:` references. The archive
+must remain available for later installs. The scaffolder package is private and
+publication remains separate maintainer-owned work. TypeScript and TS-to-JS
+conversion remain post-gate.
+
+The focused tests passed **3 tests** against a real packed/extracted CLI outside
+the repository. They cover source/dotfile fidelity, app identity, standalone
+instructions and build permissions, exclusion of local state, non-overwrite
+safety, invalid arguments, and the unpublished-version guard. The first test
+attempt also exposed Corepack selecting another pnpm version when invoked from
+a temporary directory; packing now starts from the repository's pinned context,
+while generation still runs independently outside it.
+
+The full `pnpm test` suite then passed **82 files and 631 tests**, and
+`git diff --check` passed. Both packages were packed into a fresh temporary
+directory; the extracted CLI generated `goribu-generated` there using the real
+framework archive, without hand-editing any generated application files.
+
+After the maintainer installed the workspace and generated app, the lockfile
+registered the dependency-free CLI and the focused packed-CLI tests passed again
+with **3 tests**. Goribu, React, Vite, and Tailwind resolved entirely inside the
+generated app's own installation. Its normal `pnpm dev` command passed the first
+browser load with browser caching disabled: the counter incremented, Tailwind
+set the heading to 36px, and navigation to the greeting and back preserved the
+document, with no console errors, browser exceptions, or dependency-discovery
+reload. The development server and browser were stopped afterward.
+
+The generated app's `pnpm build` and read-only `pnpm check` both passed. The build
+prerendered the home page and emitted the correctly named `goribu_generated`
+Worker. The installed Wrangler test harness served the static home and hashed
+Tailwind asset, and verified request-specific greeting props, the `no-store`
+policy, and safe serialization of script-shaped input. The harness was closed
+after verification. No new deployment or npm publication was performed in this
+substep; the starter's existing live proof remains recorded above. This closes
+the scaffolder substep, not the whole block.
+
+The getting-started guide and second small app remain later substeps. This block
+does not publish replacements for the existing npm packages automatically.

@@ -12,6 +12,11 @@ Unreleased.
 
 ### Added
 
+- Local, unpublished `create-goribu` scaffolder: generates the canonical
+  JavaScript/Tailwind starter from a self-contained packed template, assigns app
+  identity and pnpm build permissions, and refuses to overwrite existing targets.
+  The unreleased framework requires an explicit local tarball; no automatic
+  install, Git initialization, or deployment is performed.
 - In-repository JavaScript starter with app-owned Tailwind, a hydrated static
   home page, a request-time greeting, app-specific agent instructions, and
   optional one-line D1/KV declarations.
