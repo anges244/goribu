@@ -12,6 +12,9 @@ Unreleased.
 
 ### Added
 
+- In-repository JavaScript starter with app-owned Tailwind, a hydrated static
+  home page, a request-time greeting, app-specific agent instructions, and
+  optional one-line D1/KV declarations.
 - Deploy authentication preflight — validates Wrangler credentials and account
   selection before building, including apps without D1/KV. Both provisioners
   reuse the result; standalone builds remain authentication-free. Failure teaches
@@ -116,3 +119,9 @@ Unreleased.
   rendered at build time by running the emitted Worker in workerd, and served
   from Static Assets without invoking the Worker. Candidates that cannot be made
   static are downgraded with a named reason.
+
+### Fixed
+
+- Cold development starts of independently installed apps prebundle Goribu and
+  React together, preventing late lazy-page dependency discovery from reloading
+  the browser with mismatched React instances.

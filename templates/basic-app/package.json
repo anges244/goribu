@@ -1,0 +1,25 @@
+{
+  "name": "goribu-starter",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.26.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "goribu dev",
+    "build": "goribu build",
+    "check": "goribu check",
+    "deploy": "goribu deploy"
+  },
+  "dependencies": {
+    "goribu": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "tailwindcss": "4.3.3",
+    "vite": "^8.2.2"
+  }
+}

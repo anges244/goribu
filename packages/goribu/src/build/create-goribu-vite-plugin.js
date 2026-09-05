@@ -87,6 +87,20 @@ function createGoribuPlugin() {
         },
         environments: {
           client: {
+            optimizeDeps: {
+              // The bootstrap loads pages through a virtual dynamic import, so
+              // Vite's initial scan cannot see their shared UI/React imports.
+              // Optimize them with the installed bootstrap on the first pass:
+              // late discovery can otherwise reload with two React instances.
+              include: [
+                "goribu",
+                "goribu/client",
+                "react",
+                "react-dom/client",
+                "react/jsx-runtime",
+                "react/jsx-dev-runtime",
+              ],
+            },
             build: {
               // Write the hashed client build into the reserved namespace the
               // immutable header targets, keeping that namespace fingerprint-only.
