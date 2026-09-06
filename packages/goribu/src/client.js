@@ -12,6 +12,13 @@ async function startClient() {
   // Kept as a literal so Vite can resolve and split the generated manifest.
   const { pageLoaders } = await import("virtual:goribu/client-pages");
   const root = await hydrateInitialPage({ pageLoaders });
+  // The entry and page imports have now installed Vite's live CSS. Remove the
+  // first-paint stylesheet so old rules cannot survive a CSS hot update.
+  if (import.meta.env.DEV) {
+    for (const link of document.querySelectorAll("link[data-goribu-dev-styles]")) {
+      link.remove();
+    }
+  }
   if (root === null) return null;
 
   const navigation = createNavigationController({ root, pageLoaders });

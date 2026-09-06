@@ -4,12 +4,21 @@ All notable changes to Goribu are recorded here. This file is maintained as
 changes land, not retrofitted at release time.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
-Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The
-rebuild's first npm release will be `0.7.0` for both `goribu` and
-`create-goribu`, published together to `latest`. Until publication succeeds,
-everything lives under Unreleased.
+Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+`goribu` and `create-goribu` share one version and publish to `latest`.
 
 ## [Unreleased]
+
+## [0.7.1] - 2026-09-07
+
+### Fixed
+
+- Development pages load their imported styles before first paint through the
+  existing `<Stylesheet />` helper. Initial CSS uses Vite's live transforms and
+  yields to injected styles after client loading, preserving CSS hot updates
+  without stale rules. Production asset delivery is unchanged.
+
+## [0.7.0] - 2026-09-06
 
 ### Added
 
@@ -17,21 +26,22 @@ everything lives under Unreleased.
   stages: shared version changes, full-suite and archive validation, saved
   artifact hashes, ordered publication to latest, and verified retry after
   partial publication. The first replacement retires the old alpha tag only
-  after both packages succeed. No replacement has been published yet.
+  after both packages succeed.
 - Release preparation for the shared `0.7.0` version: public npm metadata,
   package READMEs, and a template packaging guard that rejects mismatched or
-  prerelease versions. No replacement package has been published yet.
+  prerelease versions.
 - Minimal independent bill-splitter app at `examples/goribu-split`, generated
   from the canonical starter, with exact-cent arithmetic, accessible input
   validation, and two static hydrated pages. It requires no data resources.
 - Getting-started guide for the unpublished rebuild's real local-package path,
   from scaffolding through browser checks and production deployment. The site
   keeps its existing getting-started URL and links to it from the homepage.
-- Local, unpublished `create-goribu` scaffolder: generates the canonical
+- `create-goribu` scaffolder: generates the canonical
   JavaScript/Tailwind starter from a self-contained packed template, assigns app
   identity and pnpm build permissions, and refuses to overwrite existing targets.
-  The unreleased framework requires an explicit local tarball; no automatic
-  install, Git initialization, or deployment is performed.
+  Generated apps pin the matching framework release, with an explicit local
+  tarball override for unpublished changes. No automatic install, Git
+  initialization, or deployment is performed.
 - In-repository JavaScript starter with app-owned Tailwind, a hydrated static
   home page, a request-time greeting, app-specific agent instructions, and
   optional one-line D1/KV declarations.

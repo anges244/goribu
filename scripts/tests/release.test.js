@@ -48,7 +48,11 @@ function localRun(bin, args, options) {
   if (bin === "git") {
     if (args[0] === "status" || args[0] === "diff") return "";
     if (args[0] === "rev-parse") return commit;
-    if (args[0] === "ls-files") return execute(bin, args, { cwd: repository });
+    if (args[0] === "ls-files") {
+      // The simulated clean commit contains the copied fixture, including new
+      // authored files that the maintainer has not yet committed in this repo.
+      return execute(bin, ["ls-files", "--cached", "--others", "--exclude-standard", ...args.slice(1)], { cwd: repository });
+    }
     throw new Error(`Unexpected git command: ${args}`);
   }
   if (bin === "pnpm" && args[0] === "test") return ""; // Avoid recursively invoking this suite.

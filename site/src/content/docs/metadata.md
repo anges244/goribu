@@ -62,7 +62,11 @@ export default function Document({ children, head, nonce }) {
 Keep `children` under `#root`, render `head` in `<head>`, and place one of each
 helper. Production replaces the development client source with its hashed entry
 and emits route-specific preloads. `<Stylesheet />` emits hashed graph CSS in
-production; Vite injects imported CSS directly in development.
+production. In development, it loads the entry and current page's imported CSS
+through Vite before the first paint. Once the client modules load, Vite's
+injected styles take over and Goribu removes the initial stylesheet, so removed
+CSS rules do not linger during hot updates. Keep CSS imports in the client
+entry or browser-reachable page modules; no stylesheet URL prop is needed.
 
 Worker-rendered documents receive one request nonce shared by
 `responseHeaders`, `Document`, Goribu's scripts, and React streaming

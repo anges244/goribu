@@ -63,6 +63,9 @@ export async function renderPage(options) {
             base: options.clientAssetBase,
           }),
     mode: options?.mode,
+    developmentStylesHref: options?.mode === "development"
+      ? `${(options?.clientAssetBase ?? "/").replace(/\/$/, "")}/_goribu/dev-styles.css${hasRouteId ? `?route=${encodeURIComponent(options.routeId)}` : ""}`
+      : null,
     nonce: options?.nonce,
   });
   const tree = h(

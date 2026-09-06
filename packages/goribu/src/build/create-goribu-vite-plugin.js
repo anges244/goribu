@@ -13,6 +13,7 @@ import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { writeWranglerConfig } from "./generate-wrangler-config.js";
 import { loadApplicationConfig } from "./load-application-config.js";
+import { createDevelopmentStylesPlugin } from "./create-development-styles-plugin.js";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const CLIENT_ENTRY = "src/client-entry.js";
@@ -57,6 +58,7 @@ export function goribu(options) {
     createConfiguredClientBoundaryPlugin(),
     createConfiguredClientPageManifestPlugin(),
     createConfiguredClientAssetsPlugin(),
+    createDevelopmentStylesPlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
   ];
 }

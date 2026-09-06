@@ -1,6 +1,6 @@
 {
   "name": "create-goribu",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Create a JavaScript Goribu app for Cloudflare Workers.",
   "type": "module",
   "license": "MIT",
@@ -16,9 +16,17 @@
     "registry": "https://registry.npmjs.org/",
     "tag": "latest"
   },
-  "engines": { "node": ">=22" },
-  "bin": { "create-goribu": "./bin/create-goribu.js" },
-  "files": ["bin", "src", "dist/template.json"],
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "create-goribu": "./bin/create-goribu.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "dist/template.json"
+  ],
   "scripts": {
     "build": "node scripts/build-template.js",
     "prepack": "node scripts/build-template.js"

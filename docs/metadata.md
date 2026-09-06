@@ -129,9 +129,14 @@ not need to be forwarded to `ClientEntry`.
 
 Import CSS from `src/client-entry.js` or code reachable from the client route
 graph. In production, `<Stylesheet />` emits the hashed CSS resolved for the
-entry and current page. In development it emits nothing because Vite's live
-client graph injects imported CSS. A source path is not a public prop; the graph
-is the source of truth.
+entry and current page. In development it emits a render-blocking stylesheet
+that follows the entry and current page's static CSS imports through Vite's
+live transforms. The first HTML render is styled before browser JavaScript
+loads. After the entry and page modules load, Vite's injected styles take over
+and Goribu removes the initial stylesheet so removed rules do not survive hot
+updates. Client navigation loads the next page's CSS with its module before
+rendering it. A source path is not a public prop; the graph is the source of
+truth. CSS imported with `?inline`, `?raw`, or `?url` is not automatically applied.
 
 ## CSP nonces and response headers
 

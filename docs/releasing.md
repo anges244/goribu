@@ -1,9 +1,10 @@
 # Releasing Goribu
 
 `goribu` and `create-goribu` share one release version and one npm channel,
-`latest`. The first release from this rebuild is planned as `0.7.0`. Preparation
-does not mean publication: until both replacement packages are available on npm,
-use the [local getting-started path](./getting-started.md).
+`latest`. The first release from this rebuild was `0.7.0`. The examples below
+prepare its `0.7.1` patch; substitute the next shared version for later releases.
+Preparation does not mean publication: verify the saved archives before
+publishing them.
 
 ## Version policy
 
@@ -51,7 +52,7 @@ or deploys the site.
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.7.0
+pnpm release prepare 0.7.1
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -62,19 +63,20 @@ Preparation can leave version edits for inspection if rebuilding fails; repair
 the reported problem before continuing.
 
 Package READMEs describe the installation path that the published archives will
-provide. The root README and public guide retain the current unpublished status
-until the registry path has actually been verified.
+provide. Keep publication claims tied to verified registry state.
 
 ### 2. Test and pack
 
 ```sh
-pnpm release pack ../goribu-release-0.7.0
+VITEST_MAX_WORKERS=2 pnpm release pack ../goribu-release-0.7.1
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
 refuses an existing directory, including an incomplete previous attempt. It
 requires a clean Git checkout, runs `git diff --check` and the full `pnpm test`
-suite, and packs both packages with pnpm. There is no skip-tests option.
+suite, and packs both packages with pnpm. Two test workers limit contention
+between local Worker integration tests; all tests still run. There is no
+skip-tests option. Preserve earlier release directories unchanged.
 
 It inspects the actual archives: package names, versions, publication metadata,
 tracked source files, executable CLIs, the license, all four framework exports,
@@ -85,8 +87,8 @@ framework dependency must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.7.0.tgz`
-- `create-goribu-0.7.0.tgz`
+- `goribu-0.7.1.tgz`
+- `create-goribu-0.7.1.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -110,7 +112,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.7.0
+pnpm release publish ../goribu-release-0.7.1
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command
