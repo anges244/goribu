@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "release": "node scripts/release.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -10,13 +10,6 @@ uses JavaScript and Tailwind. Public TypeScript declarations are not available y
 
 ## Getting started
 
-**Release preparation:** this checkout targets `0.7.0`, which is not published
-yet. Use the [getting-started guide](https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation)
-for the current local-package setup. Existing npm releases belong to the previous
-implementation.
-
-After both `0.7.0` packages are published, the registry setup will be:
-
 ```sh
 pnpm create goribu@latest my-app
 cd my-app

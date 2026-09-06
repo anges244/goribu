@@ -13,6 +13,11 @@ everything lives under Unreleased.
 
 ### Added
 
+- One maintainer-run `pnpm release` command with prepare, pack, and publish
+  stages: shared version changes, full-suite and archive validation, saved
+  artifact hashes, ordered publication to latest, and verified retry after
+  partial publication. The first replacement retires the old alpha tag only
+  after both packages succeed. No replacement has been published yet.
 - Release preparation for the shared `0.7.0` version: public npm metadata,
   package READMEs, and a template packaging guard that rejects mismatched or
   prerelease versions. No replacement package has been published yet.

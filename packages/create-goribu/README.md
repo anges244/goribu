@@ -12,11 +12,7 @@ or runtime link to the source repository. Never hand-edit the generated snapshot
 
 ## Create an app
 
-**Release preparation:** this checkout targets `0.7.0`, which is not published
-yet. Use the local setup below until both replacement packages are published.
-Existing npm releases belong to the previous implementation.
-
-After publication, with Node.js 22+ and pnpm:
+With Node.js 22+ and pnpm:
 
 ```sh
 pnpm create goribu@latest my-app
@@ -34,9 +30,10 @@ Pass a name, not a directory path. The destination must not exist.
 Use Node 22+. From the repository root:
 
 ```sh
+GORIBU_VERSION="$(node -p 'require("./packages/goribu/package.json").version')"
 pnpm --dir packages/goribu pack --pack-destination /absolute/path/to/artifacts
 pnpm --dir packages/create-goribu run build
-node packages/create-goribu/bin/create-goribu.js my-app --goribu-tarball /absolute/path/to/artifacts/goribu-0.7.0.tgz
+node packages/create-goribu/bin/create-goribu.js my-app --goribu-tarball "/absolute/path/to/artifacts/goribu-$GORIBU_VERSION.tgz"
 ```
 
 The destination must not exist. Run the CLI from the directory where you want
@@ -68,7 +65,7 @@ as their sole release channel.
 
 The snapshot records the exact sibling framework version, not `latest` or the
 scaffolder's own independent version. `--goribu-tarball` overrides the release
-dependency for local development; use it until the replacement is published.
+dependency for local development and unpublished revisions.
 TypeScript output and TS-to-JS transformation remain post-gate; there is only
 one JavaScript output path today.
 
