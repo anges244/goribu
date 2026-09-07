@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-09-07
+
 ### Fixed
 
 - Both npm packages point their repository, issue tracker, and README source
