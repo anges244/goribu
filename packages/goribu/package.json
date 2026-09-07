@@ -5,11 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anges244/goribu3.git",
+    "url": "git+https://github.com/anges244/goribu.git",
     "directory": "packages/goribu"
   },
   "homepage": "https://goribu-site.aggelos-gesoulis.workers.dev",
-  "bugs": "https://github.com/anges244/goribu3/issues",
+  "bugs": "https://github.com/anges244/goribu/issues",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/",

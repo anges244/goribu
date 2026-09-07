@@ -70,6 +70,6 @@ TypeScript output and TS-to-JS transformation remain post-gate; there is only
 one JavaScript output path today.
 
 [Getting started](https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation)
-· [Source](https://github.com/anges244/goribu3)
+· [Source](https://github.com/anges244/goribu)
 
 MIT licensed. Copyright (c) 2026 Aggelos Gesoulis.
