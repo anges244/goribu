@@ -9,6 +9,6 @@ try {
   const { run } = await import("../src/index.js");
   await run(process.argv.slice(2));
 } catch (error) {
-  console.error(error.message?.startsWith("[Goribu]") ? error.message : `[Goribu] Could not create the app: ${error.message}. Check filesystem permissions and choose a new directory before retrying.`);
+  console.error(error.message?.startsWith("[Goribu]") ? error.message : `[Goribu] An unexpected error interrupted app creation: ${error.message ?? String(error)}.\nInspect any target directory before retrying. Report the command and this error at https://github.com/anges244/goribu/issues.`);
   process.exitCode = 1;
 }

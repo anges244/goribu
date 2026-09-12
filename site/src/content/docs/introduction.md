@@ -4,9 +4,10 @@ description: What Goribu is and the two ideas that shape it.
 ---
 
 Goribu is a React framework for Cloudflare Workers where the platform's own
-primitives are first-class rather than adapted. Its JavaScript/Tailwind starter
-provides a direct path from local development to a public URL. This rebuild is
-still unpublished; the getting-started guide uses locally packed packages.
+primitives are first-class rather than adapted. Its TypeScript/Tailwind starter (with a `--js` option)
+provides a direct path from local development to a public URL. The `goribu` and
+`create-goribu` packages are published on npm; the getting-started guide creates
+an app with `pnpm create goribu@latest`.
 
 This page is itself a Goribu route. It is a Markdown file compiled to a React
 component at build time, rendered through the same streaming SSR pipeline as

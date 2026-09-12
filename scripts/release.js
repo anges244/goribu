@@ -137,8 +137,9 @@ function auditArchive(io, archive, name, version) {
   validatePackage(pkg, name, version);
   if (name === "goribu") {
     for (const entry of [".", "./server", "./client", "./vite"]) {
-      if (!files.has(pkg.exports?.[entry]?.default?.replace(/^\.\//, ""))) {
-        fail(`Missing ${entry} export in the framework archive. Restore its public entry and repack.`);
+      if (!files.has(pkg.exports?.[entry]?.default?.replace(/^\.\//, "")) ||
+          !files.has(pkg.exports?.[entry]?.types?.replace(/^\.\//, ""))) {
+        fail(`Missing runtime or type export for ${entry} in the framework archive. Restore both public entry files and repack.`);
       }
     }
   } else if (archiveJson(io, archive, "dist/template.json").goribuVersion !== version) {
@@ -157,9 +158,11 @@ function smokeScaffolder(io, archive, version) {
   const directory = mkdtempSync(join(tmpdir(), "goribu-release-smoke-"));
   try {
     io.run("tar", ["-xzf", archive, "-C", directory]);
-    io.run(process.execPath, [join(directory, "package/bin/create-goribu.js"), "release-smoke"], { cwd: directory });
-    if (readJson(join(directory, "release-smoke/package.json")).dependencies?.goribu !== version) {
-      fail("The saved scaffolder does not generate the matching framework dependency. Fix the generator and repack.");
+    for (const [name, flags] of [["release-smoke-ts", []], ["release-smoke-js", ["--js"]]]) {
+      io.run(process.execPath, [join(directory, "package/bin/create-goribu.js"), name, ...flags], { cwd: directory });
+      if (readJson(join(directory, name, "package.json")).dependencies?.goribu !== version) {
+        fail("The saved scaffolder does not generate the matching framework dependency. Fix the generator and repack.");
+      }
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }

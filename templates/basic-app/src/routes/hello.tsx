@@ -1,14 +1,18 @@
 import { Link } from "goribu";
+import type { Meta } from "goribu";
+import type { Handler } from "goribu/server";
 
-export const meta = { title: "Hello from a Worker" };
+type HelloProps = { name: string };
+
+export const meta = { title: "Hello from a Worker" } satisfies Meta<HelloProps>;
 
 // Request data belongs in a handler. res.render passes props to this page.
-export function GET(req, res) {
+export const GET: Handler<HelloProps> = (req, res) => {
   const name = req.query.get("name")?.trim() || "friend";
   return res.headers({ "cache-control": "no-store" }).render({ name });
-}
+};
 
-export default function HelloPage({ name }) {
+export default function HelloPage({ name }: HelloProps) {
   return (
     <main className="mx-auto max-w-2xl px-6 py-20">
       <h1 className="text-4xl font-bold tracking-tight">Hello, {name}.</h1>

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,11 +29,13 @@ function copySource(destination) {
     for (const path of ["package.json", "README.md", "bin", "src"]) paths.push(`packages/${name}/${path}`);
   }
   paths.push("packages/create-goribu/scripts/build-template.js");
-  for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "src"]) paths.push(`templates/basic-app/${path}`);
+  for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src"]) paths.push(`templates/basic-app/${path}`);
   for (const path of paths) {
     mkdirSync(dirname(join(destination, path)), { recursive: true });
     cpSync(join(repository, path), join(destination, path), { recursive: true });
   }
+  // Packaging uses the compiler installed for development; the saved CLI does not.
+  symlinkSync(join(repository, "packages/create-goribu/node_modules"), join(destination, "packages/create-goribu/node_modules"), "dir");
   // Exercise the first-release migration even after the repository advances.
   for (const name of ["goribu", "create-goribu"]) {
     const path = join(destination, "packages", name, "package.json");

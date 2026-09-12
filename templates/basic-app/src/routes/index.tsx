@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "goribu";
+import type { Meta } from "goribu";
 
 export const meta = {
   title: "Hello from Goribu",
   description: "A small starting point for your next Cloudflare app.",
-};
+} satisfies Meta;
 
 // With no request handler, this page is built as a static asset. It still
 // hydrates in the browser, so the counter needs no Worker request.
@@ -18,7 +19,7 @@ export default function HomePage() {
       </p>
       <h1 className="mt-4 text-4xl font-bold tracking-tight">Hello from Goribu.</h1>
       <p className="mt-6 text-lg leading-relaxed text-slate-600">
-        Edit <code className="text-slate-950">src/routes/index.jsx</code> and make
+        Edit <code className="text-slate-950">src/routes/index.tsx</code> and make
         this yours. Tailwind is ready to use.
       </p>
       <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6" aria-label="Hydration example">

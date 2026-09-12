@@ -1,7 +1,7 @@
 {
   "name": "create-goribu",
-  "version": "0.7.2",
-  "description": "Create a JavaScript Goribu app for Cloudflare Workers.",
+  "version": "0.8.0",
+  "description": "Create a TypeScript or JavaScript Goribu app for Cloudflare Workers.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -27,6 +27,9 @@
     "src",
     "dist/template.json"
   ],
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
   "scripts": {
     "build": "node scripts/build-template.js",
     "prepack": "node scripts/build-template.js"

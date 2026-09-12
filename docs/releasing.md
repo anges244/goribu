@@ -2,7 +2,7 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare its `0.7.1` patch; substitute the next shared version for later releases.
+prepare the `0.8.0` TypeScript release; substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
 
@@ -30,11 +30,14 @@ Packaging does not check whether the selected version exists on npm.
 
 The framework ships its plain JavaScript ESM source and CLI, with no framework
 compilation step. Its four public entries remain `goribu`, `goribu/server`,
-`goribu/client`, and `goribu/vite`.
+`goribu/client`, and `goribu/vite`, each with a matching public declaration.
+Type fixtures run in `pnpm test`; the archive audit requires all runtime and
+type entry files.
 
 The scaffolder ships its CLI, source, and `dist/template.json`. Its prepack step
 builds that payload from the canonical `templates/basic-app/` source. The payload
-includes dotfiles as encoded file bytes; generating an app needs neither the
+contains the canonical TypeScript files and JavaScript generated from them,
+including dotfiles as encoded file bytes; generating an app needs neither the
 repository nor a runtime template download. Only the payload file is allowed
 from `dist`, so other generated files cannot enter the package accidentally.
 
@@ -52,7 +55,7 @@ or deploys the site.
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.7.1
+pnpm release prepare 0.8.0
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -68,35 +71,38 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=2 pnpm release pack ../goribu-release-0.7.1
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.8.0
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
 refuses an existing directory, including an incomplete previous attempt. It
 requires a clean Git checkout, runs `git diff --check` and the full `pnpm test`
-suite, and packs both packages with pnpm. Two test workers limit contention
-between local Worker integration tests; all tests still run. There is no
+suite, and packs both packages with pnpm. One test worker limits resource
+contention between compiler and Worker integration checks; all tests still run. There is no
 skip-tests option. Preserve earlier release directories unchanged.
 
 It inspects the actual archives: package names, versions, publication metadata,
 tracked source files, executable CLIs, the license, all four framework exports,
 and the template's framework version. Unexpected files, local dependencies, and
 package README release-preparation notices block completion. The saved scaffolder
-is then extracted into a temporary directory and used to generate an app whose
-framework dependency must match the release.
+is then extracted into a temporary directory and used to generate both TypeScript and JavaScript apps whose
+framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.7.1.tgz`
-- `create-goribu-0.7.1.tgz`
+- `goribu-0.8.0.tgz`
+- `create-goribu-0.8.0.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
 still clean at the same commit. An incomplete directory has no valid completion
 receipt. Retain it for inspection and choose a new directory when repacking.
 
-Now independently generate, install, and exercise an app from these archives,
-including cold-start development, hydration, navigation, and production build.
+Now independently generate, install, and exercise both variants from these
+archives: the default TypeScript output and `--js` output. Run `pnpm typecheck`
+in the TypeScript app; verify cold-start development, hydration, navigation,
+first-paint styles, and production builds for both. The JavaScript app must
+work without TypeScript configuration or direct type dependencies.
 The pack command's file and scaffolder checks do not replace this installation
 proof. Keep the reviewed release directory intact. It is a local artifact record,
 not a signed provenance attestation.
@@ -112,7 +118,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.7.1
+pnpm release publish ../goribu-release-0.8.0
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command

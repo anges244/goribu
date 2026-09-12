@@ -17,13 +17,14 @@ add routes and dependencies only for actual application needs.
 
 ## Application conventions
 
-- Use JavaScript ESM and JSX. `goribu.config.js` is Node-loadable data, not JSX.
-- Routes live in `src/routes/`: `index.jsx` maps to `/`, `[id].jsx` to one dynamic
+- Use ESM and JSX, following the language of the existing source files.
+  `goribu.config.js` is Node-loadable data, not JSX.
+- Routes live in `src/routes/`: `index.tsx` maps to `/`, `[id].tsx` to one dynamic
   segment. A default page without a handler has an implicit GET.
 - Named handlers receive `(req, res)`. Return `res.render(props)` for the same
   route's page, or `res.json`, `res.text`, `res.redirect`, or `res.notFound`.
   Read input through `req.params`, `req.query`, and `await req.body()`.
-- Put server-only helpers outside the routes directory in `.server.js` files.
+- Put server-only helpers outside the routes directory in `.server.ts` files.
   Import them from handlers, never from browser-reachable page code.
 - `goribu` contains shared UI APIs; `goribu/server` contains runtime/config APIs;
   `goribu/client` bootstraps the browser; `goribu/vite` is build-only.
@@ -39,6 +40,13 @@ add routes and dependencies only for actual application needs.
 - `/_goribu/` is reserved. Do not create app routes or public files there.
 
 ## Data and validation
+
+<!-- typescript-only:start -->
+Run `pnpm typecheck` as well as `pnpm build`. Use type-only imports for
+`Handler` and `Middleware` from `goribu/server`, and `DocumentProps` and `Meta`
+from `goribu`. Validate request bodies at runtime before accessing their fields.
+
+<!-- typescript-only:end -->
 
 - Declare D1/KV only in `goribu.config.js`; Goribu generates their bindings.
   Use request-scoped `req.d1` and `req.kv` in server handlers.

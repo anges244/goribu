@@ -1,6 +1,6 @@
 # Goribu starter
 
-A small JavaScript app with Tailwind, a static hydrated home page, and a
+A small Goribu app with Tailwind, a static hydrated home page, and a
 Worker-rendered greeting. D1 and KV are opt-ins, not prerequisites.
 
 ## Run this app
@@ -11,6 +11,14 @@ Use Node.js 22 or newer and pnpm:
 pnpm install
 pnpm dev
 ```
+
+<!-- typescript-only:start -->
+Run `pnpm typecheck` to check the app's types. `pnpm build` bundles the app;
+type checking is a separate command. Routes use `.ts` and `.tsx`, while
+`goribu.config.js`, `vite.config.js`, and `src/client-entry.js` remain JavaScript
+and are checked by the starter's `tsconfig.json` too.
+
+<!-- typescript-only:end -->
 
 `pnpm build` creates production output; `pnpm check` reads the deployment plan.
 Development and standalone builds need no Cloudflare login. A generated app is
@@ -32,23 +40,20 @@ pnpm --dir templates/basic-app check
 Or, from this app directory, use `pnpm dev`, `pnpm build`, and `pnpm check`.
 Development and standalone builds need no Cloudflare login.
 
-The `goribu: workspace:*` dependency deliberately selects the framework in this
-repository. The package currently on npm is an older implementation; do not
-replace this dependency with `goribu@latest` while testing the rebuild. Before
-using a copy outside this workspace, replace it with a tarball packed from the
-current framework. Independent package-install verification is part of the
-starter's validation, not something a workspace build alone proves. The public
-release path is not available yet. The local `packages/create-goribu` CLI can
-generate an independent app using a packed framework tarball.
+The `goribu: workspace:*` dependency selects the framework in this repository.
+Before testing outside this workspace, use the local `packages/create-goribu`
+CLI with a packed framework tarball. Independent package-install verification
+is part of starter validation. This is the canonical source template;
+JavaScript output is generated during scaffolder packaging.
 
 <!-- repository-only:end -->
 
 ## What to edit
 
 - `goribu.config.js`: Worker name and optional resource declarations.
-- `src/routes/index.jsx`: static home page and hydrated counter.
-- `src/routes/hello.jsx`: request-time GET handler and its page.
-- `src/routes/_document.jsx`: language, viewport, metadata, and framework assets.
+- `src/routes/index.tsx`: static home page and hydrated counter.
+- `src/routes/hello.tsx`: request-time GET handler and its page.
+- `src/routes/_document.tsx`: language, viewport, metadata, and framework assets.
 - `src/styles.css`: Tailwind entry, scanned against this app's source files.
 - `src/client-entry.js`: browser bootstrap and global CSS import.
 

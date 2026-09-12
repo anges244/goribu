@@ -1,12 +1,13 @@
 # create-goribu
 
-Creates the canonical JavaScript/Tailwind app in a new directory. It sets the
+Creates a TypeScript/Tailwind app in a new directory; `--js` selects JavaScript. It sets the
 package, Worker, and optional resource names; writes an independent pnpm workspace
 with the required esbuild/workerd build permissions; and prints the next commands.
 It never installs packages, initializes Git, authenticates, provisions, or deploys.
 
-The real template remains `templates/basic-app/`. `pnpm run build` snapshots its
-source into ignored `dist/template.json`; `pnpm pack` does this automatically.
+The canonical TypeScript template remains `templates/basic-app/`. `pnpm run build`
+packages it and derives JavaScript into ignored `dist/template.json`;
+`pnpm pack` does this automatically. TypeScript is a packaging dependency only.
 The packed CLI carries that snapshot, including dotfiles, and has no dependencies
 or runtime link to the source repository. Never hand-edit the generated snapshot.
 
@@ -18,12 +19,18 @@ With Node.js 22+ and pnpm:
 pnpm create goribu@latest my-app
 cd my-app
 pnpm install
+pnpm typecheck
 pnpm dev
 ```
 
 The app's `goribu` dependency is pinned to the exact matching release. Choose a
-name with 1–50 lowercase letters, digits or hyphens, starting with a letter.
+name with 1–50 lowercase letters, digits or hyphens, starting with a letter
+and ending with a letter or digit.
 Pass a name, not a directory path. The destination must not exist.
+
+For JavaScript, run `pnpm create goribu@latest my-app --js`; that output has no
+TypeScript configuration, type dependencies, or `typecheck` script. Run
+`npx create-goribu --help` for the full option reference.
 
 ## Local development
 
@@ -66,8 +73,9 @@ as their sole release channel.
 The snapshot records the exact sibling framework version, not `latest` or the
 scaffolder's own independent version. `--goribu-tarball` overrides the release
 dependency for local development and unpublished revisions.
-TypeScript output and TS-to-JS transformation remain post-gate; there is only
-one JavaScript output path today.
+The TypeScript source and generated JavaScript are packaged together. Both
+outputs are covered by packed-CLI generation and production integration tests;
+independent installations remain part of release verification.
 
 [Getting started](https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation)
 · [Source](https://github.com/anges244/goribu)

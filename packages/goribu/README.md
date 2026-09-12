@@ -6,7 +6,8 @@ plain HTML served by Cloudflare Static Assets. D1 databases, migrations, and KV
 namespaces are configured in the app and provisioned during deployment.
 
 Goribu requires Node.js 22+ for tooling, React 19, and Vite 8. The current starter
-uses JavaScript and Tailwind. Public TypeScript declarations are not available yet.
+uses TypeScript and Tailwind; add `--js` for JavaScript. Public declarations
+cover all four package entries while the framework itself remains JavaScript.
 
 ## Getting started
 
@@ -14,6 +15,7 @@ uses JavaScript and Tailwind. Public TypeScript declarations are not available y
 pnpm create goribu@latest my-app
 cd my-app
 pnpm install
+pnpm typecheck
 pnpm dev
 ```
 
@@ -29,6 +31,7 @@ Run these from the generated app directory:
 | --- | --- |
 | `pnpm dev` | Start Vite and workerd with hot updates. |
 | `pnpm build` | Build the Worker, browser assets, and static HTML. |
+| `pnpm typecheck` | Check the TypeScript app without emitting files. |
 | `pnpm check` | Inspect the production resource and migration plan read-only. |
 | `pnpm run deploy` | Authenticate, build, provision resources, apply migrations, and deploy. |
 

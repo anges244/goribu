@@ -6,6 +6,7 @@ import { Link, NavLink } from "goribu";
 const NAV = [
   { href: "/docs", label: "Introduction" },
   { href: "/docs/installation", label: "Getting started" },
+  { href: "/docs/typescript", label: "TypeScript" },
   { href: "/docs/cli", label: "The CLI" },
   { href: "/docs/routing", label: "Routing" },
   { href: "/docs/rendering", label: "Rendering" },

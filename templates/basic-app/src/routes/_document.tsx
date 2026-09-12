@@ -1,6 +1,7 @@
 import { ClientEntry, Stylesheet } from "goribu";
+import type { DocumentProps } from "goribu";
 
-export default function Document({ children, head, nonce }) {
+export default function Document({ children, head, nonce }: DocumentProps) {
   return (
     <html lang="en">
       <head>

@@ -1,6 +1,6 @@
 {
   "name": "goribu",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "A full-stack React framework for Cloudflare Workers.",
   "license": "MIT",
   "repository": {
@@ -21,15 +21,19 @@
   },
   "exports": {
     ".": {
+      "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
     "./server": {
+      "types": "./src/server.d.ts",
       "default": "./src/server.js"
     },
     "./client": {
+      "types": "./src/client.d.ts",
       "default": "./src/client.js"
     },
     "./vite": {
+      "types": "./src/vite.d.ts",
       "default": "./src/vite.js"
     }
   },
@@ -41,6 +45,7 @@
     "src"
   ],
   "dependencies": {
+    "@cloudflare/workers-types": "^5.20260828.1",
     "@babel/parser": "^7.29.2",
     "@cloudflare/vite-plugin": "^1.54.2",
     "wrangler": "^4.127.1"

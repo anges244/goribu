@@ -9,6 +9,29 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Public declarations for all four package entries, including typed handlers,
+  metadata, forms, cookies, D1, and KV. Strict fixtures check valid and invalid
+  usage, module resolution, and runtime/declaration export parity.
+- A canonical TypeScript/Tailwind starter with `pnpm typecheck`. Packaging
+  derives the JavaScript variant without TypeScript configuration or dependencies.
+
+### Changed
+
+- `create-goribu <name>` defaults to TypeScript. Use `--js` for JavaScript.
+  Both languages retain the existing JavaScript config and browser entry names.
+
+### Fixed
+
+- Scaffolder errors identify unknown options, duplicate flags, missing values,
+  invalid names, archive failures, existing targets, permissions, and package
+  defects separately, with repair instructions. Names ending in a hyphen are
+  rejected before generating an invalid Worker configuration.
+- Local archive readability checks avoid loading the entire tarball into memory.
+- JavaScript starter docs preserve shared prose mentioning TypeScript. Invalid
+  starter manifests fail packaging with specific repair instructions.
+
 ## [0.7.2] - 2026-09-07
 
 ### Fixed

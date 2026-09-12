@@ -4,10 +4,10 @@ A React framework for Cloudflare Workers. Server-rendered and hydrated by
 default, with the platform's own primitives — workerd, Static Assets, Wrangler —
 as first-class parts of the pipeline rather than adapted afterwards.
 
-Under active development. This checkout is preparing `goribu@0.7.0` and
-`create-goribu@0.7.0`; neither replacement has been published yet. Follow the
-[getting-started guide](docs/getting-started.md) for the current local-package
-setup. See [Releasing](docs/releasing.md) for the shared version policy.
+Under active development. This checkout adds TypeScript by default, JavaScript
+through `--js`, and public type declarations for the next release.
+Follow the [getting-started guide](docs/getting-started.md); see
+[Releasing](docs/releasing.md) for the shared version policy.
 
 ## Commands
 

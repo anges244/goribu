@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "goribu dev",
     "build": "goribu build",
+    "typecheck": "tsc --noEmit",
     "check": "goribu check",
     "deploy": "goribu deploy"
   },
@@ -18,8 +19,12 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "@tailwindcss/vite": "4.3.3",
     "tailwindcss": "4.3.3",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "typescript": "^5.9.3"
   }
 }

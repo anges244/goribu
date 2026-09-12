@@ -9,14 +9,12 @@
 
 ## Status
 
-This rebuild is unpublished, but its JavaScript/Tailwind starter and local
-`create-goribu` scaffolder are ready. Follow [Getting started](./getting-started.md)
-for the canonical path from a checkout to an independently generated, deployed
-app. The npm packages with these names still belong to the older implementation;
-do not install them for this rebuild.
+The `goribu` framework and its `create-goribu` scaffolder are published on npm.
+Follow [Getting started](./getting-started.md) for the canonical path from
+`pnpm create goribu@latest` to an independently generated, deployed app.
 
 The rest of this page is a reference for the minimal framework files, not a
-second setup procedure. The starter adds Tailwind, a custom Document, and a
+second setup procedure. The starter defaults to TypeScript (`--js` selects JavaScript) and adds Tailwind, a custom Document, and a
 request-time greeting to these fundamentals. `fixtures/basic-app` is a regression
 test target, not the starter to copy.
 
