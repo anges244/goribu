@@ -25,6 +25,26 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `goribu dev` keeps one listening port and one `workerd` child across restarts.
+  The previous server and its Worker runtime are disposed before the replacement
+  environments are created, which resolves the `Module runner already initialized`
+  and `server restart failed` errors and the ports that climbed past them. The
+  replacement configuration is checked first, so a config Goribu cannot load
+  reports the error and leaves the running server alone instead of ending the
+  session. Ctrl+C, SIGTERM, and a failed initial listen all release the port and
+  the Worker runtime.
+- `.goribu/` is regenerated only when its contents change and is no longer watched
+  during development, so regenerating it can no longer trigger a further restart.
+- Editing `goribu.config.js` restarts the development server and is picked up on
+  the restart; the file was previously read once per process. It is applied only
+  through that restart, so a configuration Goribu rejects no longer reaches the
+  running Worker as a hot update.
+- A development server that fails to start after its configuration checked out —
+  an occupied port with `strictPort`, or a plugin whose setup throws — now releases
+  its watcher and Worker runtime, reports the error with a repair instruction, and
+  exits non-zero instead of leaving the process alive with no listener. This
+  covers the first server as well as a replacement, including a plugin that throws
+  before Goribu's own setup runs and leaves nothing to clean up.
 - Pages with non-GET handlers stay on the Worker so Static Assets cannot shadow form submissions with 405 responses. Explicit `prerender = true` rejects these routes with a repair instruction.
 - Scaffolder errors identify unknown options, duplicate flags, missing values,
   invalid names, archive failures, existing targets, permissions, and package

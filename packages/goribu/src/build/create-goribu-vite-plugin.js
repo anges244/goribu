@@ -12,12 +12,14 @@ import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { writeWranglerConfig } from "./generate-wrangler-config.js";
-import { loadApplicationConfig } from "./load-application-config.js";
+import { APPLICATION_CONFIG_FILENAME, loadApplicationConfig } from "./load-application-config.js";
 import { createDevelopmentStylesPlugin } from "./create-development-styles-plugin.js";
+import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const CLIENT_ENTRY = "src/client-entry.js";
-const GENERATED_WRANGLER_CONFIG = ".goribu/wrangler.json";
+const GENERATED_DIRECTORY = ".goribu";
+const GENERATED_WRANGLER_CONFIG = `${GENERATED_DIRECTORY}/wrangler.json`;
 const CLIENT_ASSETS_MODULE = "virtual:goribu/client-assets";
 const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
 
@@ -59,6 +61,7 @@ export function goribu(options) {
     createConfiguredClientPageManifestPlugin(),
     createConfiguredClientAssetsPlugin(),
     createDevelopmentStylesPlugin(),
+    createDevelopmentLifecyclePlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
   ];
 }
@@ -86,6 +89,25 @@ function createGoribuPlugin() {
         envPrefix: PUBLIC_ENV_PREFIX,
         builder: {
           buildApp: buildClientBeforeWorkers,
+        },
+        server: {
+          watch: {
+            // Goribu regenerates `.goribu/` from this hook, and this hook runs
+            // on every config load — including the one that checks a replacement
+            // configuration before a restart commits to it. The Cloudflare plugin
+            // watches the generated Wrangler config to decide a restart is
+            // needed, so leaving Goribu's own output in the watcher means a
+            // restart can ask for another restart, decided by where the write
+            // lands relative to that plugin's in-flight guard. The source files
+            // are watched instead: vite.config.js by Vite, goribu.config.js by
+            // the development lifecycle plugin.
+            //
+            // goribu.config.js is watched there too, and for a second reason:
+            // the generated Worker entry imports it, so leaving it here would
+            // let Vite invalidate it into the running Worker before anything
+            // had decided Goribu accepts it.
+            ignored: [`**/${GENERATED_DIRECTORY}/**`, join(root, APPLICATION_CONFIG_FILENAME)],
+          },
         },
         environments: {
           client: {

@@ -1,9 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { generateManifest } from "../routing/generate-manifest.js";
 import { scanErrorPages } from "../routing/scan-error-pages.js";
 import { scanDocument } from "../routing/scan-document.js";
 import { selectMiddlewareByRoute } from "./select-middleware-by-route.js";
+import { writeGeneratedFile } from "./write-generated-file.js";
 
 const GENERATED_DIRECTORY = ".goribu";
 const WORKER_FILENAME = "worker.js";
@@ -105,8 +105,7 @@ export function writeWorkerEntry(options) {
     applicationConfigSpecifier,
   });
 
-  mkdirSync(workerDirectory, { recursive: true });
-  writeFileSync(outputFile, source, "utf8");
+  writeGeneratedFile(outputFile, source);
   return Object.freeze({ outputFile, source });
 }
 

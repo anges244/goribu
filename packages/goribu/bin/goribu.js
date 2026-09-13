@@ -7,6 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { runCheck } from "../src/build/run-check.js";
+import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
@@ -68,8 +69,30 @@ async function runBuild() {
 // HMR; the server keeps the process alive until it is interrupted.
 async function runDev() {
   const { createServer } = await import("vite");
-  const server = await createServer({ root: process.cwd() });
-  await server.listen();
+  let server;
+  try {
+    server = await createServer({ root: process.cwd() });
+  } catch (error) {
+    // Vite drops a server whose setup threw without closing it, and it may
+    // already hold a watcher and a Worker runtime. Report before ending the
+    // session, because ending it may take the process with it.
+    console.error(error);
+    await endFailedSession();
+    return;
+  }
+  installDevLifecycle(server);
+  try {
+    await server.listen();
+  } catch (error) {
+    // A server that failed to listen may still hold a workerd child, because the
+    // Cloudflare plugin starts one while the server is being configured.
+    try {
+      await server.close();
+    } catch {
+      // Report why the server never started, not why the wreckage resisted.
+    }
+    throw error;
+  }
   server.printUrls();
 }
 

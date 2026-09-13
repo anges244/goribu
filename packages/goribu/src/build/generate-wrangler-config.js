@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { isApplicationConfig } from "../runtime/application-config.js";
+import { writeGeneratedFile } from "./write-generated-file.js";
 
 const GENERATED_DIRECTORY = ".goribu";
 const WRANGLER_FILENAME = "wrangler.json";
@@ -39,8 +39,7 @@ export function writeWranglerConfig(options) {
   const outputFile = join(root, GENERATED_DIRECTORY, WRANGLER_FILENAME);
   const config = synthesizeWranglerConfig(appConfig);
 
-  mkdirSync(dirname(outputFile), { recursive: true });
-  writeFileSync(outputFile, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  writeGeneratedFile(outputFile, `${JSON.stringify(config, null, 2)}\n`);
   return Object.freeze({ outputFile, config });
 }
 

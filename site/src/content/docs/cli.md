@@ -25,6 +25,28 @@ matches production. The server runs until you stop it. Takes no arguments.
 goribu dev
 ```
 
+Configuration restarts close the previous server and its local Worker runtime
+before starting their replacements, so a long dev session keeps one listening
+port and one `workerd` child however many times it restarts. Ctrl+C and SIGTERM
+close both.
+
+The session restarts when `vite.config.js` or `goribu.config.js` changes. Goribu
+checks the replacement configuration before stopping anything: if it cannot load,
+the error is reported, the running server keeps serving the configuration it
+already has, and the session restarts on its own once the file is repaired. If a
+replacement passes that check and still fails to start — an occupied port with
+`strictPort`, say — the session stops, releases its Worker runtime, and exits
+non-zero with the error and a repair instruction.
+
+`goribu.config.js` reaches a running session only through that restart; it is
+never hot-updated into the Worker on its own, so a config Goribu rejects cannot
+reach your app. Goribu's generated `.goribu/` directory is not watched either,
+because Goribu writes it and a rewrite is not a reason to restart.
+
+Vite's `server.port` and `server.strictPort` settings remain available in
+`vite.config.js`. Set `strictPort: true` to fail when your chosen port is occupied;
+otherwise Vite may choose another port at initial startup.
+
 ## `goribu build`
 
 Produce the production build: one pass emits the Worker bundle and the client

@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isApplicationConfig } from "../runtime/application-config.js";
 
-const CONFIG_FILE = "goribu.config.js";
+export const APPLICATION_CONFIG_FILENAME = "goribu.config.js";
 
 /**
  * Load and validate the application's `goribu.config.js`.
@@ -25,7 +25,7 @@ export async function loadApplicationConfig(options) {
   }
 
   const root = resolve(projectRoot);
-  const configFile = join(root, CONFIG_FILE);
+  const configFile = join(root, APPLICATION_CONFIG_FILENAME);
 
   let stats;
   try {
@@ -34,7 +34,7 @@ export async function loadApplicationConfig(options) {
     if (cause?.code === "ENOENT") {
       throw new Error(
         `[Goribu] Cannot build because ${JSON.stringify(configFile)} is missing. ` +
-          `Create ${CONFIG_FILE} that default-exports defineConfig({ name, compatibilityDate }).`,
+          `Create ${APPLICATION_CONFIG_FILENAME} that default-exports defineConfig({ name, compatibilityDate }).`,
         { cause },
       );
     }
@@ -48,13 +48,19 @@ export async function loadApplicationConfig(options) {
   if (!stats.isFile()) {
     throw new Error(
       `[Goribu] Cannot build because ${JSON.stringify(configFile)} is not a regular file. ` +
-        `Replace it with ${CONFIG_FILE} that default-exports defineConfig({ name, compatibilityDate }).`,
+        `Replace it with ${APPLICATION_CONFIG_FILENAME} that default-exports defineConfig({ name, compatibilityDate }).`,
     );
   }
 
   let module;
   try {
-    module = await import(pathToFileURL(configFile).href);
+    // Node caches an ES module for the lifetime of the process, so a long-lived
+    // `goribu dev` would keep serving the config it read at startup. The file's
+    // modification time makes the specifier change exactly when the file does:
+    // an edit is picked up on the next restart, and an unrelated restart reuses
+    // the cached module instead of leaking a new one.
+    const specifier = `${pathToFileURL(configFile).href}?mtime=${stats.mtimeMs}`;
+    module = await import(specifier);
   } catch (cause) {
     throw new Error(
       `[Goribu] Could not load ${JSON.stringify(configFile)}. ${cause.message}`,
