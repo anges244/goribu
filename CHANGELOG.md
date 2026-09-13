@@ -11,6 +11,7 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `<Form>` supports real PUT, PATCH, and DELETE requests to matching route handlers, with the same state and response handling as POST. Extended-method forms wait for hydration; native GET/POST submission and their button method overrides remain supported.
 - Public declarations for all four package entries, including typed handlers,
   metadata, forms, cookies, D1, and KV. Strict fixtures check valid and invalid
   usage, module resolution, and runtime/declaration export parity.
@@ -24,6 +25,7 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Pages with non-GET handlers stay on the Worker so Static Assets cannot shadow form submissions with 405 responses. Explicit `prerender = true` rejects these routes with a repair instruction.
 - Scaffolder errors identify unknown options, duplicate flags, missing values,
   invalid names, archive failures, existing targets, permissions, and package
   defects separately, with repair instructions. Names ending in a hyphen are

@@ -1,5 +1,12 @@
 export const FORM_MEDIA_TYPE = "application/vnd.goribu.form+json";
 
+const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** HTTP methods whose responses can negotiate the Form protocol. */
+export function isFormMutationMethod(method) {
+  return MUTATION_METHODS.has(method);
+}
+
 export const FORM_FAILURE_MESSAGE =
   "We couldn’t confirm the form submission. Check the page before submitting again.";
 

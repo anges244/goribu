@@ -55,7 +55,7 @@ Open the local URL printed by `pnpm dev`.
 3. Visit `/hello?name=Astra` to see the request change the greeting.
 4. Use the home link to return.
 
-The home page has no GET handler. Its production HTML is built once and served
+The home page has no HTTP handlers. Its production HTML is built once and served
 from Static Assets without invoking the Worker, while the counter still runs
 in the browser. The greeting exports GET and renders at request time. Interactive
 controls and client navigation require JavaScript.

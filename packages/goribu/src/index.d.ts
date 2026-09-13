@@ -22,7 +22,7 @@ export interface FormState<Data = unknown> {
   errors: FormErrors | null;
   data: Data | null;
 }
-export type FormMethod = "get" | "post";
+export type FormMethod = "get" | "post" | "put" | "patch" | "delete";
 export interface FormProps<Data = unknown> extends
   Omit<ComponentPropsWithRef<"form">, "action" | "children" | "method" | "encType"> {
   action?: string;

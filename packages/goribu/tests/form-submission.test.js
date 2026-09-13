@@ -43,18 +43,18 @@ describe("Form submission primitives", () => {
     });
 
     expect(() => normalizeFormMethod(undefined)).toThrow(
-      '<Form> method must be "get" or "post"',
+      '<Form> method must be "get", "post", "put", "patch", or "delete"',
     );
-    for (const method of ["put", "patch", "delete", "trace"]) {
+    for (const method of ["head", "options", "trace", "", " post "]) {
       expect(() => normalizeFormMethod(method)).toThrow(
-        'Use "get" for URL navigation or "post" for mutations',
+        'Set the intended method explicitly',
       );
     }
   });
 
-  it("rejects unsupported submitter formmethod overrides with a repair", () => {
+  it.each(["put", "patch", "delete", "head", "options", "trace", ""])("rejects submitter formmethod=%s with a repair", (method) => {
     const button = document.createElement("button");
-    button.setAttribute("formmethod", "delete");
+    button.setAttribute("formmethod", method);
 
     expect(() => {
       resolveEffectiveSubmission({

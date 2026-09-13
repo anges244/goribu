@@ -116,7 +116,7 @@ export default function NameForm() {
 }
 ```
 
-The method is explicitly `get` or `post`. Goribu selects form encoding.
+The method is explicitly `get`, `post`, `put`, `patch`, or `delete` (lowercase or uppercase). Goribu selects form encoding. PUT, PATCH, and DELETE require hydration; see [Forms](./forms.md).
 `onResult` can receive a successful navigation without JSON data, or a network
 failure without a `Response`, so those fields remain optional.
 

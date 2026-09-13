@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { act, createElement as h, createRef } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Form } from "../src/forms/form.js";
@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 describe("Form", () => {
-  it("uses the submit-time URL, successful controls, and negotiated POST fetch", async () => {
+  it.each(["POST", "PUT", "PATCH", "DELETE"])("uses the submit-time URL, successful controls, and negotiated %s fetch", async (method) => {
     const runtime = installRuntime();
     const onResult = vi.fn();
     const response = formResponse(
@@ -43,7 +43,7 @@ describe("Form", () => {
     const { container } = await mount(
       h(
         Form,
-        { method: "POST", onResult, ref, className: "editor" },
+        { method, onResult, ref, className: "editor" },
         h("input", { name: "tag", defaultValue: "one" }),
         h("input", { name: "tag", defaultValue: "two" }),
         h("button", {
@@ -64,7 +64,7 @@ describe("Form", () => {
     expect(fetch).toHaveBeenCalledOnce();
     const [url, init] = fetch.mock.calls[0];
     expect(url).toBe(`${window.location.origin}/moved?after=render`);
-    expect(init.method).toBe("POST");
+    expect(init.method).toBe(method);
     expect(init.headers).toEqual({ accept: FORM_MEDIA_TYPE });
     expect(init.credentials).toBe("same-origin");
     expect(init.referrer).toBe(`${window.location.origin}/moved?after=render`);
@@ -807,6 +807,41 @@ describe("Form", () => {
     ]);
   });
 
+  it.each(["put", "patch", "delete"])("never falls back to a native verb for %s", async (method) => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const cases = [
+      [{ action: "https://other.example/save" }, {}],
+      [{ action: "mailto:test@example.com" }, {}],
+      [{ target: "_blank" }, {}],
+      [{}, { formAction: "https://other.example/save" }],
+      [{}, { formTarget: "_blank" }],
+      [{ onSubmit() { throw new Error("Application submit failed"); } }, {}],
+    ];
+    for (const [props, buttonProps] of cases) {
+      const { container } = await mount(
+        h(Form, { method, ...props }, h("button", buttonProps, "Save")),
+      );
+      const event = submitEvent(container.querySelector("button"));
+      let submittedError;
+      function captureError(errorEvent) {
+        submittedError = errorEvent.error;
+        errorEvent.preventDefault();
+      }
+      window.addEventListener("error", captureError);
+      try {
+        container.querySelector("form").dispatchEvent(event);
+      } finally {
+        window.removeEventListener("error", captureError);
+      }
+      expect(event.defaultPrevented).toBe(true);
+      expect(submittedError?.message).toContain(props.onSubmit
+        ? "Application submit failed"
+        : "requires a same-origin HTTP(S) action");
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("warns once for ignored encoding, reserved names, and unmatched errors", async () => {
     installRuntime();
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -841,19 +876,61 @@ describe("Form", () => {
     ]);
   });
 
-  it("fails closed when method is missing or is not GET/POST", () => {
+  it("fails closed when method is missing or unsupported", () => {
     expect(() => renderToString(h(Form, null))).toThrow(
-      '<Form> method must be "get" or "post"',
+      '<Form> method must be "get", "post", "put", "patch", or "delete"',
     );
-    for (const method of ["put", "patch", "delete", "trace"]) {
+    for (const method of ["head", "options", "trace", ""]) {
       expect(() => renderToString(h(Form, { method }))).toThrow(
-        'Use "get" for URL navigation or "post" for mutations',
+        'Set the intended method explicitly',
       );
     }
   });
 });
 
 describe("Form pre-hydration contract", () => {
+  it.each(["put", "PaTcH", "delete"])("enables %s only after hydration, including external submitters", async (method) => {
+    installRuntime();
+    const fetch = vi.fn(async () => formResponse({ type: "json", data: { saved: true } }));
+    vi.stubGlobal("fetch", fetch);
+    const ref = createRef();
+    const element = h(Form, { method, id: "editor", action: "/current", ref, className: "editor" },
+      h("input", { name: "name", defaultValue: "Ada" }),
+      h("button", null, "Save"),
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(element);
+    document.body.append(container);
+    const external = document.createElement("button");
+    external.setAttribute("form", "editor");
+    external.name = "intent";
+    external.value = "save";
+    document.body.append(external);
+
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.querySelector("[inert].editor")).not.toBeNull();
+    expect(container.querySelector("input").form).toBeNull();
+    expect(external.form).toBeNull();
+    external.click();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(ref.current).toBeNull();
+
+    const onRecoverableError = vi.fn();
+    await act(async () => {
+      mountedRoots.push(hydrateRoot(container, element, { onRecoverableError }));
+    });
+    const form = container.querySelector("form");
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(container.querySelector("[inert]")).toBeNull();
+    expect(ref.current).toBe(form);
+    expect(external.form).toBe(form);
+    await submit(form, external);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0][1].method).toBe(method.toUpperCase());
+    expect(fetch.mock.calls[0][1].body.get("name")).toBe("Ada");
+    expect(fetch.mock.calls[0][1].body.get("intent")).toBe("save");
+  });
+
   it("server-renders a natively submittable form with resolved action and method", () => {
     // Before any JavaScript attaches, the real <form> already carries the action
     // and method a native browser submit needs, so a submit that races hydration

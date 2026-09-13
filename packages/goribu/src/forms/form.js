@@ -24,6 +24,7 @@ import {
   createGetSubmissionUrl,
   hasEnabledNamedFileInput,
   hasNamedControl,
+  isNativeFormMethod,
   normalizeFormMethod,
   resolveEffectiveSubmission,
 } from "./form-submission.js";
@@ -45,6 +46,7 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
     ...formProps
   } = props ?? {};
   const method = normalizeFormMethod(methodProp);
+  const requiresHydration = !isNativeFormMethod(method);
 
   const formRef = useRef(null);
   const inFlightRef = useRef(false);
@@ -63,6 +65,7 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
     data: null,
     revision: 0,
   });
+  const [hydrated, setHydrated] = useState(false);
 
   const setFormRef = useCallback(
     (form) => {
@@ -74,6 +77,7 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
 
   useLayoutEffect(() => {
     mountedRef.current = true;
+    setHydrated(true);
     return () => {
       mountedRef.current = false;
       abortControllerRef.current?.abort();
@@ -408,7 +412,12 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
   }
 
   function handleSubmit(event) {
-    onSubmit?.(event);
+    try {
+      onSubmit?.(event);
+    } catch (error) {
+      if (requiresHydration) event.preventDefault();
+      throw error;
+    }
     if (event.defaultPrevented) return;
 
     const form = event.currentTarget;
@@ -426,6 +435,21 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
     } catch (error) {
       event.preventDefault();
       throw error;
+    }
+
+    if (!isNativeFormMethod(effective.method)) {
+      // HTML cannot submit these verbs. Every exit from here must keep the
+      // browser from substituting its native form method.
+      event.preventDefault();
+      if (
+        !["http:", "https:"].includes(effective.actionUrl.protocol) ||
+        effective.actionUrl.origin !== currentUrl.origin ||
+        (effective.target.length > 0 && effective.target.toLowerCase() !== "_self")
+      ) {
+        throw new TypeError(
+          `[Goribu] <Form method="${effective.method}"> requires a same-origin HTTP(S) action and target="_self". Use an action in this app and omit target or set it to "_self"; browsers cannot submit this method natively.`,
+        );
+      }
     }
 
     if (effective.actionUrl.protocol !== "http:" && effective.actionUrl.protocol !== "https:") {
@@ -521,6 +545,14 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
     errors: state.errors,
     data: state.data,
   };
+  const content = typeof children === "function" ? children(visibleState) : children;
+
+  if (requiresHydration && !hydrated) {
+    // No form owner exists yet, including for external controls using form=id.
+    // An inert wrapper keeps the content visible without offering a submission
+    // that the browser would silently turn into GET or POST.
+    return h("div", { ...formProps, inert: true }, content);
+  }
 
   return h(
     "form",
@@ -528,12 +560,12 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
       ...formProps,
       action,
       encType: "multipart/form-data",
-      method,
+      method: requiresHydration ? "post" : method,
       target,
       ref: setFormRef,
       onSubmit: handleSubmit,
     },
-    typeof children === "function" ? children(visibleState) : children,
+    content,
   );
 });
 

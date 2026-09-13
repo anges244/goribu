@@ -4,7 +4,7 @@
  *
  * Static output is not a separate feature: it is what the build does when a
  * route's first response needs no Worker. A route qualifies when it is a
- * prerender candidate — an implicit-GET page, or one that set
+ * prerender candidate — a page without HTTP handlers, or one that set
  * `export const prerender = true` — AND every URL segment is static, so its one
  * URL is known at build time.
  *

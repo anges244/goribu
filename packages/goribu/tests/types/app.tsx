@@ -104,11 +104,14 @@ const ui = <>
     if (result.ok) result.data?.name.toUpperCase();
     else result.errors.root;
   }}>{({ pending, errors, data }) => <button disabled={pending}>{errors?.name ?? data?.name ?? "Save"}</button>}</Form>
+  <Form method="put"><button>Replace</button></Form>
+  <Form method="PATCH"><button>Update</button></Form>
+  <Form method="delete"><button>Delete</button></Form>
 </>;
 // @ts-expect-error The form method is explicit.
 const missingMethod = <Form />;
-// @ts-expect-error Mutations use POST and named controls for intent.
-const unsupportedMethod = <Form method="delete" />;
+// @ts-expect-error Forms accept GET and the four mutation methods.
+const unsupportedMethod = <Form method="head" />;
 // @ts-expect-error Goribu owns form encoding.
 const unsupportedEncoding = <Form method="post" encType="text/plain" />;
 // @ts-expect-error Stylesheet takes no props.

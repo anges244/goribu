@@ -79,13 +79,7 @@ files:
 
 ## What a route must export
 
-A route file must default-export a React component. A file under `src/routes/`
-that exports neither a page nor a handler is a build error, so a file can never
-sit on a live URL with nothing to answer it.
-
-HTTP handlers (named `GET`, `POST`, and so on) are part of a later release; a
-route that exports one is rejected at build for now, with a message saying so.
-Today a route is a page.
+A route file must export a default React component, one or more named HTTP handlers (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, or `OPTIONS`), or both. A file under `src/routes/` that exports neither is a build error. Handlers answer their matching methods; a default page provides an implicit GET when there is no `GET` handler. See [Handlers](/docs/handlers).
 
 ## What routing answers on its own
 

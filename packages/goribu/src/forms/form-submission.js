@@ -1,13 +1,20 @@
-const FORM_METHODS = new Set(["get", "post"]);
+import { isFormMutationMethod } from "./form-protocol.js";
 
 /** Normalize and fail closed on every unsupported Form method. */
-export function normalizeFormMethod(value, source = "method") {
-  if (typeof value !== "string" || !FORM_METHODS.has(value.toLowerCase())) {
+export function normalizeFormMethod(value) {
+  if (
+    typeof value !== "string" ||
+    (value.toLowerCase() !== "get" && !isFormMutationMethod(value.toUpperCase()))
+  ) {
     throw new TypeError(
-      `[Goribu] <Form> ${source} must be "get" or "post". Use "get" for URL navigation or "post" for mutations, and send mutation intent in a named form control.`,
+      '[Goribu] <Form> method must be "get", "post", "put", "patch", or "delete". Set the intended method explicitly and export its matching handler from the action route.',
     );
   }
   return value.toLowerCase();
+}
+
+export function isNativeFormMethod(method) {
+  return method === "get" || method === "post";
 }
 
 /** Resolve submitter overrides against the browser location at submit time. */
@@ -28,13 +35,16 @@ export function resolveEffectiveSubmission(options) {
     );
   }
 
-  const methodValue = hasAttribute(submitter, "formmethod")
+  const hasMethodOverride = hasAttribute(submitter, "formmethod");
+  const methodValue = hasMethodOverride
     ? submitter.getAttribute("formmethod")
     : options.method;
-  const method = normalizeFormMethod(
-    methodValue,
-    hasAttribute(submitter, "formmethod") ? "submitter formmethod" : "method",
-  );
+  if (hasMethodOverride && !isNativeFormMethod(methodValue?.toLowerCase())) {
+    throw new TypeError(
+      '[Goribu] <Form> submitter formmethod must be "get" or "post". Set PUT, PATCH, or DELETE on <Form method> instead so Goribu can prevent submission before hydration.',
+    );
+  }
+  const method = normalizeFormMethod(methodValue);
 
   const targetValue = hasAttribute(submitter, "formtarget")
     ? submitter.getAttribute("formtarget")

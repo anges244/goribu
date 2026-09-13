@@ -20,7 +20,7 @@ import {
   isFormResponseResult,
   mergeVaryAccept,
 } from "./finalize-form-result.js";
-import { acceptsFormMediaType } from "../forms/form-protocol.js";
+import { acceptsFormMediaType, isFormMutationMethod } from "../forms/form-protocol.js";
 import { resolveRouteMeta } from "../metadata/route-meta.js";
 import { isApplicationConfig } from "./application-config.js";
 import {
@@ -205,12 +205,12 @@ export function createApp(options) {
             }
 
             if (response === undefined) {
-              // An enhanced <Form> mutation is an ordinary document POST carrying
+              // An enhanced <Form> mutation is an ordinary HTTP request carrying
               // the form media type in Accept. It runs through normal routing and
               // handlers, then negotiates a typed form envelope at finalization.
               const formRenderContext =
                 resolvedRequest.kind === "document" &&
-                applicationRequest.method === "POST" &&
+                isFormMutationMethod(applicationRequest.method) &&
                 acceptsFormMediaType(applicationRequest.headers.get("accept"))
                   ? resolveFormRenderContext(applicationRequest)
                   : null;
@@ -253,11 +253,11 @@ export function createApp(options) {
                 clientAssetBase,
               });
       }
-      // Every document POST can vary between its ordinary representation and a
+      // Every document mutation can vary between its ordinary representation and a
       // negotiated Form envelope. Mark even errors, fallbacks, and non-form
       // results so shared caches never reuse one representation for the other.
       const representation =
-        requestKind === "document" && applicationRequest.method === "POST"
+        requestKind === "document" && isFormMutationMethod(applicationRequest.method)
           ? addVaryAccept(response)
           : response;
       const withGlobalHeaders = applyGlobalResponseHeaders(

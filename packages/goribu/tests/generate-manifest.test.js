@@ -59,7 +59,7 @@ describe("generateManifest", () => {
       hasDefaultExport: true,
       methods: ["POST"],
       prerenderOverride: null,
-      prerenderEligible: true,
+      prerenderEligible: false,
     });
   });
 
@@ -67,7 +67,6 @@ describe("generateManifest", () => {
     const { projectRoot, routesDir } = createRoutes({
       "automatic.jsx": `
         import { loadData } from "./data.server.js";
-        export function POST() {}
         export default function Page() { return loadData(); }
       `,
       "disabled.jsx": `
@@ -100,6 +99,18 @@ describe("generateManifest", () => {
       "/explicit-get": { override: null, eligible: false },
       "/forced": { override: true, eligible: true },
     });
+  });
+
+  it.each(["POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])("keeps a page with a %s handler on the Worker and rejects forced static output", (method) => {
+    const source = `export default function Page() { return null; }\nexport function ${method}() {}`;
+    const { projectRoot, routesDir } = createRoutes({ "form.jsx": source });
+    expect(generateManifest({ routesDir, projectRoot })[0]).toMatchObject({
+      methods: [method], prerenderEligible: false,
+    });
+    writeFileSync(join(routesDir, "form.jsx"), `${source}\nexport const prerender = true;`);
+    expect(() => generateManifest({ routesDir, projectRoot })).toThrow(
+      `Static Assets would shadow these handlers. Remove the prerender export`,
+    );
   });
 
   it("rejects both duplicate paths and parameter-name-only distinctions", () => {

@@ -1,8 +1,6 @@
 # Forms
 
-`<Form>` renders a real HTML form and enhances it after hydration. The server
-handler owns the request and response; the component owns pending state,
-validation errors, and the last successful JSON result.
+`<Form>` submits to a route's matching HTTP handler. The handler owns the request and response; the component owns pending state, validation errors, and the last successful JSON result. GET and POST forms work natively before hydration. PUT, PATCH, and DELETE forms become usable after hydration.
 
 ```jsx
 import { Form } from "goribu";
@@ -30,19 +28,19 @@ export async function POST(req, res) {
 }
 ```
 
-`method` is required and accepts only `get` or `post`. `action` defaults to the
-browser's current URL at submit time, so it remains correct when a component
-survives client navigation.
+`method` is required and accepts `get`, `post`, `put`, `patch`, or `delete`, case-insensitively. `action` defaults to the browser's current URL at submit time, so it remains correct when a component survives client navigation. The method selects the action route's matching handler: `<Form method="patch">` sends a real PATCH request to its `PATCH` export. There is no hidden method field or POST tunneling. HEAD and OPTIONS remain available as route handlers, but are not Form methods.
+
+A page with mutation handlers is served by the Worker automatically, so submissions reach those handlers in production. See [Static routes](./static-routes.md) for separating a static page from its action route.
 
 ## Handler outcomes
 
-An enhanced POST understands four response intents:
+Enhanced POST, PUT, PATCH, and DELETE submissions understand the same four response intents:
 
 | Handler result | Browser behavior |
 | --- | --- |
 | `res.json(data)` | Stay on the page and expose `data` to the render prop. |
 | `res.invalid(errors)` | Stay, expose `errors`, mark fields, and focus the first invalid control. |
-| `res.redirect(url)` | Navigate to the destination without replaying the POST. |
+| `res.redirect(url)` | Navigate to the destination without replaying the mutation. |
 | `res.render(props)` | Re-render this route in place with fresh props and metadata. |
 
 Choose based on what the user should see next. A non-2xx JSON result produces a
@@ -73,7 +71,7 @@ control named `root` produce console warnings.
 Always validate on the server. Native constraint validation is an ergonomic
 first pass, not an authorization or integrity boundary.
 
-## GET and POST
+## GET and mutation methods
 
 An enhanced GET converts successful non-file controls to a query string and
 uses normal client navigation:
@@ -93,12 +91,34 @@ The fields replace the action's existing query. File values cannot be encoded in
 the URL and are omitted, with a development warning. GET has no response data or
 validation state because it navigates to another page representation.
 
-An enhanced POST sends `application/x-www-form-urlencoded` unless the form has
-an enabled named file input, in which case it sends `multipart/form-data`.
-Successful controls, external controls associated with the form, and the clicked
-submitter's name/value are preserved. Submitter `formaction`, `formmethod`, and
-`formtarget` overrides are resolved at submit time; an unsupported method still
-fails closed.
+POST, PUT, PATCH, and DELETE send `application/x-www-form-urlencoded` unless the form has an enabled named file input, in which case they send `multipart/form-data`. Read the body with the same `req.body()` API for every method.
+
+Successful controls, external controls associated with the form, and the clicked submitter's name/value are preserved. Submitter `formAction`, `formMethod`, and `formTarget` overrides are resolved at submit time. Button `formMethod` accepts only `get` and `post`; put extended methods on `<Form method>` itself so Goribu can prevent submission before hydration. An unsupported override cancels submission and throws a repair instruction after hydration.
+
+For example, this route accepts PATCH directly:
+
+```jsx
+import { Form } from "goribu";
+
+export default function NamePage() {
+  return (
+    <Form method="patch">
+      {({ data }) => (
+        <>
+          <input name="name" />
+          <button>Send name</button>
+          <p>{data?.name}</p>
+        </>
+      )}
+    </Form>
+  );
+}
+
+export async function PATCH(req, res) {
+  const { name } = await req.body();
+  return res.json({ name });
+}
+```
 
 `encType` is not configurable. Goribu renders native forms as multipart so file
 and submitter behavior remains safe before hydration, while enhanced submission
@@ -140,8 +160,7 @@ form when conditional reset behavior is needed.
 
 `onSubmit` runs before Goribu and may cancel enhancement with `preventDefault()`.
 `onResult` runs after local state and any in-place page render commit, but before
-redirect navigation. It receives the final success/failure result and, for POST
-responses, the underlying `Response`.
+redirect navigation. It receives the final success/failure result and, for mutation responses, the underlying `Response`.
 
 Unmounting aborts the active request. A newer navigation also invalidates an
 older form completion, so stale data cannot overwrite the page the user has
@@ -149,21 +168,21 @@ already reached.
 
 ## Native behavior before hydration
 
-Before the submit handler attaches, `<Form>` is an ordinary form with a resolved
-action, `get` or `post` method, and multipart encoding. Results retain their
-ordinary server representation:
+GET and POST render ordinary multipart forms before the submit handler attaches. Results retain their ordinary server representation:
 
 - `res.render()` streams HTML;
 - `res.redirect()` is a wire redirect;
 - `res.json()` and `res.invalid()` are full-page JSON responses.
 
+PUT, PATCH, and DELETE require hydration to submit. Until then, their contents are visible but inert and there is no native form to submit, including from external controls associated by `form="id"`. Without JavaScript, these forms remain inactive. The form ref becomes available after hydration; use classes to style the wrapper before then.
+
 Enhanced validation and in-place rendering require JavaScript by design. If a
 submit is intercepted before the navigation runtime finishes installing, Goribu
 fails closed to a document load rather than committing partial state.
 
-Cross-origin actions, non-HTTP actions, and non-`_self` targets remain native.
-Malformed claimed protocol responses also recover through a document request;
-the POST is never automatically repeated.
+GET/POST submissions to cross-origin or non-HTTP actions, or non-`_self` targets, remain native. PUT/PATCH/DELETE submissions require a same-origin HTTP(S) action and an omitted or `_self` target, including submitter overrides. Goribu cancels unsupported submissions and throws with a repair instruction; it never substitutes GET or POST for an extended method.
+
+Malformed claimed protocol responses recover through a document GET; the mutation is never automatically repeated.
 
 See [navigation.md](./navigation.md) for navigation behavior and
 [handlers.md](./handlers.md) for the request/response surface.

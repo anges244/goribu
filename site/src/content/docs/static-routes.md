@@ -27,11 +27,9 @@ version.)
 
 ## What makes a route static
 
-A route is served statically when both hold:
+By default, a route is served statically when both hold:
 
-1. **Its GET representation needs no Worker.** The route has a page and no GET
-   handler, has not set `prerender = false`, and has no selected middleware.
-   POST-only handlers do not prevent the page's GET from being static.
+1. **The route needs no request-time handlers.** The route has a page and no explicit HTTP handlers, has not set `prerender = false`, and has no selected middleware. A page exporting POST, PUT, PATCH, DELETE, HEAD, or OPTIONS stays on the Worker so Static Assets cannot shadow its handlers.
 2. **Its URL is fully known at build time.** A route with a dynamic segment
    (`posts/[id]`) has no single URL to build, so it cannot be static.
 
@@ -42,8 +40,9 @@ export const prerender = false; // always serve this route from the Worker
 export const prerender = true;  // require this route to be built statically
 ```
 
-`prerender = true` is a promise: if the route cannot be built statically, the
-build fails rather than quietly serving it from the Worker.
+`prerender = true` is a promise: if the route cannot be built statically, the build fails rather than quietly serving it from the Worker. It can explicitly opt a GET handler into build-time rendering. Combining it with any non-GET handler is a build error: remove the export or move those handlers to a separate action route.
+
+A page containing `<Form>` can still be static when its handlers live at another URL. For example, a static `/subscribe` page can submit `<Form method="post" action="/subscriptions">` to a separate `/subscriptions` route exporting `POST`. Colocating the handler and page also works; that URL is then served by the Worker.
 
 ## How it works
 

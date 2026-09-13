@@ -89,13 +89,24 @@ function createManifestEntry(discoveredRoute, projectRoot) {
 
   assertUsableRouteModule(analysis, id);
 
+  const nonGetMethods = analysis.methods.filter((method) => method !== "GET");
+  if (analysis.prerender === true && nonGetMethods.length > 0) {
+    throw new Error(
+      `[Goribu] Route "${id}" sets \`export const prerender = true\` but exports ${nonGetMethods.join(", ")} handlers. ` +
+        "Static Assets would shadow these handlers. Remove the prerender export to serve this route on the Worker, " +
+        "or move the non-GET handlers to a separate action route.",
+    );
+  }
+
   // Preserve the explicit override so the build can distinguish an author-requested
   // attempt from an automatic candidate. Separately derive eligibility using only
-  // the visible rule: a page without its own GET is an automatic candidate.
+  // the visible rule: a page without HTTP handlers is an automatic candidate.
+  // Static Assets own a matching URL, so emitting HTML there would also shadow
+  // its non-GET handlers before the Worker has a chance to dispatch them.
   // Avoiding deeper code heuristics keeps this classification predictable.
   const prerenderEligible =
     analysis.prerender ??
-    (analysis.hasDefaultExport && !analysis.methods.includes("GET"));
+    (analysis.hasDefaultExport && analysis.methods.length === 0);
 
   return {
     id,

@@ -137,7 +137,7 @@ Prefetch is an optimization, never a correctness requirement.
 
 ## Related APIs
 
-GET `<Form>` submissions use this same navigation controller. POST forms can
+GET `<Form>` submissions use this same navigation controller. POST, PUT, PATCH, and DELETE forms can
 redirect into it or render the current page in place. See [forms.md](./forms.md).
 
 Route metadata is validated before a transition commits, then only Goribu's

@@ -54,6 +54,7 @@ describe("goribu build static output (workerd)", () => {
     expect(existsSync(join(clientDir, "about.html"))).toBe(true);
     expect(readFileSync(join(clientDir, "index.html"), "utf8")).toContain("Hello from Goribu");
     expect(readFileSync(join(clientDir, "about.html"), "utf8")).toContain("<h1>About</h1>");
+    expect(existsSync(join(clientDir, "forms.html"))).toBe(false);
     expect(build.output).toContain("Statically output 2 route(s)");
   });
 
@@ -88,6 +89,29 @@ describe("goribu build static output (workerd)", () => {
         hasAssets: true,
         hasServerToken: true,
       });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("reaches colocated mutation handlers through the production HTTP server", async () => {
+    const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
+    try {
+      const { url } = await harness.listen();
+      // getWorker().fetch() bypasses Static Assets routing and would miss a
+      // prerendered page shadowing these handlers at the public URL.
+      for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+        for (const accept of ["text/html", "application/vnd.goribu.form+json"]) {
+          const response = await fetch(new URL("/forms", url), {
+            method,
+            headers: { accept },
+            body: new URLSearchParams({ name: "Ada", intent: "save" }),
+          });
+          expect(response.status, `${method} with Accept: ${accept}`).toBe(201);
+          const result = await response.json();
+          expect(accept === "text/html" ? result : result.data).toMatchObject({ method, name: "Ada" });
+        }
+      }
     } finally {
       await harness.close();
     }

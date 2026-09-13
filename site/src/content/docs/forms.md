@@ -1,11 +1,9 @@
 ---
 title: Forms
-description: Native GET and POST forms enhanced with pending state, validation, redirects, and same-page rendering.
+description: Forms that submit to HTTP method handlers, with pending state, validation, redirects, and same-page rendering.
 ---
 
-`<Form>` is a real form before hydration and a stateful route submission after
-it. It accepts only `get` and `post`; `method` is required and `action` defaults
-to the current browser URL at submit time.
+`<Form>` submits to a route's matching HTTP handler. Its required `method` accepts `get`, `post`, `put`, `patch`, or `delete`, case-insensitively. `action` defaults to the current browser URL at submit time.
 
 ```jsx
 import { Form } from "goribu";
@@ -32,7 +30,11 @@ export async function POST(req, res) {
 }
 ```
 
-## Four POST outcomes
+## Four mutation outcomes
+
+POST, PUT, PATCH, and DELETE share these outcomes. For example, `<Form method="patch">` sends a real PATCH request to the action route's `PATCH` handler, where `await req.body()` reads the submitted fields.
+
+A page with mutation handlers is served by the Worker automatically, so submissions reach those handlers in production.
 
 | Handler result | Browser behavior |
 |---|---|
@@ -52,10 +54,7 @@ GET and never repeats the mutation.
 
 ## Submission behavior
 
-GET converts successful non-file controls into a query string and uses client
-navigation. POST uses URL encoding unless an enabled named file input requires
-multipart. The clicked submit button and native `formaction`, `formmethod`, and
-`formtarget` overrides are honored, but unsupported methods fail closed.
+GET converts successful non-file controls into a query string and uses client navigation. POST, PUT, PATCH, and DELETE use URL encoding unless an enabled named file input requires multipart. The clicked submit button's name/value and its `formAction`, `formMethod`, and `formTarget` overrides are honored. Button `formMethod` accepts only `get` and `post`; set PUT, PATCH, or DELETE on `<Form method>` itself. Unsupported overrides cancel submission with an error after hydration.
 
 `pending` starts synchronously and duplicate submits are blocked. Errors clear
 when a new request starts; previous data remains while pending, then `data` and
@@ -63,17 +62,17 @@ when a new request starts; previous data remains while pending, then `data` and
 successful JSON or same-page render result. `onSubmit` may cancel enhancement;
 `onResult` observes completion before redirect navigation.
 
-Cross-origin actions, non-HTTP actions, and non-`_self` targets remain native. A
-newer navigation or unmount invalidates an older submission so it cannot replace
-the current page.
+GET/POST submissions to cross-origin or non-HTTP actions, or non-`_self` targets, remain native. PUT/PATCH/DELETE require a same-origin HTTP(S) action and an omitted or `_self` target; unsupported destinations cancel submission with a repair instruction. A newer navigation or unmount invalidates an older submission so it cannot replace the current page.
 
 ## Before hydration
 
-The server-rendered element is an ordinary multipart form. Before enhancement:
+GET and POST render ordinary multipart forms. Before enhancement:
 
 - `res.render()` returns HTML;
 - `res.redirect()` is a normal wire redirect;
 - `res.json()` and `res.invalid()` are full-page JSON responses.
+
+PUT, PATCH, and DELETE forms wait for hydration: their contents are visible but inactive until JavaScript attaches. They never fall back to GET or POST. Without JavaScript, they remain inactive.
 
 Enhanced validation and in-place rendering require JavaScript by design. A
 submission caught before navigation finishes installing fails closed to a
