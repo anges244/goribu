@@ -20,10 +20,27 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Local Worker bindings use Cloudflare's `.env` plus `.env.local`, or `.dev.vars`
+  precedence. Compared with the older Goribu loader, `.env.development` and
+  `.env.development.local` no longer feed bindings; move server overrides to
+  `.env.local`. Vite still uses mode files for `PUBLIC_*` browser values. Implicit
+  dotenv loading before `goribu.config.js` evaluation remains deferred.
+
 - `create-goribu <name>` defaults to TypeScript. Use `--js` for JavaScript.
   Both languages retain the existing JavaScript config and browser entry names.
 
 ### Fixed
+
+- Root `.env` files now reach local Worker bindings. The generated Wrangler
+  config moves to `goribu.wrangler.jsonc` at the app root, with idempotent writes
+  and an explicit dev-watcher exclusion to preserve restart lifecycle safety.
+  When upgrading, remove the obsolete generated `.goribu/wrangler.json`; Goribu
+  no longer reads it. Keep `.goribu/worker.js`, which is still used.
+- `goribu deploy` again uploads `.env.production` through Wrangler's native
+  secrets-file option, preserving omitted platform secrets and never falling
+  back to local `.env`. A Wrangler dry run rejects invalid secrets before
+  provisioning or migrations; `goribu check` reports the file and action
+  without values or key counts.
 
 - `goribu dev` keeps one listening port and one `workerd` child across restarts.
   The previous server and its Worker runtime are disposed before the replacement

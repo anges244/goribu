@@ -8,6 +8,7 @@ const NAV = [
   { href: "/docs/installation", label: "Getting started" },
   { href: "/docs/typescript", label: "TypeScript" },
   { href: "/docs/cli", label: "The CLI" },
+  { href: "/docs/environment-variables", label: "Environment variables" },
   { href: "/docs/routing", label: "Routing" },
   { href: "/docs/rendering", label: "Rendering" },
   { href: "/docs/handlers", label: "Handlers" },

@@ -88,6 +88,18 @@ or make correctness-sensitive decisions. See the site's
 
 ## Deploy deliberately
 
+Put local server values in `.env`, with optional overrides in `.env.local`.
+Handlers read them from `req.env`. A `.dev.vars` file takes precedence over both.
+Put production secrets in `.env.production`; deployment uploads that file and
+preserves existing secrets omitted from it. Without it, existing platform
+secrets are used. Local `.env` never becomes a production upload fallback.
+
+Only `PUBLIC_*` values belong in browser code through `import.meta.env`.
+Vite loads mode files for those values and bakes them into the build. Worker
+bindings do not automatically load `.env.development`; use `.env.local` for
+local server overrides. Keep env files private and commit only a placeholder
+`.env.example`. `goribu.wrangler.jsonc` is generated; do not edit or commit it.
+
 Choose your Worker name in `goribu.config.js`. From this app directory, log in
 with the bundled Wrangler if needed:
 

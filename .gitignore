@@ -4,5 +4,11 @@ node_modules/
 dist/
 .wrangler/
 .goribu/
+goribu.wrangler.jsonc
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
 .DS_Store
 /examples/.artifacts/

@@ -101,6 +101,9 @@ remains reserved for Goribu's generated immutable asset rule.
 
 ## Public browser values
 
+For local Worker bindings and production secrets, see
+[Environment variables](/docs/environment-variables).
+
 Only `PUBLIC_*` environment values enter `import.meta.env`:
 
 ```dotenv

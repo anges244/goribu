@@ -12,7 +12,7 @@ add routes and dependencies only for actual application needs.
   command instead of the app script.
 - The maintainer installs dependencies, commits, and deploys. Provide the exact
   command and wait for confirmation; do not perform these actions yourself.
-- Preserve unrelated work. Never edit generated `dist/`, `.goribu/`, `.wrangler/`,
+- Preserve unrelated work. Never edit generated `goribu.wrangler.jsonc`, `dist/`, `.goribu/`, `.wrangler/`,
   or `node_modules/`, and do not commit credentials or local environment files.
 
 ## Application conventions

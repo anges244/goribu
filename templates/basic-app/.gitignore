@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .goribu/
+goribu.wrangler.jsonc
 .wrangler/
 .env
 .env.*

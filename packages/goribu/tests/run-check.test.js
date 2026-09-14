@@ -40,6 +40,27 @@ function fakeSpawn({ output = "[]", code = 0, signal = null, error } = {}) {
 }
 
 describe("goribu check", () => {
+  it("reports the secrets file and action without reading or printing values", async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goribu-check-secrets-"));
+    try {
+      const written = [];
+      const options = {
+        projectRoot,
+        loadConfig: async () => defineConfig({ name: "app", compatibilityDate: "2026-09-11" }),
+        stdout: { write: (text) => written.push(text) },
+      };
+      writeFileSync(join(projectRoot, ".env"), "LOCAL_KEY=never-upload\n");
+      expect((await runCheck(options)).secretsFile).toBeUndefined();
+      expect(written.pop()).toContain("Secrets: use existing platform secrets; no .env.production found.");
+      writeFileSync(join(projectRoot, ".env.production"), "PRIVATE_KEY=never-log\n");
+      expect((await runCheck(options)).secretsFile).toBe(".env.production");
+      const output = written.pop();
+      expect(output).toContain("Secrets: upload from .env.production; preserve other existing secrets.");
+      expect(output).not.toMatch(/PRIVATE_KEY|never-log|never-upload/);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
   it("reports a missing D1 database, its future DB binding, target, and cost warning", async () => {
     const written = [];
     const plan = await runCheck({

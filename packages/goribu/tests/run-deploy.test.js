@@ -1,11 +1,14 @@
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import {
   resolveWranglerBin,
   runDeploy,
   runWranglerDeploy,
+  validateProductionSecrets,
 } from "../src/build/run-deploy.js";
 
 const FAKE_BIN = "/fake/path/to/wrangler.js";
@@ -26,8 +29,30 @@ function fakeSpawn(drive) {
 
 const resolveBin = () => FAKE_BIN;
 const fakeAccess = async () => ({ accountId: "account", headers: {} });
+const roots = [];
+function makeProject() {
+  const root = mkdtempSync(join(tmpdir(), "goribu-deploy-secrets-"));
+  roots.push(root);
+  return root;
+}
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
 
 describe("runWranglerDeploy", () => {
+  it("passes the production file unchanged to Wrangler and validates it without logging parser output", async () => {
+    const spawn = fakeSpawn((child) => child.emit("close", 0, null));
+    const options = { projectRoot: "/app", secretsFile: ".env.production", spawn, resolveBin };
+    await validateProductionSecrets(options);
+    await runWranglerDeploy(options);
+    expect(spawn.calls.map(({ args, options }) => ({ args, stdio: options.stdio }))).toEqual([
+      { args: [FAKE_BIN, "deploy", "--dry-run", "--secrets-file=.env.production"], stdio: "ignore" },
+      { args: [FAKE_BIN, "deploy", "--secrets-file=.env.production"], stdio: "inherit" },
+    ]);
+    await expect(validateProductionSecrets({
+      ...options, spawn: fakeSpawn((child) => child.emit("close", 1, null)),
+    })).rejects.toThrow(/\[Goribu\].*pnpm --dir node_modules\/goribu exec wrangler deploy --cwd "\$PWD" --dry-run --secrets-file=\.env\.production.*output may include text from the file.*No resources or migrations were changed/);
+  });
   it("launches the resolved Wrangler binary with deploy in the project root", async () => {
     const spawn = fakeSpawn((child) => child.emit("close", 0, null));
 
@@ -291,7 +316,7 @@ describe("runDeploy", () => {
     expect(migrate).not.toHaveBeenCalled();
     expect(finalize).not.toHaveBeenCalled();
     expect(getAccess).toHaveBeenCalledWith({ projectRoot: "/app" });
-    expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app" });
+    expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app", secretsFile: undefined });
   });
 
   it("stops before building or remote mutations when authentication fails, even without resources", async () => {
@@ -313,4 +338,35 @@ describe("runDeploy", () => {
       expect(stage).not.toHaveBeenCalled();
     }
   });
+});
+
+it("validates production secrets before provisioning, and never uploads the local .env as fallback", async () => {
+  const projectRoot = makeProject();
+  writeFileSync(join(projectRoot, ".env"), "LOCAL_ONLY=never-upload\n");
+  const stdout = { write: vi.fn() };
+  const provision = vi.fn(async () => null);
+  const provisionKV = vi.fn(async () => null);
+  const migrate = vi.fn();
+  const deploy = vi.fn(async () => 0);
+  const validateSecrets = vi.fn(async () => {});
+  const options = {
+    projectRoot, stdout, provision, provisionKV, migrate, deploy, validateSecrets,
+    build: async () => {}, getAccess: fakeAccess,
+    loadConfig: async () => defineConfig({ name: "app", compatibilityDate: "2026-09-11" }),
+  };
+  await runDeploy(options);
+  expect(validateSecrets).not.toHaveBeenCalled();
+  expect(deploy).toHaveBeenLastCalledWith({ projectRoot, secretsFile: undefined });
+  expect(stdout.write).toHaveBeenCalledWith(expect.stringContaining("use existing platform secrets"));
+
+  writeFileSync(join(projectRoot, ".env.production"), "PROD_ONLY=upload\nPUBLIC_NAME=public-too\n");
+  await runDeploy(options);
+  expect(validateSecrets).toHaveBeenCalledWith({ projectRoot, secretsFile: ".env.production" });
+  expect(deploy).toHaveBeenLastCalledWith({ projectRoot, secretsFile: ".env.production" });
+  expect(stdout.write.mock.calls.flat().join("")).not.toMatch(/PROD_ONLY|PUBLIC_NAME|never-upload/);
+
+  for (const stage of [provision, provisionKV, migrate, deploy]) stage.mockClear();
+  validateSecrets.mockRejectedValueOnce(new Error("invalid production secrets"));
+  await expect(runDeploy(options)).rejects.toThrow("invalid production secrets");
+  for (const stage of [provision, provisionKV, migrate, deploy]) expect(stage).not.toHaveBeenCalled();
 });

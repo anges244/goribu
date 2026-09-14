@@ -196,6 +196,9 @@ covering static pages.
 
 ## Public browser environment
 
+For local Worker bindings and production secrets, see
+[Environment variables](./environment-variables.md).
+
 Only variables with the exact `PUBLIC_` prefix enter browser code:
 
 ```dotenv

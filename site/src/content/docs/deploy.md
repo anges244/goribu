@@ -44,6 +44,13 @@ The app is served from its `workers.dev` URL (and any custom domain you have
 configured), under the `name` from `goribu.config.js`. Re-running `goribu deploy`
 replaces what production serves.
 
+If `.env.production` exists at the app root, deploy uploads it unchanged as
+Worker secrets through Wrangler. Omitted secrets are preserved. If absent,
+existing platform secrets are used; local `.env` is never an upload fallback.
+A Wrangler dry run validates the file and built Worker before provisioning or
+migrations. See [Environment variables](/docs/environment-variables) for local
+loading, public browser values, and migration from the older loader.
+
 ## Deploying with D1 and KV
 
 Declare either or both resources in `goribu.config.js`; the application owns
@@ -72,12 +79,15 @@ goribu check
 
 `check` is read-only. It reports the production Worker target, whether each D1/KV
 resource exists or will be created, the `DB`/`KV` mappings, cost warnings, and
-the production migration state. Applied, pending, and drifted migrations come
+the production migration state. It also reports the intended secrets file or
+that existing platform secrets will be used, without reading values or counting
+keys. Applied, pending, and drifted migrations come
 from a read-only ledger query; a missing database or tracking table is reported
 without creating either. It finishes by confirming that no resources changed.
 
 On `goribu deploy`, Goribu validates binding ownership, checks authentication,
-and completes the production build before changing any production resources.
+and completes the production build and any production secrets preflight before
+changing any production resources.
 The credential/account result is reused by both provisioners within that deploy;
 it is not stored by Goribu. Authentication checks also run for apps with no D1
 or KV declaration. They do not prove every later operation has permission or
@@ -141,5 +151,5 @@ changes and upload run, so pending migrations must be compatible with it. See
 - A failed or interrupted deploy exits non-zero and does not report success.
 - The build output lives in `dist/`; `.wrangler/deploy/config.json` redirects
   Wrangler to the emitted Worker configuration and static assets there. The
-  redirect, build output, and `.goribu/` build inputs are generated and are not
+  redirect, build output, `goribu.wrangler.jsonc`, and `.goribu/` build inputs are generated and are not
   committed.

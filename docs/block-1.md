@@ -6,6 +6,11 @@ from source to a locally-served Worker, to a production build, to a deploy.
 
 ## What landed
 
+Historical note: the generated Wrangler config location below was superseded by
+the 2026-09-14 “Local environment files and generated config location” decision
+in [decisions.md](./decisions.md). The current file is root
+`goribu.wrangler.jsonc`; see [Environment variables](./environment-variables.md).
+
 - **The CLI (`bin/goribu.js`)** — the framework's front door, built first, not
   last. `dev`, `build`, and `deploy`, plus `--version`, `--help`, and fail-closed
   handling of unknown commands and unexpected arguments.

@@ -1,6 +1,6 @@
 import {
   mkdtempSync,
-  readFileSync,
+  mkdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -24,11 +24,11 @@ beforeAll(async () => {
     database: { type: "d1", name: "local-d1-app-db" },
     kv: { name: "local-d1-app-kv" },
   });
-  const { outputFile } = writeWranglerConfig({ projectRoot: root, appConfig });
-  const config = JSON.parse(readFileSync(outputFile, "utf8"));
+  const { outputFile, config } = writeWranglerConfig({ projectRoot: root, appConfig });
   delete config.assets;
   writeFileSync(outputFile, `${JSON.stringify(config, null, 2)}\n`);
   const serverModule = fileURLToPath(new URL("../src/server.js", import.meta.url));
+  mkdirSync(join(root, ".goribu"), { recursive: true });
   writeFileSync(
     join(root, ".goribu", "worker.js"),
     `import { createApp, defineConfig } from ${JSON.stringify(serverModule)};

@@ -9,6 +9,7 @@ import { readAppliedMigrations } from "./migrations/inspect-applied.js";
 import { planMigrations } from "./migrations/plan-migrations.js";
 import { executeD1 } from "./migrations/wrangler-d1.js";
 import { findDeclaredKVNamespace, listRemoteKVNamespaces } from "./inspect-kv.js";
+import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -59,7 +60,8 @@ export async function runCheck(options) {
   const appliedRows =
     existing === undefined ? [] : await inspectMigrations({ projectRoot, appConfig });
 
-  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations, appliedRows });
+  const secretsFile = findProductionSecretsFile(projectRoot);
+  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations, appliedRows, secretsFile });
 
   stdout.write(formatCheckPlan(plan));
   return plan;
@@ -192,7 +194,7 @@ export function findDeclaredDatabase({ appConfig, remoteDatabases } = {}) {
 }
 
 /** Compare declared resources with the read-only remote inventories. */
-export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations = [], appliedRows = [] } = {}) {
+export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations = [], appliedRows = [], secretsFile } = {}) {
   if (!isApplicationConfig(appConfig)) {
     throw new TypeError(
       "[Goribu] createCheckPlan({ appConfig }) requires the defineConfig() result loaded from goribu.config.js.",
@@ -256,6 +258,7 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
 
   return Object.freeze({
     readOnly: true,
+    secretsFile,
     deployTarget: Object.freeze({
       worker: appConfig.name,
       environment: "production",
@@ -285,6 +288,7 @@ export function formatCheckPlan(plan) {
     `  Static assets: ${plan.deployTarget.staticAssets}`,
     `  Compatibility date: ${plan.deployTarget.compatibilityDate}`,
     `  Compatibility flags: ${flags.length === 0 ? "none" : flags.join(", ")}`,
+    `  ${formatSecretsPlan(plan.secretsFile)}`,
     "",
     "Resources",
     `  Existing: ${formatResources(existing)}`,

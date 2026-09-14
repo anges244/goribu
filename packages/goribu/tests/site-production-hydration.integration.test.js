@@ -20,7 +20,7 @@ const productionRoute =
 let build;
 
 function cleanBuildOutput() {
-  for (const dir of ["dist", ".goribu", ".wrangler"]) {
+  for (const dir of ["dist", ".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
     rmSync(join(siteDir, dir), { recursive: true, force: true });
   }
 }
@@ -87,6 +87,7 @@ describe("site production hydration", () => {
       ["migrations", "Migrations"],
       ["kv", "KV"],
       ["metadata", "Metadata &amp; Document"],
+      ["environment-variables", "Environment variables"],
     ]) {
       const file = join(clientDir, "docs", `${page}.html`);
       expect(existsSync(file), page).toBe(true);

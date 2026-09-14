@@ -4,8 +4,8 @@ import { dirname } from "node:path";
 /**
  * Write a generated file only when its bytes would actually change.
  *
- * Goribu regenerates `.goribu/` from the Vite `config` hook, so every dev-server
- * restart rewrites it. One of those files is the Wrangler config that the
+ * Goribu regenerates its Worker and Wrangler config from the Vite `config` hook,
+ * including on every dev-server restart. The Wrangler config is a file the
  * Cloudflare plugin watches to decide a restart is needed, so an unconditional
  * write makes each restart schedule the next one: the write lands while the
  * previous server's watcher is still open, and whether the resulting restart is

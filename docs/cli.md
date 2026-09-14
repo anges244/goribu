@@ -38,7 +38,13 @@ non-zero with the error and a repair instruction.
 `goribu.config.js` reaches a running session only through that restart; it is
 never hot-updated into the Worker on its own, so a config Goribu rejects cannot
 reach your app. Goribu's generated `.goribu/` directory is not watched either,
-because Goribu writes it and a rewrite is not a reason to restart.
+because Goribu writes it and a rewrite is not a reason to restart. The generated
+root `goribu.wrangler.jsonc` is excluded for the same reason.
+
+Local Worker values come from root `.env` plus `.env.local`, or from `.dev.vars`
+which suppresses both. Edits reload the session. See
+[Environment variables](./environment-variables.md) for precedence and how
+browser values differ from Worker bindings.
 
 Vite's `server.port` and `server.strictPort` settings remain available in
 `vite.config.js`. Set `strictPort: true` to fail when your chosen port is occupied;
@@ -69,11 +75,16 @@ goribu deploy
 
 `goribu deploy` takes no arguments.
 
+When `.env.production` exists, a Wrangler dry run validates it before
+provisioning or migrations, then deployment uploads it as secrets. Otherwise,
+existing platform secrets are used. Local `.env` is never uploaded as fallback.
+
 ## `goribu check`
 
 Inspect the production deployment plan without changing resources. Check reports
 the Worker target, declared D1/KV resources and bindings, cost warnings, and real
-production applied, pending, and drifted migration state.
+production applied, pending, and drifted migration state. It also reports the
+production secrets file and intended action, without values or key counts.
 
 ```sh
 goribu check

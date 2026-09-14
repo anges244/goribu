@@ -66,7 +66,8 @@ Vite configuration, and `src/styles.css` scans the app's source. Use complete
 class names rather than constructing names such as `bg-${color}-500`.
 
 The generated `AGENTS.md` explains the application conventions and maintainer
-ownership. Do not edit `node_modules/`, `dist/`, `.goribu/`, or `.wrangler/`.
+ownership. Do not edit `node_modules/`, `dist/`, `.goribu/`, `.wrangler/`, or
+the generated root `goribu.wrangler.jsonc`.
 
 ## 3. Build and review the target
 

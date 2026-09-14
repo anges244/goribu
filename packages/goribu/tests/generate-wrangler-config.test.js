@@ -14,7 +14,7 @@ function makeProject() {
 }
 
 function readConfig(root) {
-  return JSON.parse(readFileSync(join(root, ".goribu", "wrangler.json"), "utf8"));
+  return JSON.parse(readFileSync(join(root, "goribu.wrangler.jsonc"), "utf8").replace(/^\/\/[^\n]*\n/, ""));
 }
 
 afterEach(() => {
@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe("writeWranglerConfig", () => {
-  it("synthesizes .goribu/wrangler.json from the application config", () => {
+  it("synthesizes goribu.wrangler.jsonc from the application config", () => {
     const root = makeProject();
     const appConfig = defineConfig({
       name: "goribu-basic-app",
@@ -33,11 +33,11 @@ describe("writeWranglerConfig", () => {
 
     const { outputFile, config } = writeWranglerConfig({ projectRoot: root, appConfig });
 
-    expect(outputFile).toBe(join(root, ".goribu", "wrangler.json"));
+    expect(outputFile).toBe(join(root, "goribu.wrangler.jsonc"));
     expect(readConfig(root)).toEqual(config);
     expect(config).toEqual({
       name: "goribu-basic-app",
-      main: "worker.js",
+      main: ".goribu/worker.js",
       compatibility_date: "2026-08-31",
       assets: { binding: "ASSETS", html_handling: "drop-trailing-slash" },
     });

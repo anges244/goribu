@@ -11,7 +11,7 @@ import { createClientPageManifestPlugin } from "./create-client-page-manifest-pl
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
-import { writeWranglerConfig } from "./generate-wrangler-config.js";
+import { GENERATED_WRANGLER_CONFIG, writeWranglerConfig } from "./generate-wrangler-config.js";
 import { APPLICATION_CONFIG_FILENAME, loadApplicationConfig } from "./load-application-config.js";
 import { createDevelopmentStylesPlugin } from "./create-development-styles-plugin.js";
 import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
@@ -19,7 +19,6 @@ import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const CLIENT_ENTRY = "src/client-entry.js";
 const GENERATED_DIRECTORY = ".goribu";
-const GENERATED_WRANGLER_CONFIG = `${GENERATED_DIRECTORY}/wrangler.json`;
 const CLIENT_ASSETS_MODULE = "virtual:goribu/client-assets";
 const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
 
@@ -40,7 +39,7 @@ const ASSET_HEADERS = `/_goribu/assets/*\n  Cache-Control: public, max-age=31536
  * This is the walking skeleton: it drives the production build through the
  * Cloudflare Vite plugin so one `vite build` emits both the Worker bundle and
  * the client bundle. Goribu generates the Worker entry into `.goribu/worker.js`,
- * synthesizes `.goribu/wrangler.json` from `goribu.config.js`, and points the
+ * synthesizes `goribu.wrangler.jsonc` from `goribu.config.js`, and points the
  * Cloudflare plugin at that generated config so the app never hand-writes a
  * Wrangler file. Routing and the dev server are added in later steps.
  *
@@ -92,7 +91,7 @@ function createGoribuPlugin() {
         },
         server: {
           watch: {
-            // Goribu regenerates `.goribu/` from this hook, and this hook runs
+            // Goribu regenerates its Worker and Wrangler config here, and this hook runs
             // on every config load — including the one that checks a replacement
             // configuration before a restart commits to it. The Cloudflare plugin
             // watches the generated Wrangler config to decide a restart is
@@ -106,7 +105,11 @@ function createGoribuPlugin() {
             // the generated Worker entry imports it, so leaving it here would
             // let Vite invalidate it into the running Worker before anything
             // had decided Goribu accepts it.
-            ignored: [`**/${GENERATED_DIRECTORY}/**`, join(root, APPLICATION_CONFIG_FILENAME)],
+            ignored: [
+              `**/${GENERATED_DIRECTORY}/**`,
+              join(root, GENERATED_WRANGLER_CONFIG),
+              join(root, APPLICATION_CONFIG_FILENAME),
+            ],
           },
         },
         environments: {

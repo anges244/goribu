@@ -1,7 +1,7 @@
 import { execFileSync, fork } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
-import { cpSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +33,7 @@ function startDevSession(initialOptions) {
   cpSync(join(fixture, "src"), join(root, "src"), { recursive: true });
   for (const name of ["package.json", "goribu.config.js"]) cpSync(join(fixture, name), join(root, name));
   symlinkSync(join(fixture, "node_modules"), join(root, "node_modules"), "dir");
+  initialOptions?.prepare?.(root);
 
   const session = { root, events: [], output: "", workers: new Set() };
 
@@ -126,11 +127,71 @@ afterEach(async () => {
   sessions.clear();
 });
 
+it.each([".env", ".dev.vars"])("loads root %s bindings and reloads edits without leaking a generation", async (source) => {
+  const session = startDevSession({ prepare(root) {
+    writeFileSync(join(root, ".env"), "GORIBU_ENV_PROBE=base-value\nGORIBU_ENV_BASE_ONLY=base-only\nPUBLIC_ENV_PROBE=base-public\n");
+    writeFileSync(join(root, ".env.local"), "GORIBU_ENV_PROBE=local-value\n");
+    writeFileSync(join(root, ".env.development"), "GORIBU_ENV_MODE_ONLY=mode-only\nPUBLIC_ENV_PROBE=mode-public\n");
+    writeFileSync(join(root, ".env.production"), "GORIBU_ENV_PROD_ONLY=production-only\n");
+    if (source === ".dev.vars") writeFileSync(join(root, source), "GORIBU_ENV_PROBE=dev-vars-value\n");
+    writeFileSync(join(root, "src/routes/env-probe.js"), `
+export function GET(req, res) {
+  return res.json({
+    value: req.env.GORIBU_ENV_PROBE,
+    base: req.env.GORIBU_ENV_BASE_ONLY ?? null,
+    mode: req.env.GORIBU_ENV_MODE_ONLY ?? null,
+    production: req.env.GORIBU_ENV_PROD_ONLY ?? null,
+    public: import.meta.env.PUBLIC_ENV_PROBE,
+  });
+}
+`);
+  } });
+  const { port } = await session.awaitGeneration(1);
+  const expected = {
+    value: source === ".env" ? "local-value" : "dev-vars-value",
+    base: source === ".env" ? "base-only" : null,
+    mode: null,
+    production: null,
+    public: "mode-public",
+  };
+  expect(await (await session.get("/env-probe", port)).json()).toEqual(expected);
+
+  const configPath = join(session.root, "goribu.wrangler.jsonc");
+  const generatedAt = statSync(configPath).mtimeMs;
+  const filesToEdit = source === ".env" ? [".env", ".env.local"] : [".dev.vars"];
+  for (const [index, file] of filesToEdit.entries()) {
+    const value = `edited-${index}`;
+    writeFileSync(join(session.root, file), `GORIBU_ENV_PROBE=${value}\nGORIBU_ENV_BASE_ONLY=base-only\n`);
+    const event = await session.awaitGeneration(index + 2);
+    expect(event).toMatchObject({ port, listeners: 1 });
+    const workers = workerPids(session.child.pid);
+    expect(workers).toHaveLength(1);
+    expect([...session.workers].filter(isAlive)).toEqual(workers);
+    expected.value = file === ".env" ? "local-value" : value;
+    expected.base = "base-only";
+    expect(await (await session.get("/env-probe", port)).json()).toEqual(expected);
+    expect(statSync(configPath).mtimeMs).toBe(generatedAt);
+  }
+
+  // Both Vite and Cloudflare can observe .env. Let delayed events settle so an
+  // accidental second restart cannot hide behind the first healthy response.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  expect(session.events).toHaveLength(filesToEdit.length + 1);
+  expect(existsSync(join(session.root, ".goribu/.dev.vars"))).toBe(false);
+  expect(readFileSync(configPath, "utf8")).not.toMatch(/base-value|local-value|dev-vars-value|production-only/);
+  for (const file of [".env", ".env.local", "goribu.wrangler.jsonc", ...(source === ".dev.vars" ? [source] : [])]) {
+    const response = await session.get(`/@fs${join(session.root, file)}`, port);
+    expect(response.status).toBe(403);
+  }
+  session.child.kill("SIGINT");
+  await session.exited;
+}, 120000);
+
 it.each(["SIGINT", "SIGTERM"])(
   "restarts on one port with one workerd and releases both on %s",
   async (signal) => {
     const session = startDevSession();
-    const generated = [join(session.root, ".goribu/wrangler.json"), join(session.root, ".goribu/worker.js")];
+    const generated = [join(session.root, "goribu.wrangler.jsonc"), join(session.root, ".goribu/worker.js")];
     let port;
     let generatedWrittenAt;
 
@@ -195,8 +256,9 @@ it("keeps serving the previous configuration when the replacement cannot load", 
 it("restarts when goribu.config.js changes", async () => {
   const session = startDevSession();
   const { port } = await session.awaitGeneration(1);
-  const generated = join(session.root, ".goribu/wrangler.json");
-  expect(JSON.parse(readFileSync(generated, "utf8")).name).toBe("goribu-basic-app");
+  const generated = join(session.root, "goribu.wrangler.jsonc");
+  const readGenerated = () => JSON.parse(readFileSync(generated, "utf8").replace(/^\/\/[^\n]*\n/, ""));
+  expect(readGenerated().name).toBe("goribu-basic-app");
 
   writeFileSync(
     join(session.root, "goribu.config.js"),
@@ -212,7 +274,7 @@ it("restarts when goribu.config.js changes", async () => {
     expect(session.events).toHaveLength(2);
     expect(session.output).toContain("goribu.config.js changed, restarting server...");
     expect(restarted).toMatchObject({ revision: 0, port, listeners: 1 });
-    expect(JSON.parse(readFileSync(generated, "utf8")).name).toBe("goribu-renamed-app");
+    expect(readGenerated().name).toBe("goribu-renamed-app");
     expect(workerPids(session.child.pid)).toHaveLength(1);
   });
   expect((await session.get("/greet?name=Renamed", port)).status).toBe(200);

@@ -9,6 +9,7 @@ import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { provisionKV } from "./provision-kv.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
+import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
@@ -40,11 +41,17 @@ export async function runDeploy(options) {
   // `goribu build` has the same protection.
   await guard({ projectRoot, appConfig });
   await (options?.guardKV ?? assertNoDuplicateKVDeclaration)({ projectRoot, appConfig });
+  const secretsFile = findProductionSecretsFile(projectRoot);
+  (options?.stdout ?? process.stdout).write(`${formatSecretsPlan(secretsFile)}\n`);
   // Authentication is read-only remote work, not provisioning. Fail before an
   // expensive build even when the application declares no managed resources.
   const access = await (options?.getAccess ?? getCloudflareAccess)({ projectRoot });
   const getAccess = async () => access;
   await build();
+
+  if (secretsFile) {
+    await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile });
+  }
 
   const database = await provision({
     projectRoot,
@@ -80,7 +87,20 @@ export async function runDeploy(options) {
       stdout: options?.stdout ?? process.stdout,
     });
   }
-  return deploy({ projectRoot });
+  return deploy({ projectRoot, secretsFile });
+}
+
+/** Let pinned Wrangler validate the file and built Worker before remote mutation. */
+export async function validateProductionSecrets(options) {
+  const code = await runWranglerDeploy({ ...options, dryRun: true });
+  if (code !== 0) {
+    throw new Error(
+      `[Goribu] Wrangler could not validate .env.production and the built Worker (exit code ${code}). ` +
+        "Ensure .env.production is readable and contains valid KEY=value entries or a JSON object of string values. " +
+        "To see Wrangler's diagnostic, run `pnpm --dir node_modules/goribu exec wrangler deploy --cwd \"$PWD\" --dry-run --secrets-file=.env.production` from the app directory " +
+        "(its output may include text from the file). Fix the reported problem, then retry `goribu deploy`. No resources or migrations were changed.",
+    );
+  }
 }
 
 /**
@@ -91,7 +111,7 @@ export async function runDeploy(options) {
  * Wrangler and reports how it finished. `spawn` and `resolveBin` are injectable
  * so the launching contract can be tested without a network or a real deploy.
  *
- * @param {{ projectRoot: string, spawn?: Function, resolveBin?: Function }} options
+ * @param {{ projectRoot: string, secretsFile?: string, dryRun?: boolean, spawn?: Function, resolveBin?: Function }} options
  * @returns {Promise<number>} Wrangler's exit code (0 on success)
  */
 export async function runWranglerDeploy(options) {
@@ -117,9 +137,14 @@ export async function runWranglerDeploy(options) {
   }
 
   const { code, signal } = await new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(process.execPath, [wranglerBin, "deploy"], {
+    const args = [wranglerBin, "deploy"];
+    if (options.dryRun) args.push("--dry-run");
+    if (options.secretsFile) args.push(`--secrets-file=${options.secretsFile}`);
+    const child = spawn(process.execPath, args, {
       cwd: projectRoot,
-      stdio: "inherit",
+      // Parser diagnostics can include source text. The preflight reports a
+      // teaching error itself so malformed secrets cannot reach terminal logs.
+      stdio: options.dryRun ? "ignore" : "inherit",
     });
     child.on("error", rejectPromise);
     child.on("close", (exitCode, terminatingSignal) =>

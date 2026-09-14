@@ -11,7 +11,7 @@ const WRANGLER_CONFIG_FILES = [
 /**
  * Fail before a build when an app declares D1 through both Goribu and Wrangler.
  *
- * Goribu's generated `.goribu/wrangler.json` is deliberately outside this
+ * Goribu's generated `goribu.wrangler.jsonc` is deliberately outside this
  * search. These are author-owned root files, which would otherwise create a
  * second source of truth for the `DB` binding.
  */

@@ -18,7 +18,7 @@ const workerConfig = join(appDir, "dist", "goribu_basic_app", "wrangler.json");
 let build;
 
 function cleanBuildOutput() {
-  for (const dir of ["dist", ".goribu", ".wrangler"]) {
+  for (const dir of ["dist", ".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
     rmSync(join(appDir, dir), { recursive: true, force: true });
   }
 }
