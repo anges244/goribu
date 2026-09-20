@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-21
+
 ### Added
 
 - `<Form>` supports real PUT, PATCH, and DELETE requests to matching route handlers, with the same state and response handling as POST. Extended-method forms wait for hydration; native GET/POST submission and their button method overrides remain supported.
@@ -26,8 +28,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `.env.local`. Vite still uses mode files for `PUBLIC_*` browser values. Implicit
   dotenv loading before `goribu.config.js` evaluation remains deferred.
 
-- `create-goribu <name>` defaults to TypeScript. Use `--js` for JavaScript.
+- **Breaking:** `create-goribu <name>` defaults to TypeScript. Use `--js` for JavaScript.
   Both languages retain the existing JavaScript config and browser entry names.
+- **Breaking:** `prerender = true` with non-GET handlers now fails the build.
+  Remove the prerender export or move those handlers to a separate action route.
 
 ### Fixed
 

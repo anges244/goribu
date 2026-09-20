@@ -2,9 +2,31 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare the `0.8.0` TypeScript release; substitute the next shared version for later releases.
+prepare `0.8.0`, including TypeScript, expanded forms, and development,
+environment, and CSS fixes; substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.7.2 to 0.8.0
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.8.0` from its directory, then rebuild and deploy.
+Existing JavaScript apps do not need conversion. New apps default to TypeScript;
+add `--js` to retain JavaScript scaffolding.
+
+- Remove the obsolete generated `.goribu/wrangler.json`, keeping
+  `.goribu/worker.js`. Add root `goribu.wrangler.jsonc` to the app's `.gitignore`;
+  Goribu now generates its Wrangler config there.
+- Local Worker values come from `.env` plus `.env.local`, or `.dev.vars` which
+  suppresses both. Older mode-file server overrides belong in `.env.local`.
+  Review `.env.production`: deploy now uploads that file as Worker secrets when
+  present. See [Environment variables](environment-variables.md) for precedence,
+  browser values, and validation.
+- Remove `prerender = true` from routes with non-GET handlers, or move those
+  handlers to a separate action route. These routes now stay on the Worker so
+  Static Assets cannot shadow their handlers.
+- Rebuild and deploy to replace the old CSS filenames. Updating a dependency
+  alone does not change assets already uploaded to Cloudflare.
 
 ## Version policy
 
