@@ -135,6 +135,14 @@ function createGoribuPlugin() {
               rollupOptions: {
                 input: resolve(root, CLIENT_ENTRY),
                 output: {
+                  assetFileNames(asset) {
+                    // Extracted CSS uses the original chunk name, independently of
+                    // chunkFileNames below, so it can carry the same encoded path.
+                    // Name CSS before emission so Vite's graph keeps every URL aligned.
+                    return asset.names.some((name) => name.endsWith(".css"))
+                      ? `${GENERATED_ASSETS_DIR}/style-[hash][extname]`
+                      : `${GENERATED_ASSETS_DIR}/[name]-[hash][extname]`;
+                  },
                   chunkFileNames(chunk) {
                     // Rollup derives a dynamic entry's default name from its virtual
                     // module ID. Goribu's route IDs contain an encoded absolute source

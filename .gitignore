@@ -1,14 +1,35 @@
 workspace/
 START.md
+
+# Dependencies and build output
 node_modules/
+.pnpm-store/
+.vite/
 dist/
 .wrangler/
 .goribu/
 goribu.wrangler.jsonc
+*.tsbuildinfo
+
+# Test output and logs
+coverage/
+.nyc_output/
+*.log
+
+# Local environment files
 .env
 .env.*
 !.env.example
 .dev.vars
 .dev.vars.*
+
+# OS metadata and editor temporary files
 .DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
 /examples/.artifacts/

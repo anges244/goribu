@@ -31,6 +31,9 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Generated CSS filenames use `style-[content hash].css`, preventing route
+  stylesheets from exposing encoded absolute build paths. Vite records the
+  final names in its asset graph, preserving stylesheet and CSS asset URLs.
 - Root `.env` files now reach local Worker bindings. The generated Wrangler
   config moves to `goribu.wrangler.jsonc` at the app root, with idempotent writes
   and an explicit dev-watcher exclusion to preserve restart lifecycle safety.
