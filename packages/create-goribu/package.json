@@ -9,7 +9,7 @@
     "url": "git+https://github.com/anges244/goribu.git",
     "directory": "packages/create-goribu"
   },
-  "homepage": "https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation",
+  "homepage": "https://goribu.dev/docs/installation",
   "bugs": "https://github.com/anges244/goribu/issues",
   "publishConfig": {
     "access": "public",

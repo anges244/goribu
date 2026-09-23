@@ -58,5 +58,5 @@ from `goribu`. Validate request bodies at runtime before accessing their fields.
   and `pnpm build`; do not claim a command passed without observing it.
 
 For deeper topics, consult the matching page in the
-[Goribu guides](https://goribu-site.aggelos-gesoulis.workers.dev/docs): routing,
+[Goribu guides](https://goribu.dev/docs): routing,
 handlers, rendering, navigation/forms, metadata, D1/migrations, KV, or deployment.

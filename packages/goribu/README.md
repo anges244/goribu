@@ -49,7 +49,7 @@ Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.
 Interactive forms and client navigation require JavaScript. Static output means
 the request needs no Worker; it can still hydrate and be interactive.
 
-[Documentation](https://goribu-site.aggelos-gesoulis.workers.dev/docs/introduction)
+[Documentation](https://goribu.dev/docs/introduction)
 · [Source](https://github.com/anges244/goribu)
 
 MIT licensed. Copyright (c) 2026 Aggelos Gesoulis.

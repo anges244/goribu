@@ -82,9 +82,9 @@ previously deployed code; deployment and migrations are not one transaction.
 
 KV is eventually consistent. Do not use an immediate reread to confirm a write
 or make correctness-sensitive decisions. See the site's
-[D1](https://goribu-site.aggelos-gesoulis.workers.dev/docs/d1),
-[migrations](https://goribu-site.aggelos-gesoulis.workers.dev/docs/migrations), and
-[KV](https://goribu-site.aggelos-gesoulis.workers.dev/docs/kv) guides.
+[D1](https://goribu.dev/docs/d1),
+[migrations](https://goribu.dev/docs/migrations), and
+[KV](https://goribu.dev/docs/kv) guides.
 
 ## Deploy deliberately
 

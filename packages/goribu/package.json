@@ -8,7 +8,7 @@
     "url": "git+https://github.com/anges244/goribu.git",
     "directory": "packages/goribu"
   },
-  "homepage": "https://goribu-site.aggelos-gesoulis.workers.dev",
+  "homepage": "https://goribu.dev",
   "bugs": "https://github.com/anges244/goribu/issues",
   "publishConfig": {
     "access": "public",

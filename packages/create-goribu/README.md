@@ -77,7 +77,7 @@ The TypeScript source and generated JavaScript are packaged together. Both
 outputs are covered by packed-CLI generation and production integration tests;
 independent installations remain part of release verification.
 
-[Getting started](https://goribu-site.aggelos-gesoulis.workers.dev/docs/installation)
+[Getting started](https://goribu.dev/docs/installation)
 · [Source](https://github.com/anges244/goribu)
 
 MIT licensed. Copyright (c) 2026 Aggelos Gesoulis.

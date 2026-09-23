@@ -82,7 +82,7 @@ and [list reference](https://developers.cloudflare.com/kv/api/list-keys/).
 
 ## A real use on this site
 
-[Community feedback](https://goribu-site.aggelos-gesoulis.workers.dev/community) caches the ten latest public D1 messages
+[Community feedback](https://goribu.dev/community) caches the ten latest public D1 messages
 under a versioned key with a five-minute expiration. Cache hits avoid a database
 query; misses read D1 and attempt to store a complete snapshot. A competing or
 failed cache fill is logged while the successful database result is still shown.
