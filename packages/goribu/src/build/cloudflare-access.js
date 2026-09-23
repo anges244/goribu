@@ -25,7 +25,7 @@ export async function getCloudflareAccess(options) {
   const accounts = identity?.accounts;
   if (!Array.isArray(accounts) || accounts.length === 0) {
     throw new Error(
-      "[Goribu] Wrangler returned no Cloudflare accounts for deployment. Run `wrangler login`, confirm account access, then rerun `goribu deploy`.",
+      "[Goribu] Wrangler returned no Cloudflare accounts for deployment. Run `goribu cloudflare-login`, confirm account access, then rerun `goribu deploy`.",
     );
   }
   const requestedAccountId = Object.prototype.hasOwnProperty.call(
@@ -40,7 +40,7 @@ export async function getCloudflareAccess(options) {
     if (account === undefined) {
       throw new Error(
         `[Goribu] CLOUDFLARE_ACCOUNT_ID ${JSON.stringify(requestedAccountId)} is not available to Wrangler's current credentials. ` +
-          "Select an accessible account or log in again, then rerun `goribu deploy`.",
+          "Select an accessible account or run `goribu cloudflare-login` to log in again, then rerun `goribu deploy`.",
       );
     }
   } else if (accounts.length === 1) {
@@ -53,7 +53,7 @@ export async function getCloudflareAccess(options) {
   }
   if (typeof account?.id !== "string" || account.id.length === 0) {
     throw new Error(
-      "[Goribu] Wrangler returned an invalid Cloudflare account for deployment. Update Wrangler, log in again, and rerun `goribu deploy`.",
+      "[Goribu] Wrangler returned an invalid Cloudflare account for deployment. Update Goribu to update its Wrangler dependency, run `goribu cloudflare-login` to log in again, and rerun `goribu deploy`.",
     );
   }
 
@@ -106,7 +106,7 @@ async function runWranglerJson(options) {
 
 function wranglerAccessError(description, cause) {
   return new Error(
-    `[Goribu] Could not ${description} for deployment. Read the Wrangler error above; run \`wrangler login\` locally or configure CLOUDFLARE_API_TOKEN for non-interactive use, confirm account access and network connectivity, then rerun \`goribu deploy\`.`,
+    `[Goribu] Could not ${description} for deployment. Read the Wrangler error above; run \`goribu cloudflare-login\` locally or configure CLOUDFLARE_API_TOKEN for non-interactive use, confirm account access and network connectivity, then rerun \`goribu deploy\`.`,
     { cause },
   );
 }
@@ -132,6 +132,6 @@ function authHeaders(credentials) {
     });
   }
   throw new Error(
-    "[Goribu] Wrangler returned unsupported Cloudflare credentials for deployment. Update Wrangler, log in again, and rerun `goribu deploy`.",
+    "[Goribu] Wrangler returned unsupported Cloudflare credentials for deployment. Update Goribu to update its Wrangler dependency, run `goribu cloudflare-login` to log in again, and rerun `goribu deploy`.",
   );
 }

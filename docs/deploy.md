@@ -13,10 +13,9 @@ produced.
 Wrangler ships as a Goribu dependency, so there is nothing extra to install.
 Authenticate one of these ways:
 
-- **Interactive (local):** run Wrangler's `login` once to authorize your
-  Cloudflare account in the browser. From the app directory, use the bundled
-  copy with `pnpm --dir node_modules/goribu exec wrangler login`. The login is
-  remembered for later runs.
+- **Interactive (local):** run `pnpm exec goribu cloudflare-login` from the app
+  directory to authorize your Cloudflare account in the browser. Goribu uses its
+  installed Wrangler, which stores the credentials for later runs.
 - **Non-interactive (no browser, e.g. a server):** set `CLOUDFLARE_API_TOKEN`
   in the environment (add `CLOUDFLARE_ACCOUNT_ID` if the token can reach more
   than one account). Create the token from the "Edit Cloudflare Workers"

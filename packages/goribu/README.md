@@ -33,7 +33,8 @@ Run these from the generated app directory:
 | `pnpm build` | Build the Worker, browser assets, and static HTML. |
 | `pnpm typecheck` | Check the TypeScript app without emitting files. |
 | `pnpm check` | Inspect the production resource and migration plan read-only. |
-| `pnpm run deploy` | Authenticate, build, provision resources, apply migrations, and deploy. |
+| `pnpm exec goribu cloudflare-login` | Log in to Cloudflare through Wrangler. |
+| `pnpm run deploy` | Check credentials, build, provision resources, apply migrations, and deploy. |
 
 Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.
 

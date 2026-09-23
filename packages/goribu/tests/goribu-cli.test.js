@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 
 const cliPath = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
 
-function runCli(args) {
+function runCli(args, nodeArgs = []) {
   try {
-    const stdout = execFileSync(process.execPath, [cliPath, ...args], { encoding: "utf8" });
+    const stdout = execFileSync(process.execPath, [...nodeArgs, cliPath, ...args], { encoding: "utf8" });
     return { status: 0, stdout, stderr: "" };
   } catch (error) {
     return { status: error.status, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
@@ -14,11 +14,12 @@ function runCli(args) {
 }
 
 describe("goribu CLI", () => {
-  it("lists the complete migration verb set in help", () => {
+  it("lists Cloudflare login and migration commands in help", () => {
     const { status, stdout } = runCli(["--help"]);
     expect(status).toBe(0);
     expect(stdout).toContain("migrate:down");
     expect(stdout).toContain("migrate:seed");
+    expect(stdout).toMatch(/cloudflare-login\s+Log in to Cloudflare through Wrangler\./);
   });
 
   it("prints the version", () => {
@@ -56,6 +57,38 @@ describe("goribu CLI", () => {
     const { status, stderr } = runCli(["deploy", "--definitely-not-a-real-option"]);
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\] `goribu deploy` does not accept arguments/);
+  });
+
+  it("rejects trailing arguments to cloudflare-login without starting login", () => {
+    const { status, stderr } = runCli(["cloudflare-login", "--remote"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/\[Goribu\] `goribu cloudflare-login` does not accept arguments/);
+  });
+
+  it("dispatches cloudflare-login to the installed Wrangler and forwards its exit status", () => {
+    for (const code of [0, 2]) {
+      // Replace only process creation in the CLI subprocess: never open a browser
+      // or touch real credentials while exercising the public command end to end.
+      const preload = `
+        import childProcess from "node:child_process";
+        import { syncBuiltinESMExports } from "node:module";
+        import { EventEmitter } from "node:events";
+        import assert from "node:assert/strict";
+        childProcess.spawn = (command, args, options) => {
+          assert.equal(command, process.execPath);
+          assert.match(args[0], /wrangler[.]js$/);
+          assert.deepEqual(args.slice(1), ["login"]);
+          assert.deepEqual(options, { cwd: process.cwd(), stdio: "inherit" });
+          const child = new EventEmitter();
+          queueMicrotask(() => child.emit("close", ${code}, null));
+          return child;
+        };
+        syncBuiltinESMExports();
+      `;
+      const result = runCli(["cloudflare-login"], ["--import", `data:text/javascript,${encodeURIComponent(preload)}`]);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(code);
+    }
   });
 
   it("fails closed on conflicting migration targets", () => {

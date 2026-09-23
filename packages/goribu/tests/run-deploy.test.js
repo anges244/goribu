@@ -325,7 +325,7 @@ describe("runDeploy", () => {
     const provisionKV = vi.fn();
     const migrate = vi.fn();
     const deploy = vi.fn();
-    const failure = new Error("[Goribu] Wrangler is not authenticated. Run `wrangler login`.");
+    const failure = new Error("[Goribu] Wrangler is not authenticated. Run `goribu cloudflare-login`.");
 
     await expect(runDeploy({
       projectRoot: "/app",

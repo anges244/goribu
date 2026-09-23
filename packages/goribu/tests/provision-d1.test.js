@@ -186,7 +186,7 @@ describe("Cloudflare access and D1 API", () => {
 
   it("rejects missing accounts, inaccessible account selection, and unsupported credentials", async () => {
     for (const [credentials, accounts, accountId, message] of [
-      [{ type: "oauth", token: "secret" }, [], undefined, /no Cloudflare accounts.*wrangler login/],
+      [{ type: "oauth", token: "secret" }, [], undefined, /no Cloudflare accounts.*goribu cloudflare-login/],
       [{ type: "oauth", token: "secret" }, [{ id: "one" }], "two", /not available.*Select an accessible account/],
       [{ type: "oauth", token: "" }, [{ id: "one" }], undefined, /unsupported Cloudflare credentials.*log in again/],
     ]) {

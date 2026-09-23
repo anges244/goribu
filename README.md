@@ -17,6 +17,7 @@ Run from an app directory (where `goribu.config.js` lives):
 |---|---|
 | `goribu dev` | Start the local dev server (Vite + workerd) with HMR. |
 | `goribu build` | Produce the production Worker and client bundles. |
+| `goribu cloudflare-login` | Log in to Cloudflare through Wrangler. |
 | `goribu deploy` | Build and deploy to Cloudflare. |
 
 `goribu --help` prints usage; `goribu --version` prints the version.

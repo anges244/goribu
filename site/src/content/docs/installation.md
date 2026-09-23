@@ -98,10 +98,10 @@ preflight does that. Development and standalone builds need no Cloudflare login.
 
 ## 4. Deploy to a public URL
 
-From the app directory, authorize the bundled Wrangler if needed:
+From the app directory, log in to Cloudflare if needed:
 
 ```sh
-pnpm --dir node_modules/goribu exec wrangler login
+pnpm exec goribu cloudflare-login
 ```
 
 Then deploy:

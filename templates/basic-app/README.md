@@ -101,10 +101,10 @@ local server overrides. Keep env files private and commit only a placeholder
 `.env.example`. `goribu.wrangler.jsonc` is generated; do not edit or commit it.
 
 Choose your Worker name in `goribu.config.js`. From this app directory, log in
-with the bundled Wrangler if needed:
+to Cloudflare if needed:
 
 ```sh
-pnpm --dir node_modules/goribu exec wrangler login
+pnpm exec goribu cloudflare-login
 pnpm check
 pnpm run deploy
 ```

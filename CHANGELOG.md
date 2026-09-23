@@ -9,6 +9,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `goribu cloudflare-login` authorizes Cloudflare through Goribu's installed
+  Wrangler, with no extra installation or dependency-path command. Onboarding
+  guides and authentication errors now point to this command.
+
 ## [0.8.0] - 2026-09-21
 
 ### Added

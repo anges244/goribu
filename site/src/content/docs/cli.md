@@ -63,11 +63,28 @@ arguments.
 goribu build
 ```
 
+## `goribu cloudflare-login`
+
+Log in to Cloudflare through Goribu's installed Wrangler. Takes no arguments.
+
+```sh
+pnpm exec goribu cloudflare-login
+```
+
+Wrangler opens the browser authorization flow and stores the credentials for
+later runs. Login needs no application configuration or build. Goribu passes
+through Wrangler's terminal interaction and exit status; it does not manage
+credentials itself. For non-interactive authentication, configure
+`CLOUDFLARE_API_TOKEN` instead.
+
+Login is explicit: `goribu deploy` checks credentials before building and asks
+you to repair authentication if needed.
+
 ## `goribu deploy`
 
 Check Wrangler credentials and account selection before building, provision
 D1 and KV, apply pending D1 migrations, then deploy to Cloudflare. Authentication
-failure stops before the build, even without resources; log in with Wrangler or
+failure stops before the build, even without resources; run `goribu cloudflare-login` or
 configure credentials, then retry. Standalone `goribu build` needs no
 authentication. The Worker is uploaded only after the schema step succeeds.
 See [Deploying](/docs/deploy) for details.
