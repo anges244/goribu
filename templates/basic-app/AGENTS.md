@@ -31,8 +31,20 @@ add routes and dependencies only for actual application needs.
 - Keep `<Stylesheet />` and `{head}` in the Document head and `<ClientEntry />`
   after `#root`. The explicit client-entry URL is the development fallback;
   production resolves hashed assets. Preserve the request nonce.
-- Use Goribu's `Link` and `Form` for hydrated navigation and form behavior.
-  Static output and hydration are separate: static pages can be interactive.
+- Use Goribu's `Link` for hydrated navigation. Goribu's interactive features
+  deliberately require JavaScript. Use `<Form>` with `get`, `post`, `put`,
+  `patch`, or `delete` and the corresponding named handler. Do not avoid mutation
+  methods or colocated handlers solely for progressive enhancement.
+- Colocate handlers with their page when appropriate. To keep an otherwise
+  static page prerendered, put its mutation handler in a separate route without
+  a page component and target it with `<Form action="/action-path">`. Adding a
+  mutation handler to the page makes that route dynamic; forcing
+  `prerender = true` is invalid.
+- For Form mutations, prefer `res.json(data)` for an in-place result,
+  `res.invalid(errors)` for field errors, or `res.redirect(url)` for navigation.
+  Use `res.render(props)` only for intentional rendering of the handler's own
+  page; a separate action cannot use it to replace the submitting page at
+  another pathname.
 - Global CSS is imported from `src/client-entry.js`. Tailwind belongs to this
   app's Vite configuration, not to the framework. Write complete class names.
 - Only `PUBLIC_*` environment values are browser-visible. Never prefix secrets
