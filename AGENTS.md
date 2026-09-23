@@ -59,6 +59,9 @@ that has no source in the tree.
 - Build and bundle guards fail closed when safety cannot be proven.
 - Static and dynamic routes are equally first-class. Static output is what the
   build produces when a route needs no Worker, not a bolted-on feature.
+  Successfully prerendered pages use Static Assets for production document
+  loads, client navigation, and prefetch. Navigation must preserve this
+  no-Worker guarantee and use the HTML's build-time props and metadata.
 - Interactive routes require JavaScript by design. Forms and client navigation
   are hydrated-only; static routes work without JS because they are plain HTML.
   This is a decision, and it is documented as one rather than assumed.

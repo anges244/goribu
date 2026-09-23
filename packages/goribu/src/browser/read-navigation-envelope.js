@@ -2,7 +2,7 @@ import { normalizeRouteMeta } from "../metadata/route-meta.js";
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /** Parse and validate the reserved Worker's kind-tagged navigation response. */
-export async function readNavigationEnvelope(response) {
+export async function readNavigationEnvelope(response, options = {}) {
   if (!(response instanceof Response)) {
     throw new TypeError(
       "[Goribu] Cannot read a navigation envelope because fetch did not return a Web Response.",
@@ -27,6 +27,9 @@ export async function readNavigationEnvelope(response) {
   }
   if (!isPlainObject(payload) || typeof payload.kind !== "string") {
     throw invalidEnvelope("a kind-tagged object");
+  }
+  if (options.buildId !== undefined && payload.buildId !== options.buildId) {
+    throw invalidEnvelope("static data from the current browser build");
   }
 
   if (payload.kind === "render") {

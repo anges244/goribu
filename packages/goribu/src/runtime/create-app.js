@@ -266,6 +266,9 @@ export function createApp(options) {
       );
       d1Controller.commit();
       const flushed = appendSetCookies(withGlobalHeaders, cookieJar.pending);
+      if (requestKind === "navigation" && clientAssetManifest?.navigationBuildId) {
+        flushed.headers.set("x-goribu-build", clientAssetManifest.navigationBuildId);
+      }
 
       // One HEAD boundary for every path: a HEAD response shares GET's status and
       // headers but never carries a body. The outer request owns this decision;

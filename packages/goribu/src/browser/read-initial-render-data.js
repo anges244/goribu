@@ -52,7 +52,9 @@ export function readInitialRenderData(browserDocument = globalThis.document) {
     );
   }
 
-  return Object.freeze({ routeId: route.id, props });
+  return Object.freeze({ routeId: route.id, props,
+    ...(route.buildId === undefined ? {} : { buildId: route.buildId }),
+  });
 }
 
 function parseJsonScript(element, id, label) {

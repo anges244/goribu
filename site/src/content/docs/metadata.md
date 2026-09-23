@@ -36,6 +36,11 @@ that complete marked set while preserving viewport, icon, and other
 Document-owned nodes. A missing title becomes an empty managed title, so every
 route owns its browser-tab text.
 
+For a prerendered page, metadata is a build-time snapshot shared by its static
+HTML and client navigation data. Changing a query string does not rerun its
+server `meta()` function. Use `prerender = false` when metadata must depend on
+the current request.
+
 ## Custom Document
 
 ```jsx
@@ -97,7 +102,8 @@ blanket body, redirect, cookie, and transport headers are rejected.
 
 This policy is Worker-only. Static routes bypass the Worker and cannot currently
 receive application-defined CSP or other static headers; `public/_headers`
-remains reserved for Goribu's generated immutable asset rule.
+remains reserved for Goribu's generated cache rules: immutable browser assets
+and static navigation payloads, and an uncached navigation index.
 
 ## Public browser values
 

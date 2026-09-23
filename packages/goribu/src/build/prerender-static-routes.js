@@ -4,6 +4,7 @@ import { generateManifest } from "../routing/generate-manifest.js";
 import { matchRoute } from "../routing/match-route.js";
 import { planStaticRoutes } from "./plan-static-routes.js";
 import { selectMiddlewareByRoute } from "./select-middleware-by-route.js";
+import { createStaticNavigationOutput } from "./static-navigation-output.js";
 
 const ROUTES_DIRECTORY = join("src", "routes");
 const DEPLOY_REDIRECT = join(".wrangler", "deploy", "config.json");
@@ -72,12 +73,14 @@ export async function prerenderStaticRoutes(options) {
   // Fail closed on any published HTML asset that owns a route's URL, before this
   // step writes its own output into the same directory.
   assertNoAssetRouteCollisions({ clientDir, manifest });
+  const navigationOutput = createStaticNavigationOutput(clientDir);
 
   // Structural downgrades (no build-time URL) are known before rendering anything.
   const allDowngraded = [...downgraded];
   for (const route of downgraded) announceDowngrade(log, route);
 
   if (staticRoutes.length === 0) {
+    navigationOutput.finish();
     log.log("[Goribu] No routes were statically output; every route renders on the Worker.");
     return { prerendered: [], downgraded: allDowngraded };
   }
@@ -89,6 +92,7 @@ export async function prerenderStaticRoutes(options) {
       const result = await renderThroughWorker(worker, route);
 
       if (result.ok) {
+        await navigationOutput.write(route, result.html);
         const outputFile = join(clientDir, route.assetPath);
         mkdirSync(dirname(outputFile), { recursive: true });
         writeFileSync(outputFile, result.html, "utf8");
@@ -118,6 +122,7 @@ export async function prerenderStaticRoutes(options) {
   } finally {
     await worker.stop();
   }
+  navigationOutput.finish();
 
   if (prerendered.length === 0) {
     log.log("[Goribu] No routes were statically output; every route renders on the Worker.");
@@ -164,6 +169,12 @@ async function renderThroughWorker(worker, route) {
 
   if (response.status !== 200) {
     return { ok: false, reason: `responded ${response.status}` };
+  }
+  if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/html")) {
+    return { ok: false, reason: "did not return an HTML page" };
+  }
+  if (response.headers.has("set-cookie")) {
+    return { ok: false, reason: "set a request-time cookie" };
   }
 
   let html;

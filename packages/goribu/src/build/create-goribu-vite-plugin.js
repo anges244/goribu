@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { generateManifest } from "../routing/generate-manifest.js";
@@ -31,7 +32,7 @@ const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
 // emitted it. Cloudflare treats `_headers` as configuration and never serves it.
 const GENERATED_ASSETS_DIR = "_goribu/assets";
 const RESERVED_ASSETS_PREFIX = "_goribu/assets/";
-const ASSET_HEADERS = `/_goribu/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`;
+const ASSET_HEADERS = `/_goribu/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/_goribu/navigation/*\n  Cache-Control: public, max-age=31536000, immutable\n/_goribu/navigation.json\n  Cache-Control: no-store\n`;
 
 /**
  * Compose Goribu's Vite integration.
@@ -54,21 +55,23 @@ export function goribu(options) {
     );
   }
 
+  const navigationBuildId = randomBytes(16).toString("hex");
   return [
-    createGoribuPlugin(),
+    createGoribuPlugin(navigationBuildId),
     createConfiguredClientBoundaryPlugin(),
-    createConfiguredClientPageManifestPlugin(),
-    createConfiguredClientAssetsPlugin(),
+    createConfiguredClientPageManifestPlugin(navigationBuildId),
+    createConfiguredClientAssetsPlugin(navigationBuildId),
     createDevelopmentStylesPlugin(),
     createDevelopmentLifecyclePlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
   ];
 }
 
-function createGoribuPlugin() {
+function createGoribuPlugin(navigationBuildId) {
   return {
     name: "goribu",
     enforce: "pre",
+    sharedDuringBuild: true,
 
     // Runs before the Cloudflare plugin resolves configPath (this plugin is
     // enforce: "pre"), so the generated Worker entry and Wrangler config are on
@@ -170,6 +173,10 @@ function createGoribuPlugin() {
     generateBundle() {
       if (this.environment?.name !== "client") return;
       this.emitFile({ type: "asset", fileName: "_headers", source: ASSET_HEADERS });
+      // Prerendering finalizes this after both bundles exist. An unfinished build
+      // must never advertise candidates as confirmed static routes.
+      this.emitFile({ type: "asset", fileName: "_goribu/navigation.json",
+        source: JSON.stringify({ buildId: navigationBuildId, routes: null }) });
     },
 
     // Audit the finished bundle after every plugin has contributed, so the check
@@ -179,6 +186,9 @@ function createGoribuPlugin() {
     // the guard and no environment check is needed. Failing here still fails the
     // build before the separate deploy step, so nothing unsafe ships.
     writeBundle(_options, bundle) {
+      if (Object.keys(bundle).some((name) => name.startsWith("_goribu/navigation/"))) {
+        this.error("[Goribu] Only Goribu's prerender step may write /_goribu/navigation/ snapshots. Remove the plugin output in that reserved namespace so immutable data always has a verified content hash.");
+      }
       const unhashed = findUnhashedReservedAsset(bundle);
       if (unhashed !== null) {
         this.error(
@@ -269,14 +279,17 @@ function requireClientBoundary(boundary) {
  * imports this virtual module; preparing it here keeps Worker and browser route
  * IDs aligned without introducing a second scan convention.
  */
-function createConfiguredClientPageManifestPlugin() {
+function createConfiguredClientPageManifestPlugin(navigationBuildId) {
   let pageManifest;
+  let production = false;
 
   return {
     name: "goribu:client-page-manifest",
     enforce: "pre",
+    sharedDuringBuild: true,
 
-    config(config) {
+    config(config, environment = {}) {
+      production = environment.command === "build";
       const root = config.root ? resolve(config.root) : process.cwd();
       const manifest = generateManifest({
         projectRoot: root,
@@ -295,7 +308,8 @@ function createConfiguredClientPageManifestPlugin() {
     },
 
     load(id) {
-      return requireClientPageManifest(pageManifest).load.call(this, id);
+      const source = requireClientPageManifest(pageManifest).load.call(this, id);
+      return source === null ? null : `${source}\nexport const navigationBuildId = ${JSON.stringify(production ? navigationBuildId : null)};`;
     },
   };
 }
@@ -313,7 +327,7 @@ function requireClientPageManifest(pageManifest) {
  * build environments: the client generateBundle hook writes the closure state
  * that the Worker load hook reads after buildClientBeforeWorkers has completed.
  */
-function createConfiguredClientAssetsPlugin() {
+function createConfiguredClientAssetsPlugin(navigationBuildId) {
   let assetManifestPlugin;
   let clientAssetManifest = null;
   let clientAssetBase = "/";
@@ -336,7 +350,7 @@ function createConfiguredClientAssetsPlugin() {
       assetManifestPlugin = createClientAssetManifestPlugin({
         manifest,
         onManifest(manifestValue) {
-          clientAssetManifest = manifestValue;
+          clientAssetManifest = { ...manifestValue, navigationBuildId };
         },
       });
     },

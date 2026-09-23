@@ -8,6 +8,10 @@ import {
   servedPathnameForAsset,
 } from "../src/build/prerender-static-routes.js";
 import { generateManifest } from "../src/routing/generate-manifest.js";
+import { matchRoute } from "../src/routing/match-route.js";
+import { serializePropsForScript, serializeRouteForScript } from "../src/rendering/render-context.js";
+
+const buildId = "1234567890abcdef1234567890abcdef";
 
 const created = [];
 
@@ -31,6 +35,7 @@ function writeRoute(root, relativePath, source = "export default function Page()
 // and the client asset directory, plus the directory itself.
 function writeBuildOutputs(root) {
   mkdirSync(join(root, "dist", "client"), { recursive: true });
+  writeFile(root, "dist/client/_goribu/navigation.json", JSON.stringify({ buildId, routes: null }));
   writeFile(root, join("dist", "app", "index.js"), "export default { fetch() {} };\n");
   writeFile(
     root,
@@ -72,11 +77,26 @@ function streamErrorResponse() {
 // A fake Worker runner: `handler(pathname)` returns a Response or throws. Records
 // whether the Worker was started and stopped so lifecycle can be asserted.
 function fakeStartWorker(handler) {
+  const manifest = manifestFor(created.at(-1));
   const state = { started: false, stopped: false };
   const startWorker = vi.fn(async () => {
     state.started = true;
     return {
-      fetch: (pathname) => handler(pathname),
+      fetch: async (pathname) => {
+        const response = handler(pathname);
+        if (response.status !== 200) return response;
+        const id = matchRoute({ manifest, pathname, method: "GET" }).route.id;
+        const suffix = `<script id="__GORIBU_ROUTE__" type="application/json">${serializeRouteForScript(id, { buildId, meta: {}, status: 200 })}</script><script id="__GORIBU_PROPS__" type="application/json">${serializePropsForScript({})}</script>`;
+        // Keep stream failures as response-body failures, not rejected fetches.
+        const reader = response.body.getReader();
+        return new Response(new ReadableStream({
+          async pull(controller) {
+            const { value, done } = await reader.read();
+            if (!done) controller.enqueue(value);
+            else { controller.enqueue(new TextEncoder().encode(suffix)); controller.close(); }
+          },
+        }), { headers: response.headers });
+      },
       stop: async () => {
         state.stopped = true;
       },
@@ -156,6 +176,26 @@ describe("assertNoAssetRouteCollisions", () => {
 });
 
 describe("prerenderStaticRoutes", () => {
+  it("refuses cookie-setting and non-HTML snapshots, downgrading automatic pages and rejecting forced ones", async () => {
+    for (const forced of [false, true]) {
+      for (const headers of [
+        { "content-type": "text/html", "set-cookie": "session=private" },
+        { "content-type": "application/json" },
+      ]) {
+        const root = makeProject();
+        writeRoute(root, "index.jsx", `${forced ? "export const prerender = true;" : ""} export default function Page() { return null; }`);
+        const clientDir = writeBuildOutputs(root);
+        const { startWorker } = fakeStartWorker(() => new Response("not a public snapshot", { headers }));
+        const result = prerenderStaticRoutes({ projectRoot: root, log: makeLog(), startWorker });
+        if (forced) await expect(result).rejects.toThrow(/cookie|HTML/);
+        else {
+          expect((await result).prerendered).toEqual([]);
+          expect(JSON.parse(readFileSync(join(clientDir, "_goribu/navigation.json"), "utf8")).routes).toEqual({});
+        }
+        expect(existsSync(join(clientDir, "index.html"))).toBe(false);
+      }
+    }
+  });
   it("writes an HTML asset for each static route the Worker renders", async () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");
@@ -179,6 +219,10 @@ describe("prerenderStaticRoutes", () => {
     expect(log.log).toHaveBeenCalledWith(expect.stringContaining("Statically output 2 route(s)"));
     expect(state.started).toBe(true);
     expect(state.stopped).toBe(true);
+    const navigation = JSON.parse(readFileSync(join(clientDir, "_goribu/navigation.json"), "utf8"));
+    expect(Object.keys(navigation.routes).sort()).toEqual(["/", "/about"]);
+    const snapshot = JSON.parse(readFileSync(join(clientDir, navigation.routes["/about"].asset), "utf8"));
+    expect(snapshot).toMatchObject({ buildId, kind: "render", routeId: "src/routes/about.jsx", props: {}, meta: {}, status: 200 });
   });
 
   it("uses shared middleware selection to downgrade only the affected static page", async () => {

@@ -183,15 +183,22 @@ describe("goribu()", () => {
     );
   });
 
-  it("emits a _headers asset that caches only the reserved fingerprinted namespace", () => {
+  it("emits immutable asset rules and an unfinished, uncached navigation index", () => {
     const client = emitHeadersFor("client");
-    expect(client).toHaveLength(1);
+    expect(client).toHaveLength(2);
     expect(client[0]).toMatchObject({ type: "asset", fileName: "_headers" });
     expect(client[0].source).toContain("/_goribu/assets/*");
     expect(client[0].source).toContain("Cache-Control: public, max-age=31536000, immutable");
+    expect(client[0].source).toContain("/_goribu/navigation.json\n  Cache-Control: no-store");
+    expect(JSON.parse(client[1].source)).toMatchObject({ routes: null });
 
     // The Worker build shares the plugin and must not receive the file.
     expect(emitHeadersFor("goribu_basic_app")).toHaveLength(0);
+  });
+
+  it("rejects plugin output in the prerender-owned immutable navigation namespace", () => {
+    expect(() => auditBundle({ "_goribu/navigation/latest.json": { type: "asset" } }))
+      .toThrow(/Only Goribu's prerender step/);
   });
 
   it("passes Vite hashes containing dashes and ignores files outside the reserved namespace", () => {

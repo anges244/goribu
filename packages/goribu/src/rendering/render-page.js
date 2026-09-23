@@ -51,7 +51,12 @@ export async function renderPage(options) {
   }
 
   const renderData = Object.freeze({
-    routeJson: hasRouteId ? serializeRouteForScript(options.routeId) : null,
+    routeJson: hasRouteId ? serializeRouteForScript(options.routeId,
+      options?.clientAssetManifest?.navigationBuildId === undefined ? undefined : {
+        buildId: options.clientAssetManifest.navigationBuildId,
+        meta: options.metadata ?? {},
+        status,
+      }) : null,
     propsJson: serializePropsForScript(props),
     clientAssets:
       options?.clientAssetManifest === undefined ||

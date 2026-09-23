@@ -9,6 +9,20 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Behavior change:** production client navigation and prefetch to prerendered
+  pages now use Static Assets without invoking the Worker. HTML and navigation
+  data share one build-time snapshot, including explicitly prerendered GET props
+  and metadata; query-dependent server output requires `prerender = false`.
+  Build identity checks reload safely instead of mixing incompatible deployments.
+- Exact-current-URL Link, NavLink, and imperative navigation scroll to the top.
+  Confirmed static pages preserve state without fetching or rerendering; dynamic
+  pages fetch fresh data without a document reload or duplicate history entry.
+  Fragment links retain native behavior. Development uses Worker navigation.
+- Prerendering rejects cookie-setting or non-HTML responses and fails closed
+  when the Document's hydration data cannot produce a valid navigation snapshot.
+
 ### Added
 
 - `goribu cloudflare-login` authorizes Cloudflare through Goribu's installed

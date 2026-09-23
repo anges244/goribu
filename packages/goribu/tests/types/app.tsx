@@ -132,6 +132,7 @@ defineConfig({ name: "typed-app", compatibilityDate: "2026-08-31", adapter: "nod
 const app = createApp({
   manifest: [], modules: new Map([["_document", { default: Document }]]),
   errorPages: { notFound: null }, documentId: "_document", applicationConfig: config,
+  clientAssetManifest: { entry: { file: "_goribu/assets/entry-1234ABCD.js" }, navigationBuildId: "1234567890abcdef1234567890abcdef" },
 });
 const response: Promise<Response> = app.fetch(new Request("https://app.test"), { GREETING: "Hello" }, { waitUntil() {} });
 // @ts-expect-error Binding shape follows application configuration.

@@ -5,6 +5,109 @@ import { createNavigationController } from "../src/browser/create-navigation-con
 import { LocationContext } from "../src/navigation/location-context.js";
 
 describe("createNavigationController", () => {
+  it("uses static assets for prefetch, query navigation, redirects and history, and only scrolls on a repeated static click", async () => {
+    const { controller, browser, fetch, root, applyMeta, manifestReady } = staticController();
+    await manifestReady();
+    await controller.navigate("/start");
+    expect(root.render).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1); // Only bootstrap's manifest.
+    expect(browser.window.scrollTo).toHaveBeenLastCalledWith(0, 0);
+
+    await controller.prefetch("/about?x=1");
+    await controller.navigate("/about?x=1");
+    expect(fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
+      "/_goribu/navigation.json", staticAsset,
+    ]);
+    expect(root.render).toHaveBeenCalledOnce();
+    expect(applyMeta).toHaveBeenCalledWith({ title: "Saved title" });
+    expect(browser.location.href).toBe("https://example.com/about?x=1");
+    const pushes = browser.history.pushState.mock.calls.length;
+    await controller.navigate("/about?x=1");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(root.render).toHaveBeenCalledOnce();
+    expect(browser.history.pushState).toHaveBeenCalledTimes(pushes);
+
+    await controller.navigate("/redirect");
+    expect(browser.location.href).toBe("https://example.com/about#section");
+    expect(fetch.mock.calls.filter(([url]) => new URL(url).pathname === "/_goribu/worker-nav")).toHaveLength(1);
+    browser.setHref("https://example.com/start");
+    browser.dispatch("popstate", { state: { __goribu: { x: 10, y: 80 } } });
+    await vi.waitFor(() => expect(browser.window.scrollTo).toHaveBeenLastCalledWith(10, 80));
+    expect(fetch.mock.calls.filter(([url]) => new URL(url).pathname === "/_goribu/worker-nav")).toHaveLength(1);
+    controller.dispose();
+  });
+
+  it("refreshes the current dynamic URL without adding history or reusing completed prefetch data", async () => {
+    const { controller, browser, fetch, root } = staticController();
+    await controller.prefetch("/dynamic");
+    await controller.navigate("/dynamic");
+    const pushes = browser.history.pushState.mock.calls.length;
+    await controller.navigate("/dynamic");
+    expect(fetch.mock.calls.filter(([url]) => new URL(url).pathname === "/_goribu/worker-nav")).toHaveLength(2);
+    expect(root.render).toHaveBeenCalledTimes(2);
+    expect(browser.history.pushState).toHaveBeenCalledTimes(pushes);
+    expect(browser.location.assign).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it("cancels pending navigation when the current static page is clicked again", async () => {
+    const delayed = deferred();
+    const setup = staticController({ dynamicResponse: () => delayed.promise });
+    const { controller, browser, root, fetch } = setup;
+    const old = controller.navigate("/dynamic");
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await controller.navigate("/start");
+    delayed.resolve(jsonResponse({ kind: "render", routeId: "page", props: {}, status: 200 }));
+    await old;
+    expect(root.render).not.toHaveBeenCalled();
+    expect(browser.location.href).toBe("https://example.com/start");
+    controller.dispose();
+  });
+
+  it.each([false, true])("reconciles the URL when returning to the displayed static page during Back (replace: %s)", async (replace) => {
+    const delayed = deferred();
+    const dynamicResponse = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ kind: "render", routeId: "page", props: { live: true }, status: 200 }))
+      .mockImplementationOnce(() => delayed.promise);
+    const { controller, browser, root } = staticController({ dynamicResponse });
+    try {
+      await controller.navigate("/slow");
+      const slowState = browser.history.state;
+      await controller.navigate("/about");
+      browser.history.pushState.mockClear();
+
+      browser.setHref("https://example.com/slow");
+      browser.history.state = slowState;
+      browser.dispatch("popstate", { state: slowState });
+      await vi.waitFor(() => expect(dynamicResponse).toHaveBeenCalledTimes(2));
+      await controller.navigate("/about", { replace });
+
+      expect(browser.location.href).toBe("https://example.com/about");
+      expect(root.render.mock.lastCall[0].props.value).toBe(browser.location.href);
+      expect(browser.history.pushState).toHaveBeenCalledTimes(replace ? 0 : 1);
+      const renders = root.render.mock.calls.length;
+      delayed.resolve(jsonResponse({ kind: "render", routeId: "page", props: { stale: true }, status: 200 }));
+      await new Promise((done) => setTimeout(done, 0));
+      expect(root.render).toHaveBeenCalledTimes(renders);
+      expect(browser.location.href).toBe("https://example.com/about");
+      expect(browser.location.assign).not.toHaveBeenCalled();
+    } finally { controller.dispose(); }
+  });
+
+  it("hard-loads on stale manifests, missing snapshots, wrong route data, or a newer Worker", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const fault of ["manifest", "missing", "route", "worker", "snapshot-build"]) {
+        const { controller, browser, root } = staticController({ fault });
+        const path = fault === "worker" ? "/dynamic" : "/about";
+        await controller.navigate(path);
+        expect(browser.location.assign, fault).toHaveBeenCalledWith(`https://example.com${path}`);
+        expect(root.render).not.toHaveBeenCalled();
+        controller.dispose();
+      }
+    } finally { log.mockRestore(); }
+  });
+
   it("fetches the reserved endpoint, loads the canonical page, and commits once ready", async () => {
     function PostPage() {}
     const hashTarget = { scrollIntoView: vi.fn() };
@@ -60,6 +163,12 @@ describe("createNavigationController", () => {
     expect(locatedPage.props.children.type).toBe(PostPage);
     expect(locatedPage.props.children.props).toEqual({ id: "42" });
     expect(hashTarget.scrollIntoView).toHaveBeenCalledOnce();
+    const pushes = browser.history.pushState.mock.calls.length;
+    await controller.navigate("#comments");
+    expect(browser.history.pushState).toHaveBeenCalledTimes(pushes);
+    await controller.navigate("#");
+    expect(browser.window.scrollTo).toHaveBeenLastCalledWith(0, 0);
+    expect(fetch).toHaveBeenCalledOnce();
     controller.dispose();
   });
 
@@ -623,6 +732,40 @@ describe("createNavigationController", () => {
     }
   });
 });
+
+const staticBuildId = "1234567890abcdef1234567890abcdef";
+const staticAsset = `/_goribu/navigation/${staticBuildId}/${"a".repeat(64)}.json`;
+function staticController({ fault, dynamicResponse } = {}) {
+  const browser = fakeBrowser("https://example.com/start");
+  const root = { render: vi.fn() };
+  const applyMeta = vi.fn();
+  const fetch = vi.fn(async (url) => {
+    const path = new URL(url).pathname;
+    if (path === "/_goribu/navigation.json") return jsonResponse({
+      buildId: fault === "manifest" ? "old" : staticBuildId,
+      routes: Object.fromEntries(["/start", "/about"].map((route) => [route, { routeId: "page", asset: staticAsset }])),
+    });
+    if (path === staticAsset) {
+      if (fault === "missing") return new Response("missing", { status: 404 });
+      return jsonResponse({
+        kind: "render", routeId: fault === "route" ? "other" : "page", props: { saved: true },
+        meta: { title: "Saved title" }, status: 200, buildId: fault === "snapshot-build" ? "old" : staticBuildId,
+      });
+    }
+    const response = dynamicResponse ? await dynamicResponse() : jsonResponse(
+      new URL(url).searchParams.get("to") === "/redirect"
+        ? { kind: "redirect", location: "/about#section", status: 303 }
+        : { kind: "render", routeId: "page", props: { live: true }, status: 200 },
+    );
+    response.headers.set("x-goribu-build", fault === "worker" ? "new" : staticBuildId);
+    return response;
+  });
+  const controller = createNavigationController({
+    root, browserWindow: browser.window, fetch, applyMeta, navigationBuildId: staticBuildId,
+    pageLoaders: { page: async () => ({ default: function Page() {} }) }, afterRender: async () => {},
+  });
+  return { controller, browser, root, fetch, applyMeta, manifestReady: async () => { await controller.prefetch("/start"); await new Promise((done) => setTimeout(done, 0)); } };
+}
 
 
 function fakeBrowser(initialHref, options = {}) {

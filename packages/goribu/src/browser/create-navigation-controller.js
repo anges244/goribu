@@ -2,6 +2,7 @@ import { applyDocumentMeta } from "./apply-document-meta.js";
 import { loadClientPage } from "./load-client-page.js";
 import { readNavigationEnvelope } from "./read-navigation-envelope.js";
 import { createLocatedPage } from "../navigation/location-context.js";
+import { createStaticNavigation } from "./static-navigation.js";
 
 const NAVIGATION_PATH = "/_goribu/worker-nav";
 const HISTORY_KEY = "__goribu";
@@ -14,8 +15,8 @@ const MAX_REDIRECTS = 8;
 /**
  * Own browser navigation after initial hydration.
  *
- * The controller fetches only the reserved endpoint, resolves pages through the
- * generated route-ID loader map, and commits history/UI only after both payload
+ * The controller fetches saved static payloads or the Worker endpoint, resolves
+ * pages through the generated route-ID loader map, and commits history/UI only after both payload
  * and page module are known-good. Every uncertain path falls back to a document
  * load instead of leaving partially committed client state.
  */
@@ -37,6 +38,14 @@ export function createNavigationController(options) {
     afterRender,
     applyMeta,
   });
+  const navigationBuildId = options?.navigationBuildId ?? null;
+  const staticNavigation = navigationBuildId === null ? null : createStaticNavigation({
+    buildId: navigationBuildId, fetch: fetchImplementation,
+    origin: browserWindow.location.origin, pageLoaders,
+  });
+  // Discover confirmed output once, without blocking hydration or swallowing a
+  // click. Failed discovery is retried by navigation and otherwise stays silent.
+  void staticNavigation?.ready().catch(() => {});
 
   const cache = new Map();
   const scheduledPrefetches = new Map();
@@ -97,7 +106,7 @@ export function createNavigationController(options) {
       saveCurrentScroll();
       if (signal?.aborted === true) return;
       try {
-        commitHistory(destination, replace ? "replace" : "push");
+        commitHistory(destination, replace || destination.href === renderedUrl.href ? "replace" : "push");
         renderedUrl = destination;
       } catch (error) {
         logNavigationFailure(destination, error);
@@ -111,12 +120,16 @@ export function createNavigationController(options) {
     }
 
     saveCurrentScroll();
+    // Back/Forward changes the browser URL before its page finishes loading.
+    // History decisions must use that URL, not the page still on screen.
+    const sameUrl = destination.href === browserWindow.location.href;
     return performNavigation(destination, {
       version,
-      historyMode: replace ? "replace" : "push",
+      historyMode: replace || sameUrl ? "replace" : "push",
       redirectDepth: 0,
       restoreScroll: null,
       signal,
+      refresh: sameUrl,
     });
   }
 
@@ -163,7 +176,23 @@ export function createNavigationController(options) {
 
   async function performNavigation(destination, context) {
     try {
-      const target = await consumeTarget(destination);
+      if (staticNavigation !== null) {
+        const entry = await staticNavigation.lookup(destination);
+        if (disposed || context.version !== navigationVersion || context.signal?.aborted) return;
+        if (entry !== null) {
+          destination.pathname = entry.pathname;
+          if (
+            context.refresh &&
+            destination.href === renderedUrl.href &&
+            destination.href === browserWindow.location.href
+          ) {
+            scrollToDestination(destination);
+            saveCurrentScroll();
+            return;
+          }
+        }
+      }
+      const target = await consumeTarget(destination, context.refresh);
       if (
         disposed ||
         context.version !== navigationVersion ||
@@ -262,7 +291,7 @@ export function createNavigationController(options) {
     if (
       destination === null ||
       destination.origin !== browserWindow.location.origin ||
-      isSameDocumentHash(destination)
+      isSameDocumentHash(destination) || destination.href === renderedUrl.href
     ) {
       return;
     }
@@ -409,8 +438,9 @@ export function createNavigationController(options) {
     return record.promise;
   }
 
-  async function consumeTarget(destination) {
+  async function consumeTarget(destination, refresh = false) {
     const key = navigationKey(destination);
+    if (refresh) cache.delete(key);
     const promise = warmTarget(destination);
     try {
       return await promise;
@@ -420,12 +450,30 @@ export function createNavigationController(options) {
   }
 
   async function fetchTarget(destination) {
+    const entry = staticNavigation === null ? null : await staticNavigation.lookup(destination);
+    if (entry !== null) {
+      const response = await fetchImplementation(new URL(entry.asset, browserWindow.location.origin).href, {
+        headers: { accept: "application/json" }, redirect: "error",
+      });
+      if (!response.ok) {
+        throw new Error("[Goribu] Static page data could not be loaded. Reload the page and deploy complete build output.");
+      }
+      const envelope = await readNavigationEnvelope(response, { buildId: navigationBuildId });
+      if (envelope.kind !== "render" || envelope.routeId !== entry.routeId || envelope.status !== 200) {
+        throw new Error("[Goribu] Static page data does not match its route. Rebuild and deploy the application together.");
+      }
+      const Page = await loadClientPage({ routeId: envelope.routeId, pageLoaders });
+      return { envelope, Page };
+    }
     const endpoint = new URL(NAVIGATION_PATH, browserWindow.location.origin);
     endpoint.searchParams.set("to", navigationKey(destination));
     const response = await fetchImplementation(endpoint.href, {
       headers: { accept: "application/json" },
       redirect: "manual",
     });
+    if (navigationBuildId !== null && response.headers.get("x-goribu-build") !== navigationBuildId) {
+      throw new Error("[Goribu] The Worker and browser belong to different builds. Reload the page to use matching route code and data.");
+    }
     const envelope = await readNavigationEnvelope(response);
     if (envelope.kind !== "render") return { envelope, Page: null };
 
@@ -454,7 +502,7 @@ export function createNavigationController(options) {
     return (
       destination.pathname === current.pathname &&
       destination.search === current.search &&
-      destination.hash.length > 0
+      destination.href.includes("#")
     );
   }
 

@@ -25,13 +25,19 @@ prefetch API.
 
 An eligible click is an unmodified primary click to a same-origin HTTP(S) URL in
 the current browsing context. External URLs, downloads, other targets, modified
-clicks, same-document fragments, exact-current URLs, and a cancelled `onClick`
+clicks, same-document fragments, and a cancelled `onClick`
 remain browser-owned.
 
 `replace` replaces the current history entry. Intent prefetch is enabled by
 default; hover waits briefly, pointer down starts immediately, and
 `prefetch={false}` disables it. Prefetch is bounded and optional: failure never
 changes what a click does.
+
+Clicking the exact current URL scrolls to the top. In production, a confirmed
+static page preserves component state without fetching or rerendering. A dynamic
+page requests fresh route data and updates in place. Neither adds a history
+entry or deliberately reloads the document. Exact-current-URL links do not
+prefetch. `NavLink` and `navigate()` share these semantics.
 
 ## Active links
 
@@ -64,18 +70,35 @@ the full document. Invalid or non-HTTP targets fail with a repair message.
 
 ## What happens during a transition
 
-Goribu asks `/_goribu/worker-nav` for a no-store render, redirect, or reload
-envelope. The target still runs through normal GET routing, middleware, handlers,
+In production, successfully prerendered pages load saved route data from Static
+Assets without executing the Worker. This applies to prefetch, links, imperative
+navigation, redirects into static pages, and back/forward traversal. Page chunks
+and stylesheets still load as needed.
+
+The browser reads one uncached static navigation index tied to its build. Saved
+route data shares the exact props and metadata embedded in the prerendered HTML.
+Explicitly prerendered GET handlers do not rerun on client navigation, and query
+strings do not recompute static server data or metadata. Use `prerender = false`
+when the output must depend on a request. Development uses the Worker because
+there are no production snapshots yet.
+
+For dynamic pages, Goribu asks `/_goribu/worker-nav` for a no-store render,
+redirect, or reload envelope. The target runs through normal GET routing, middleware, handlers,
 cookies, and Worker bindings. A render loads the route's canonical page chunk
 before history or UI commits. A reload means the response cannot safely become a
 client page, so the browser requests the document.
 
 A newer navigation invalidates older work. Any malformed envelope, missing page
-module, failed render, unsafe redirect, or history failure falls back to the
+module, mismatched build, missing snapshot, failed render, unsafe redirect, or history failure falls back to the
 document rather than leaving partial client state.
 
-Goribu pushes one history entry by default, preserves application fields in
+Goribu pushes one history entry by default (reusing the current entry for an
+exact-current-URL navigation), preserves application fields in
 `history.state`, restores scroll on back/forward, and scrolls new routes to a
 fragment or the top. Same-document hash links remain native.
+
+The static scroll-only behavior requires the destination to match both the
+address bar and the displayed page. If Back or Forward is still loading,
+clicking a link to the page still on screen navigates to that URL normally.
 
 **Next:** [Forms](/docs/forms).

@@ -10,6 +10,23 @@ afterEach(() => {
 });
 
 describe("Link", () => {
+  it("enhances exact-current-URL clicks without prefetching them", async () => {
+    const runtime = navigationRuntime();
+    const uninstall = installNavigationRuntime(runtime);
+    vi.stubGlobal("window", browserWindow("https://example.com/"));
+    try {
+      const element = Link({ href: "/" });
+      element.props.onPointerEnter(pointerEvent());
+      element.props.onPointerDown(pointerEvent());
+      const event = pointerEvent();
+      element.props.onClick(event);
+      await Promise.resolve();
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(runtime.navigate).toHaveBeenCalledWith("/", { replace: false });
+      expect(runtime.prefetch).not.toHaveBeenCalled();
+      expect(runtime.schedulePrefetch).not.toHaveBeenCalled();
+    } finally { uninstall(); }
+  });
   it("renders a real anchor and enhances one eligible click", async () => {
     const runtime = navigationRuntime();
     const uninstall = installNavigationRuntime(runtime);
@@ -52,6 +69,7 @@ describe("Link", () => {
       const cases = [
         [{ href: "https://other.example/posts" }, pointerEvent()],
         [{ href: "/posts#comments" }, pointerEvent()],
+        [{ href: "#" }, pointerEvent()],
         [{ href: "/next", target: "_blank" }, pointerEvent()],
         [{ href: "/download", download: true }, pointerEvent()],
         [{ href: "/next" }, pointerEvent({ button: 1 })],
@@ -72,7 +90,7 @@ describe("Link", () => {
         expect(event.preventDefault).not.toHaveBeenCalled();
       }
       expect(runtime.navigate).not.toHaveBeenCalled();
-      expect(runtime.saveScroll).toHaveBeenCalledTimes(4);
+      expect(runtime.saveScroll).toHaveBeenCalledTimes(5);
     } finally {
       uninstall();
     }

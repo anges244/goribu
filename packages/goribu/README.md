@@ -48,7 +48,8 @@ Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.
 | `goribu/vite` | Vite build integration. |
 
 Interactive forms and client navigation require JavaScript. Static output means
-the request needs no Worker; it can still hydrate and be interactive.
+document loads, client navigation, and prefetch use Static Assets without
+invoking the Worker; the page can still hydrate and be interactive.
 
 [Documentation](https://goribu.dev/docs/introduction)
 · [Source](https://github.com/anges244/goribu)

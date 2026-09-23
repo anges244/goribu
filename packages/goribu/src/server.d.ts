@@ -148,7 +148,7 @@ export interface AppOptions<Env extends object = Record<string, unknown>> {
   documentId?: string | null;
   middlewareByRoute?: Map<string, Array<{ id: string; relativePath: string }>>;
   mode?: "development" | "production";
-  clientAssetManifest?: { entry: ClientAsset; pages?: Record<string, ClientAsset> } | null;
+  clientAssetManifest?: { entry: ClientAsset; pages?: Record<string, ClientAsset>; navigationBuildId?: string } | null;
   clientAssetBase?: string;
   applicationConfig?: DefinedConfig<Env>;
 }

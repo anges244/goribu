@@ -1,3 +1,5 @@
+import { Link } from "goribu";
+
 // A route that exports both a default page and a GET handler. The handler runs
 // instead of an implicit GET render, reads a query param through the request
 // surface, and returns res.render(props) so the route's own page renders with
@@ -8,7 +10,7 @@ export default function GreetPage({ name }) {
       <h1>Hello, {name ?? "world"}</h1>
       <p>This page was rendered by a GET handler that returned res.render(props).</p>
       <nav>
-        <a href="/">Home</a>
+        <Link href="/">Home</Link> · <Link href="/greet">Greeting</Link>
       </nav>
     </main>
   );

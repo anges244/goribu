@@ -1,9 +1,10 @@
 # Navigation
 
 Goribu enhances ordinary anchors after the initial page hydrates. A direct page
-request still renders HTML, while an eligible in-app transition asks the Worker
-for a small route envelope and loads the matching page module from the client
-graph.
+request receives HTML. In production, an eligible transition to a successfully
+prerendered page loads saved route data from Static Assets without invoking the
+Worker. Dynamic transitions ask the Worker for route data. Both load the matching
+page module from the client graph.
 
 Import the public navigation APIs from `goribu`:
 
@@ -34,12 +35,18 @@ primary click in the current browsing context. These remain browser-owned:
 - external URLs and non-HTTP schemes such as `mailto:`;
 - downloads and non-`_self` targets;
 - middle clicks and clicks with Meta, Ctrl, Shift, or Alt;
-- same-document hash links and exact-current-URL links;
+- same-document hash links;
 - malformed destinations;
 - a click whose application `onClick` called `preventDefault()`.
 
 Application handlers run first. When a click is not enhanced, the real anchor
 performs the normal document navigation.
+
+After hydration, clicking the exact current URL scrolls to the top. A confirmed
+static page preserves its component state without fetching or rerendering. A
+dynamic page requests fresh route data, bypassing prefetched data, and updates
+in place. Neither adds a history entry or deliberately reloads the document.
+`NavLink` and `navigate()` use the same rule. Fragment links remain native.
 
 ## Active links
 
@@ -83,9 +90,27 @@ empty, non-HTTP, and non-browser calls fail with a `[Goribu]` repair message.
 Prefer `<Link>` for navigation users may open in another tab, copy, or reach
 without JavaScript.
 
+## Static navigation
+
+Production bootstrap reads one uncached, build-identified static navigation
+index. Only pages whose HTML and navigation payload were successfully written
+appear in it. Prefetch, links, imperative navigation, redirects into static
+pages, and back/forward traversal all use these saved payloads. JavaScript and
+CSS still load as needed; avoiding Worker execution does not mean avoiding all
+asset requests.
+
+Static HTML and route data share the exact same build-time props and metadata.
+This includes explicitly prerendered GET handlers: client navigation does not
+rerun them. Query strings remain in the address bar but do not recompute static
+server props or metadata. Use `prerender = false` for request-dependent output.
+
+Development keeps using the Worker because no production snapshots exist yet.
+Build or data mismatches, missing assets, and invalid payloads fall back to a
+document load. Deploy the complete output of `goribu build` together.
+
 ## Worker protocol
 
-Enhanced transitions fetch only Goribu's reserved endpoint:
+Dynamic transitions fetch Goribu's reserved endpoint:
 
 ```text
 GET /_goribu/worker-nav?to=%2Fposts%2F42%3Fview%3Dfull
@@ -112,7 +137,12 @@ This endpoint is framework-internal. Do not call or route `/_goribu/` yourself.
 
 A successful transition pushes one history entry by default. `replace` changes
 the current entry, redirect chains commit only the final destination, and
-back/forward traversal reuses its existing entry.
+back/forward traversal reuses its existing entry. Exact-current-URL navigation
+reuses the current entry too.
+
+The static scroll-only behavior requires the destination to match both the
+address bar and the displayed page. If Back or Forward is still loading,
+clicking a link to the page still on screen navigates to that URL normally.
 
 Goribu preserves application-owned `history.state` fields and stores its own
 scroll data under a private key. New routes scroll to a matching fragment or the
@@ -132,6 +162,9 @@ Goribu loads the target document instead of committing partial client state.
 - a following navigation shares the in-flight request;
 - completed entries expire quickly and the cache is bounded;
 - failures are discarded so the real click retries.
+
+Exact-current-URL links do not prefetch. Static prefetch uses Static Assets;
+dynamic prefetch uses the Worker protocol.
 
 Prefetch is an optimization, never a correctness requirement.
 

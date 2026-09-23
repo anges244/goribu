@@ -40,6 +40,11 @@ add routes and dependencies only for actual application needs.
   a page component and target it with `<Form action="/action-path">`. Adding a
   mutation handler to the page makes that route dynamic; forcing
   `prerender = true` is invalid.
+- In production, prerendered pages use Static Assets for document loads, client
+  navigation, and prefetch. Their props and metadata stay fixed at build time,
+  including explicitly prerendered GET handlers; query changes do not rerun
+  them. Use `prerender = false` for request-dependent output. Development uses
+  the Worker.
 - For Form mutations, prefer `res.json(data)` for an in-place result,
   `res.invalid(errors)` for field errors, or `res.redirect(url)` for navigation.
   Use `res.render(props)` only for intentional rendering of the handler's own

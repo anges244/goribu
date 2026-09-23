@@ -71,14 +71,14 @@ export function serializePropsForScript(props) {
 }
 
 /** Serialize the stable route ID used to select a generated client page loader. */
-export function serializeRouteForScript(routeId) {
+export function serializeRouteForScript(routeId, snapshot = undefined) {
   if (typeof routeId !== "string" || routeId.length === 0) {
     throw new TypeError(
       "[Goribu] Could not serialize hydration route data because the matched route has no stable source ID. Pass the unchanged route.id from Goribu's generated manifest.",
     );
   }
 
-  return escapeJsonForScript(JSON.stringify({ id: routeId }));
+  return escapeJsonForScript(JSON.stringify({ id: routeId, ...snapshot }));
 }
 
 function escapeJsonForScript(serialized) {

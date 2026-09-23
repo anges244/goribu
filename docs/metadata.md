@@ -54,7 +54,8 @@ return everything the page and metadata need through `res.render(props)`.
 Metadata is resolved and validated before streaming begins, so a failure reaches
 the normal error boundary before page bytes commit.
 
-For a direct render or navigation, `url` is the displayed route URL. A same-page
+During request-time rendering, `url` is the displayed route URL. Prerendering
+uses the build-time route URL; static navigation reuses the saved metadata. A same-page
 form render receives the verified Referer URL, including its query. `_404`
 receives the missing URL and its props. Production `_500` receives the safe
 `{ url, errorId }` props, while its metadata URL omits query and hash.
@@ -89,6 +90,11 @@ Route-owned title, meta, and link nodes carry `data-goribu-head`. Navigation and
 same-page form renders construct the complete next set, remove the old marked
 nodes, and append the new set atomically. Document-owned viewport, icon, preload,
 and other unmarked nodes remain untouched.
+
+For a prerendered page, metadata is a build-time snapshot shared by its static
+HTML and client navigation data. Changing a query string does not rerun its
+server `meta()` function. Use `prerender = false` when metadata must depend on
+the current request.
 
 ## Document
 
@@ -188,8 +194,9 @@ again, so that emergency response may lack application headers.
 ### Static response limitation
 
 `responseHeaders()` runs only when the Worker runs. Prerendered routes and other
-Static Assets bypass it and currently receive only Goribu's generated immutable
-cache rule for `/_goribu/assets/*`. App-authored `public/_headers` is rejected to
+Static Assets bypass it. Goribu generates immutable cache rules for hashed
+browser assets and static navigation payloads, plus a no-store rule for the
+navigation index. App-authored `public/_headers` is rejected to
 protect that generated file, so application-defined static CSP and other static
 header rules are not supported yet. Do not describe a Worker nonce policy as
 covering static pages.

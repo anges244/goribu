@@ -73,10 +73,11 @@ export function shouldEnhanceLinkClick(event, anchorProps) {
 }
 
 function shouldPrefetchLink(event, anchorProps, requirePrimaryButton) {
+  const destination = resolveEnhanceableDestination(anchorProps);
   return (
     hasNoModifiers(event) &&
     (!requirePrimaryButton || event.button === undefined || event.button === 0) &&
-    resolveEnhanceableDestination(anchorProps) !== null
+    destination !== null && destination.href !== globalThis.window?.location?.href
   );
 }
 
@@ -124,12 +125,12 @@ function resolveEnhanceableDestination(anchorProps) {
   if (
     destination.pathname === current.pathname &&
     destination.search === current.search &&
-    destination.hash.length > 0
+    destination.href.includes("#")
   ) {
     return null;
   }
 
-  return destination.href === current.href ? null : destination;
+  return destination;
 }
 
 function isPrimaryUnmodifiedPointer(event) {

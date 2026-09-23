@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "goribu";
 
 export default function IndexPage() {
   const [count, setCount] = useState(0);
@@ -11,8 +12,9 @@ export default function IndexPage() {
         Hydration count: {count}
       </button>
       <nav>
-        <a href="/about">About</a> · <a href="/posts/hello-world">A post</a> ·{" "}
-        <a href="/missing">A missing page</a>
+        <Link href="/">Home</Link> · <Link href="/about">About</Link> ·{" "}
+        <Link href="/greet">Greeting</Link> · <Link href="/posts/hello-world">A post</Link> ·{" "}
+        <Link href="/missing">A missing page</Link>
       </nav>
     </main>
   );

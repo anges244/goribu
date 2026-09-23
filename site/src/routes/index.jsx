@@ -42,7 +42,8 @@ export default function LandingPage() {
           <h2>Static where it can be</h2>
           <p>
             A route whose first response needs no Worker is built once and served
-            from Static Assets. This landing page and the docs are static;
+            from Static Assets for both document loads and client navigation.
+            This landing page and the docs are static;
             feedback and the community feed run on the Worker.
           </p>
         </div>

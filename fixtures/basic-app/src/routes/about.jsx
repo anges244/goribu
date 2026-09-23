@@ -1,10 +1,12 @@
+import { Link } from "goribu";
+
 export default function AboutPage() {
   return (
     <main>
       <h1>About</h1>
-      <p>A second static route, served by the same Worker as the home page.</p>
+      <p>A second static route, served from Static Assets for document and client navigation.</p>
       <nav>
-        <a href="/">Home</a>
+        <Link href="/">Home</Link> · <Link href="/about">About</Link>
       </nav>
     </main>
   );
