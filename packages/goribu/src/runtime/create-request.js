@@ -249,17 +249,27 @@ function parseJson(bytes) {
 }
 
 function parseUrlEncoded(bytes) {
-  const searchParams = new URLSearchParams(textDecoder.decode(bytes));
+  return collectFormFields(new URLSearchParams(textDecoder.decode(bytes)));
+}
+
+// Both form encodings share one field contract. Defining own properties keeps
+// names such as __proto__ ordinary data; repeated entries retain their order.
+function collectFormFields(entries) {
   const parsed = {};
 
-  for (const name of new Set(searchParams.keys())) {
-    const values = searchParams.getAll(name);
-    Object.defineProperty(parsed, name, {
-      configurable: true,
-      enumerable: true,
-      value: values.length === 1 ? values[0] : values,
-      writable: true,
-    });
+  for (const [name, value] of entries) {
+    if (Object.hasOwn(parsed, name)) {
+      const previous = parsed[name];
+      if (Array.isArray(previous)) previous.push(value);
+      else parsed[name] = [previous, value];
+    } else {
+      Object.defineProperty(parsed, name, {
+        configurable: true,
+        enumerable: true,
+        value,
+        writable: true,
+      });
+    }
   }
 
   return parsed;
@@ -278,7 +288,7 @@ async function parseMultipart(bytes, contentType) {
     const response = new Response(bytes, {
       headers: { "content-type": contentType },
     });
-    return await response.formData();
+    return collectFormFields(await response.formData());
   } catch (cause) {
     throw createHttpError(
       400,

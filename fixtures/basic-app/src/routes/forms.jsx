@@ -32,11 +32,10 @@ export function PATCH(req, res) { return submit(req, res); }
 export function DELETE(req, res) { return submit(req, res); }
 
 async function submit(req, res) {
-  const body = await req.body();
-  const fields = body instanceof FormData ? Object.fromEntries(body) : body;
+  const fields = await req.body();
   req.cookies.set("last_method", req.method, { path: "/forms", httpOnly: true });
   res.headers({ "x-form-handler": req.method, etag: '"form-data"', vary: "Origin" });
-  if (!fields.name?.trim()) return res.invalid({ name: "Enter a name." });
+  if (typeof fields.name !== "string" || !fields.name.trim()) return res.invalid({ name: "Enter a name." });
   if (fields.intent === "preview") return res.render({ message: `${req.method}: ${fields.name}` });
   if (fields.intent === "redirect") return res.redirect(`/forms?completed=${req.method}`);
   if (fields.intent === "plain") return res.text(`${req.method}: ${fields.name}`);

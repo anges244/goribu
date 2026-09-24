@@ -24,6 +24,8 @@ add routes and dependencies only for actual application needs.
 - Named handlers receive `(req, res)`. Return `res.render(props)` for the same
   route's page, or `res.json`, `res.text`, `res.redirect`, or `res.notFound`.
   Read input through `req.params`, `req.query`, and `await req.body()`.
+  Form bodies are objects: uploads are `File` values and repeated fields are
+  arrays. Validate field values; do not branch on `FormData`.
 - Put server-only helpers outside the routes directory in `.server.ts` files.
   Import them from handlers, never from browser-reachable page code.
 - `goribu` contains shared UI APIs; `goribu/server` contains runtime/config APIs;

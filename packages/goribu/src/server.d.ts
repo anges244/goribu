@@ -99,8 +99,11 @@ export interface GoribuRequest<Env extends object = Record<string, unknown>, Par
   d1: D1;
   kv: KV;
   waitUntil(promise: Promise<unknown>): void;
-  /** Content-type-aware parsing; narrow and validate input before use. */
-  body(): Promise<Record<string, unknown> | FormData | string>;
+  /**
+   * JSON and forms return objects; repeated form fields are arrays and uploads
+   * are Files. Text returns a string. Narrow and validate values before use.
+   */
+  body(): Promise<Record<string, unknown> | string>;
   rawBody(): Promise<Uint8Array>;
 }
 declare const resultBrand: unique symbol;

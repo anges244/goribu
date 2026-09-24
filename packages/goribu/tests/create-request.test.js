@@ -93,14 +93,16 @@ describe("createRequest", () => {
     await expect(text.body()).resolves.toBe("héllo Goribu");
   });
 
-  it("parses URL-encoded fields without letting field names alter objects", async () => {
+  it.each(["urlencoded", "multipart"])("normalizes %s fields without coercion or prototype changes", async (encoding) => {
+    const fields = new URLSearchParams("option=a&option=b&title=best+pizza&__proto__=safe&__proto__=again&constructor=own&empty=&count=42&enabled=false&user[name]=Ada");
+    const submitted = encoding === "multipart" ? new FormData() : fields;
+    if (encoding === "multipart") {
+      for (const [name, value] of fields) submitted.append(name, value);
+    }
     const wrapped = createRequest(
       new Request("https://example.com/forms", {
         method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded; charset=utf-8",
-        },
-        body: "option=a&option=b&title=best+pizza&__proto__=safe",
+        body: submitted,
       }),
       {},
     );
@@ -110,11 +112,17 @@ describe("createRequest", () => {
     expect(body.option).toEqual(["a", "b"]);
     expect(body.title).toBe("best pizza");
     expect(Object.hasOwn(body, "__proto__")).toBe(true);
-    expect(body.__proto__).toBe("safe");
+    expect(body.__proto__).toEqual(["safe", "again"]);
+    expect(body.constructor).toBe("own");
+    expect(body.empty).toBe("");
+    expect(body.count).toBe("42");
+    expect(body.enabled).toBe("false");
+    expect(body["user[name]"]).toBe("Ada");
+    expect(Object.hasOwn(body, "missing")).toBe(false);
     expect(Object.getPrototypeOf(body)).toBe(Object.prototype);
   });
 
-  it("parses multipart bodies into FormData with files and repeated fields", async () => {
+  it("normalizes multipart files and mixed repeated fields without losing bytes", async () => {
     const submitted = new FormData();
     submitted.append("tag", "one");
     submitted.append("tag", "two");
@@ -125,6 +133,9 @@ describe("createRequest", () => {
       }),
       "payload.bin",
     );
+    submitted.append("mixed", "text first");
+    submitted.append("mixed", submitted.get("attachment"));
+    submitted.append("mixed", new File(["second"], "second.txt", { type: "text/plain" }));
     const wrapped = createRequest(
       new Request("https://example.com/upload", {
         method: "POST",
@@ -134,10 +145,18 @@ describe("createRequest", () => {
     );
 
     const body = await wrapped.body();
-    const attachment = body.get("attachment");
+    const attachment = body.attachment;
 
-    expect(body).toBeInstanceOf(FormData);
-    expect(body.getAll("tag")).toEqual(["one", "two"]);
+    expect(Object.getPrototypeOf(body)).toBe(Object.prototype);
+    expect(body.tag).toEqual(["one", "two"]);
+    expect(attachment).toBeInstanceOf(File);
+    expect(attachment.type).toBe("application/octet-stream");
+    expect(body.mixed[0]).toBe("text first");
+    expect(body.mixed.slice(1).map(file => file.name)).toEqual(["payload.bin", "second.txt"]);
+    expect(await body.mixed[2].text()).toBe("second");
+    expect(new Uint8Array(await body.mixed[1].arrayBuffer())).toEqual(new Uint8Array([0, 1, 2, 255]));
+    expect(await wrapped.body()).toBe(body);
+    expect((await wrapped.rawBody()).byteLength).toBeGreaterThan(0);
     expect(attachment.name).toBe("payload.bin");
     expect(new Uint8Array(await attachment.arrayBuffer())).toEqual(
       new Uint8Array([0, 1, 2, 255]),

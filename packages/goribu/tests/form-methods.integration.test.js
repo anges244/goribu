@@ -82,6 +82,16 @@ it.each(["POST", "PUT", "PATCH", "DELETE"])("dispatches real %s handlers with ev
   expect(invalid.status).toBe(422);
   expect(await invalid.json()).toEqual({ type: "invalid", errors: { name: "Enter a name." } });
 
+  // Repeated text fields have the same array shape with either wire encoding.
+  // A handler expecting one name must reject them rather than silently pick one.
+  for (const body of [new URLSearchParams(), new FormData()]) {
+    body.append("name", "Ada");
+    body.append("name", "Grace");
+    const repeated = await fetch(action, { method, body, headers: { accept: FORM_MEDIA_TYPE } });
+    expect(repeated.status).toBe(422);
+    expect(await repeated.json()).toEqual({ type: "invalid", errors: { name: "Enter a name." } });
+  }
+
   const preview = await submit({ name: "Ada", intent: "preview" });
   expect(await preview.json()).toMatchObject({ type: "render", route: "src/routes/forms.jsx", props: { message: `${method}: Ada` } });
 

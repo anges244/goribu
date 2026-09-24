@@ -60,10 +60,8 @@ function createFormApp(options = {}) {
           }),
           async POST(request, response) {
             const body = await request.body();
-            const messageValue =
-              body instanceof FormData ? body.get("message") : body.message;
-            const intentValue =
-              body instanceof FormData ? body.get("intent") : body.intent;
+            const messageValue = body.message;
+            const intentValue = body.intent;
             const message =
               typeof messageValue === "string" ? messageValue.trim() : "";
             const intent = typeof intentValue === "string" ? intentValue : "send";

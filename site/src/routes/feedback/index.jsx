@@ -111,8 +111,8 @@ export async function GET(req, res) {
 
 export async function POST(req, res) {
   const body = await req.body();
-  const submittedMessage = readField(body, "message");
-  const submittedIntent = readField(body, "intent");
+  const submittedMessage = body.message;
+  const submittedIntent = body.intent;
   const message =
     typeof submittedMessage === "string" ? submittedMessage.trim() : "";
   const intent = typeof submittedIntent === "string" ? submittedIntent : "send";
@@ -134,10 +134,6 @@ export async function POST(req, res) {
   `.run();
 
   return res.redirect("/feedback/thanks");
-}
-
-function readField(body, name) {
-  return body instanceof FormData ? body.get(name) : body?.[name];
 }
 
 async function loadRecentFeedback(d1) {

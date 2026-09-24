@@ -58,10 +58,23 @@ read shared behind the scenes so it can't be consumed twice:
   array, is a `400`).
 - `application/x-www-form-urlencoded` → a plain **object** of fields; repeated
   fields become arrays. Field names can't pollute the prototype.
-- `multipart/form-data` → a **`FormData`**, with files as `Blob`s.
+- `multipart/form-data` → a plain **object** of fields, with uploads as `File`
+  values; repeated names become arrays, including repeated files or mixed values.
 - `text/*` → the decoded **string**.
 - anything else, or an empty body → an empty object `{}` (a friendly default, not
   an error).
+
+Both form encodings use the same field shape: one value stays a string or
+`File`, repeated values become an array in submission order, and missing fields
+are absent. Empty strings remain empty strings. Goribu does not coerce numbers
+or booleans, or interpret names such as `user[name]` as nested objects. Validate
+field types and file size/content before using them.
+
+**Migrating multipart handlers:** `req.body()` no longer returns `FormData`.
+Replace `body.get("name")` with `body.name`; a missing field is now `undefined`
+rather than `null`. Where you used `body.getAll("tag")`, handle an absent field,
+a single value, or an array. Remove `instanceof FormData` branches. JSON and text
+parsing are unchanged; `rawBody()` still provides the original bytes.
 
 A malformed body of a *supported* type — broken JSON, a multipart body with no
 boundary — is a client mistake, so `req.body()` rejects with a **`400`** carrying

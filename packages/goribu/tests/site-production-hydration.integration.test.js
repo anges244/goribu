@@ -168,7 +168,7 @@ describe("site production hydration", () => {
 
       // WorkerHandle's RPC transport does not serialize a FormData instance as an HTTP
       // multipart body. Send the wire representation explicitly so this exercises the
-      // native browser form path and req.body() returns FormData inside the Worker.
+      // native browser form path and its normalized field object inside the Worker.
       const boundary = "----goribu-native-form-test";
       const nativeBody = [
         `--${boundary}`,

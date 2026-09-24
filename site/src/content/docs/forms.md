@@ -25,7 +25,7 @@ export default function FeedbackPage() {
 
 export async function POST(req, res) {
   const { message } = await req.body();
-  if (!message?.trim()) return res.invalid({ message: "Enter a message." });
+  if (typeof message !== "string" || !message.trim()) return res.invalid({ message: "Enter a message." });
   return res.json({ sent: true });
 }
 ```
@@ -57,6 +57,12 @@ precedence over recovery.
 The GET uses normal page data, so mutation-only props such as an unsaved preview
 do not survive the reload. A verified different pathname remains an error with
 a repair instruction and document fallback.
+
+`await req.body()` returns an object for both form encodings: read `body.name`
+for a text field or `body.file` for an upload. Uploaded values are `File` objects;
+repeated names become arrays, and missing fields are absent. Validate the values
+you expect; there is no need to check for `FormData`. See
+[Reading the body](/docs/handlers#reading-the-body) for migration details.
 
 ## Submission behavior
 

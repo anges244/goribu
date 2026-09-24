@@ -74,7 +74,8 @@ pathname.
 ## Validate request input
 
 Types do not validate network input. `req.body()` returns a record with unknown
-values, a `FormData`, or text according to Content-Type. Narrow that value before
+values or text according to Content-Type. Both form encodings return records;
+uploads are `File` values and repeated fields are arrays. Narrow that value before
 using fields:
 
 ```ts
@@ -82,9 +83,7 @@ import type { Handler } from "goribu/server";
 
 export const POST: Handler = async (req, res) => {
   const body = await req.body();
-  const name = body instanceof FormData
-    ? body.get("name")
-    : typeof body === "object" ? body.name : undefined;
+  const name = typeof body === "object" ? body.name : undefined;
   if (typeof name !== "string" || !name.trim()) {
     return res.invalid({ name: "Enter a name." });
   }

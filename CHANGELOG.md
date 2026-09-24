@@ -33,6 +33,13 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** `req.body()` now normalizes multipart forms into field objects,
+  matching URL-encoded forms. Uploads remain `File` values and repeated names
+  become arrays in submission order. Replace multipart `body.get("name")` with
+  `body.name` (missing fields are `undefined`), and handle scalar/array values
+  instead of `getAll()`. Remove `instanceof FormData` branches. JSON, text, and
+  raw-body parsing are unchanged.
+
 - Starter agent guidance explicitly calls for displaying form-level errors from
   `res.invalid("message")` through `errors.root`.
 

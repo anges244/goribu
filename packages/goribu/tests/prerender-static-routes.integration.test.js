@@ -102,14 +102,22 @@ describe("goribu build static output (workerd)", () => {
       // prerendered page shadowing these handlers at the public URL.
       for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
         for (const accept of ["text/html", "application/vnd.goribu.form+json"]) {
-          const response = await fetch(new URL("/forms", url), {
-            method,
-            headers: { accept },
-            body: new URLSearchParams({ name: "Ada", intent: "save" }),
-          });
-          expect(response.status, `${method} with Accept: ${accept}`).toBe(201);
-          const result = await response.json();
-          expect(accept === "text/html" ? result : result.data).toMatchObject({ method, name: "Ada" });
+          for (const multipart of [false, true]) {
+            const body = multipart ? new FormData() : new URLSearchParams();
+            body.append("name", "Ada");
+            body.append("intent", "save");
+            if (multipart) body.append("attachment", new File(["upload"], "note.txt", { type: "text/plain" }));
+            const response = await fetch(new URL("/forms", url), {
+              method,
+              headers: { accept },
+              body,
+            });
+            expect(response.status, `${method} with Accept: ${accept}`).toBe(201);
+            const result = await response.json();
+            expect(accept === "text/html" ? result : result.data).toMatchObject({
+              method, name: "Ada", attachment: multipart ? "note.txt" : null,
+            });
+          }
         }
       }
     } finally {

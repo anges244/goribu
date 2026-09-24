@@ -47,9 +47,12 @@ const GET: Handler<Props, Env, { id: string }> = async (req, res) => {
   req.waitUntil(req.kv.put(id, JSON.stringify(row), { expirationTtl: 300 }));
   await req.kv.delete("old");
   const body = await req.body();
-  if (body instanceof FormData) body.get("name");
-  else if (typeof body === "string") body.trim();
+  const parsedBody: Record<string, unknown> | string = body;
+  if (typeof body === "string") body.trim();
   else if (typeof body.name === "string") body.name.trim();
+  if (typeof body === "object" && body.file instanceof File) {
+    const filename: string = body.file.name;
+  }
   const bytes: Uint8Array = await req.rawBody();
   // @ts-expect-error Raw body parsing does not promise an application schema.
   body.name.trim();

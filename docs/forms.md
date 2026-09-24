@@ -22,7 +22,7 @@ export default function SubscribePage() {
 
 export async function POST(req, res) {
   const { email } = await req.body();
-  if (!email?.trim()) return res.invalid({ email: "Enter an email." });
+  if (typeof email !== "string" || !email.trim()) return res.invalid({ email: "Enter an email." });
   await subscribe(req, email);
   return res.json({ subscribed: true });
 }
@@ -123,6 +123,12 @@ export async function PATCH(req, res) {
 `encType` is not configurable. Goribu renders native forms as multipart so file
 and submitter behavior remains safe before hydration, while enhanced submission
 selects the narrowest correct encoding.
+
+`await req.body()` returns an object for both form encodings: read `body.name`
+for a text field or `body.file` for an upload. Uploaded values are `File` objects;
+repeated names become arrays, and missing fields are absent. Validate the values
+you expect; there is no need to check for `FormData`. See
+[Reading the body](./handlers.md#reading-the-body) for migration details.
 
 ## Same-page render safety
 
