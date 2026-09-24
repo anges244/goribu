@@ -63,45 +63,39 @@ beforeAll(() => {
       expect(document.documentElement.lang).toBe("en");
       expect(document.querySelector('meta[name="viewport"]').content)
         .toContain("width=device-width");
-      expect(document.title).toBe("Hello from Goribu");
-      expect(document.querySelector("button").textContent).toBe("Count: 0");
+      expect(document.title).toBe("Goribu — Ready when you are");
+      expect(document.querySelector("h1").textContent.replace(/\s+/g, " ")).toMatch(/Ready when.*you are\./);
+      expect(document.querySelector("code").textContent).toBe(`src/routes/index.${language === "typescript" ? "tsx" : "jsx"}`);
+      expect(document.querySelector('a[href="https://goribu.dev/docs"]')).not.toBeNull();
       expect(document.querySelector('script[type="module"]').getAttribute("src"))
         .toMatch(/^\/_goribu\/assets\/client-entry-[A-Za-z0-9_-]{8}\.js$/);
       const href = document.querySelector('link[rel="stylesheet"]').getAttribute("href");
       expect(href).toMatch(/^\/_goribu\/assets\/.+-[A-Za-z0-9_-]{8}\.css$/);
       const css = readFileSync(join(clientDir, href.slice(1)), "utf8");
-      expect(css).toContain(".text-4xl");
-      expect(css).toContain(".bg-indigo-700");
+      expect(css).toContain(".bg-canvas");
+      expect(css).toContain(".stroke-flow");
+      expect(css).toContain("prefers-color-scheme:dark");
+      expect(css).toContain("prefers-reduced-motion:reduce");
       expect(css).not.toContain('@import "tailwindcss"');
     } finally {
       dom.window.close();
     }
   });
 
-  it("serves request-specific props through the emitted Worker without requiring D1 or KV", async () => {
+  it("serves the single static page and returns 404 for removed demos without requiring D1 or KV", async () => {
     expect(existsSync(join(clientDir, "hello.html"))).toBe(false);
     const config = JSON.parse(readFileSync(workerConfig, "utf8"));
     expect(config.d1_databases ?? []).toHaveLength(0);
     expect(config.kv_namespaces ?? []).toHaveLength(0);
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
-    await harness.listen();
+    const { url } = await harness.listen();
     try {
-      const worker = harness.getWorker();
-      for (const name of ["Astra", "<script>alert(1)</script>"]) {
-        const response = await worker.fetch(`https://starter.test/hello?name=${encodeURIComponent(name)}`);
-        expect(response.status).toBe(200);
-        expect(response.headers.get("cache-control")).toBe("no-store");
-        const html = await response.text();
-        const dom = new JSDOM(html);
-        try {
-          expect(dom.window.document.querySelector("h1").textContent).toBe(`Hello, ${name}.`);
-          expect(dom.window.document.querySelector("h1 script")).toBeNull();
-          expect(JSON.parse(dom.window.document.getElementById("__GORIBU_PROPS__").textContent))
-            .toEqual({ name });
-        } finally {
-          dom.window.close();
-        }
-      }
+      const response = await fetch(new URL("/", url));
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(readFileSync(join(clientDir, "index.html"), "utf8"));
+      expect((await fetch(new URL("/hello?name=friend", url))).status).toBe(404);
+      const index = await (await fetch(new URL("/_goribu/navigation.json", url))).json();
+      expect(Object.keys(index.routes)).toEqual(["/"]);
     } finally {
       await harness.close();
     }

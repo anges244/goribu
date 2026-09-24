@@ -46,6 +46,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The starter now ships one static welcome page with a responsive Tailwind layout,
+  light/dark colors, and native orange SVG motion that respects reduced motion.
+  The counter and `/hello` demo are removed from both language variants.
+
 - Starter Git ignore rules now cover dependency caches, TypeScript build state,
   test coverage, logs, and OS/editor temporary files.
 

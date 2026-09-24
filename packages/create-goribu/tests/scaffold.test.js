@@ -64,7 +64,8 @@ it("generates an app pinned to the matching framework release by default", () =>
   const pkg = JSON.parse(readFileSync(join(taskDir, "release-app/package.json"), "utf8"));
   expect(pkg.dependencies.goribu).toBe(frameworkVersion);
   expect(pkg.scripts.typecheck).toBe("tsc --noEmit");
-  expect(readFileSync(join(taskDir, "release-app/src/routes/hello.tsx"), "utf8")).toContain("Handler<HelloProps>");
+  expect(readFileSync(join(taskDir, "release-app/src/routes/index.tsx"), "utf8")).toContain("satisfies Meta");
+  expect(readdirSync(join(taskDir, "release-app/src/routes"))).toEqual(["index.tsx"]);
   expect(result.stdout).toContain("TypeScript + Tailwind");
   expect(existsSync(join(taskDir, "release-app/node_modules"))).toBe(false);
   expect(readFileSync(join(taskDir, "package/LICENSE"), "utf8"))
@@ -84,7 +85,7 @@ it("generates from the packed canonical template without installing or leaking l
   expect(config).toContain('name: "my-app-kv"');
   expect(readFileSync(join(app, ".gitignore"), "utf8"))
     .toBe(readFileSync(join(templateDir, ".gitignore"), "utf8"));
-  for (const path of ["src/routes/index.tsx", "src/routes/hello.tsx", "src/setup/_document.tsx", "src/setup/client-entry.js", "src/styles/global.css", "vite.config.js", "AGENTS.md", "tsconfig.json"]) {
+  for (const path of ["src/routes/index.tsx", "src/components/flow-background.tsx", "src/setup/_document.tsx", "src/setup/client-entry.js", "src/styles/global.css", "vite.config.js", "AGENTS.md", "tsconfig.json"]) {
     expect(readFileSync(join(app, path))).toEqual(readFileSync(join(templateDir, path)));
   }
   const readme = readFileSync(join(app, "README.md"), "utf8");
@@ -152,15 +153,15 @@ it("generates JavaScript with JSX, working file references, and no TypeScript se
   expect(pkg.scripts.typecheck).toBeUndefined();
   expect(Object.keys(pkg.devDependencies)).not.toEqual(expect.arrayContaining(["typescript"]));
   expect(Object.keys(pkg.devDependencies).some((name) => name.startsWith("@types/"))).toBe(false);
-  const hello = readFileSync(join(app, "src/routes/hello.jsx"), "utf8");
-  expect(hello).toContain("export const GET");
-  expect(hello).toContain("<Link");
-  expect(hello).not.toMatch(/import type|HelloProps|goribu\/server|satisfies/);
+  const index = readFileSync(join(app, "src/routes/index.jsx"), "utf8");
+  expect(index).toContain("<FlowBackground");
+  expect(index).not.toMatch(/import type|goribu\/server|satisfies/);
+  expect(readdirSync(join(app, "src/routes"))).toEqual(["index.jsx"]);
   expect(readFileSync(join(app, "src/routes/index.jsx"), "utf8")).toContain("src/routes/index.jsx");
   for (const path of ["README.md", "AGENTS.md"]) {
     expect(readFileSync(join(app, path), "utf8")).not.toMatch(/\.tsx|tsconfig|pnpm typecheck|typescript-only/);
   }
-  expect(readFileSync(join(app, "README.md"), "utf8")).toContain("src/routes/hello.jsx");
+  expect(readFileSync(join(app, "README.md"), "utf8")).toContain("src/routes/index.jsx");
   expect(readFileSync(join(app, "AGENTS.md"), "utf8")).toContain("`.server.js`");
   for (const path of ["tsconfig.json", "src/routes/index.tsx", "node_modules", ".git"]) expect(existsSync(join(app, path))).toBe(false);
   expect(result.stdout).toContain("JavaScript + Tailwind");
@@ -187,40 +188,28 @@ it("preserves shared documentation while removing only marked TypeScript guidanc
 it("ships readable JavaScript with the authored code groups and multiline JSX intact", () => {
   succeeds(generate("readable-app", "--js"));
   const app = join(taskDir, "readable-app");
-  const hello = readFileSync(join(app, "src/routes/hello.jsx"), "utf8");
+  const document = readFileSync(join(app, "src/setup/_document.jsx"), "utf8");
 
-  expect(hello).toMatchInlineSnapshot(`
-    "import { Link } from "goribu";
+  expect(document).toMatchInlineSnapshot(`
+    "import { ClientEntry, Stylesheet } from "goribu";
 
-    export const meta = { title: "Hello from a Worker" };
-
-    // Request data belongs in a handler. res.render passes props to this page.
-    export const GET = (req, res) => {
-      const name = req.query.get("name")?.trim() || "friend";
-
-      return res.headers({ "cache-control": "no-store" }).render({ name });
-    };
-
-    export default function HelloPage({ name }) {
+    export default function Document({ children, head, nonce }) {
       return (
-        <main className="mx-auto max-w-2xl px-6 py-20">
-          <h1 className="text-4xl font-bold tracking-tight">Hello, {name}.</h1>
+        <html lang="en">
+          <head>
+            <meta charSet="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-          <p className="mt-6 text-lg leading-relaxed text-slate-600">
-            This page reads the query string on a Cloudflare Worker. Change the name
-            in the URL and refresh, or follow the link home without reloading the
-            document.
-          </p>
+            <Stylesheet />
+            {head}
+          </head>
 
-          <p className="mt-8">
-            <Link
-              href="/"
-              className="font-medium text-indigo-700 underline underline-offset-4"
-            >
-              Back home
-            </Link>
-          </p>
-        </main>
+          <body className="bg-canvas font-sans text-ink antialiased">
+            <div id="root">{children}</div>
+
+            <ClientEntry src="/src/setup/client-entry.js" nonce={nonce} />
+          </body>
+        </html>
       );
     }
     "

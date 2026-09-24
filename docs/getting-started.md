@@ -5,9 +5,8 @@
 This page describes the upcoming 0.8.0 release. Use the reviewed local archives
 until its npm publication has been verified.
 
-This guide creates a TypeScript app with Tailwind, a static home page with a
-working counter, and a request-time greeting. You do not need to copy routes or
-read framework source.
+This guide creates a TypeScript app with Tailwind and one static welcome page.
+You do not need to copy routes or read framework source.
 
 You need:
 
@@ -43,24 +42,25 @@ Worker name, and commented resource names, and includes pnpm's build permissions
 for esbuild and workerd. It does not install dependencies, initialize Git, log
 in, or deploy.
 
-## 2. See both kinds of page work
+## 2. Make the welcome page yours
 
-Open the local URL printed by `pnpm dev`.
+Open the local URL printed by `pnpm dev`. You should see “Ready when you are.”
+with links to the documentation and Goribu site. The page follows your system's
+light/dark preference and hides its moving dots when reduced motion is enabled.
 
-1. Click the home page counter. It should increment after hydration.
-2. Follow the greeting link. You should see “Hello, friend.”
-3. Visit `/hello?name=Astra` to see the request change the greeting.
-4. Use the home link to return.
+Edit `src/routes/index.tsx` to change the copy, links, and Tailwind layout.
+The JavaScript starter displays and uses `src/routes/index.jsx` instead.
+Edit the palette in `src/styles/global.css`; the decorative SVG is isolated in
+`src/components/flow-background.tsx` (`.jsx` with `--js`) so it is easy to remove.
 
 The home page has no HTTP handlers. Its production HTML is built once and served
-from Static Assets without invoking the Worker, while the counter still runs
-in the browser. The greeting exports GET and renders at request time. Interactive
-controls and client navigation require JavaScript.
+from Static Assets without invoking the Worker. Its content and links work
+without JavaScript; the standard browser bootstrap remains ready for your own
+interactive components. Add routes and handlers when your app needs them.
 
-Edit `src/routes/index.tsx` to change the home page, or
-`src/routes/hello.tsx` to change the greeting. Tailwind belongs to the app's
-Vite configuration, and `src/styles/global.css` scans the app's source. Use complete
-class names rather than constructing names such as `bg-${color}-500`.
+Tailwind belongs to the app's Vite configuration, and `src/styles/global.css`
+scans the app's source. Use complete class names rather than constructing names
+such as `bg-${color}-500`.
 
 The generated `AGENTS.md` explains the application conventions and maintainer
 ownership. Do not edit `node_modules/`, `.goribu/`, `.wrangler/`, or
@@ -81,7 +81,7 @@ pnpm check
 handlers, metadata, forms, and request validation.
 
 The build produces a browser bundle and Worker bundle, then reports
-`index.html` as statically output. It should not report `hello.html` as static.
+`index.html` as statically output. The starter ships no other page routes.
 
 Review `goribu.config.js`. The generated Worker name is your project name.
 Choose a name that does not belong to another app in your Cloudflare account:
@@ -115,10 +115,8 @@ Goribu checks authentication and account selection before building, then uploads
 the new Worker and static assets. This is a production deployment, not a preview.
 Wrangler prints the public `workers.dev` URL and version ID.
 
-Open that URL and repeat the counter and greeting checks from step 2. You now
-have an independently generated Goribu app deployed to Cloudflare. For a working
-example of this starter, see the
-[deployed starter](https://goribu-starter.aggelos-gesoulis.workers.dev).
+Open that URL and check the welcome page and documentation link from step 2.
+You now have an independently generated Goribu app deployed to Cloudflare.
 
 For non-interactive authentication, use `CLOUDFLARE_API_TOKEN`; set
 `CLOUDFLARE_ACCOUNT_ID` when credentials can reach multiple accounts. See

@@ -84,7 +84,7 @@ function prepareFiles(input, { name, goribuSpec, language }) {
   }
   const extension = language === "typescript" ? "tsx" : "jsx";
   const required = ["package.json", "README.md", "AGENTS.md", ".gitignore", "goribu.config.js", "vite.config.js", "src/setup/client-entry.js", "src/styles/global.css",
-    `src/setup/_document.${extension}`, ...["index", "hello"].map((name) => `src/routes/${name}.${extension}`), ...(language === "typescript" ? ["tsconfig.json"] : [])];
+    `src/setup/_document.${extension}`, `src/routes/index.${extension}`, ...(language === "typescript" ? ["tsconfig.json"] : [])];
   for (const path of required) {
     if (!files.has(path)) throw packageError(`The packaged starter is missing ${JSON.stringify(path)}.`);
   }

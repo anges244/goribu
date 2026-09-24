@@ -1,7 +1,7 @@
 # Goribu starter
 
-A small Goribu app with Tailwind, a static hydrated home page, and a
-Worker-rendered greeting. D1 and KV are opt-ins, not prerequisites.
+A small Goribu app with Tailwind and one static welcome page. D1 and KV are
+opt-ins, not prerequisites.
 
 ## Run this app
 
@@ -52,11 +52,17 @@ JavaScript output is generated during scaffolder packaging.
 ## What to edit
 
 - `goribu.config.js`: Worker name and optional resource declarations.
-- `src/routes/index.tsx`: static home page and hydrated counter.
-- `src/routes/hello.tsx`: request-time GET handler and its page.
+- `src/routes/index.tsx`: welcome copy, links, and Tailwind layout.
+- `src/components/flow-background.tsx`: decorative SVG paths and native animation.
 - `src/setup/_document.tsx`: language, viewport, metadata, and framework assets.
-- `src/styles/global.css`: Tailwind entry, scanned against this app's source files.
+- `src/styles/global.css`: Tailwind entry and the light/dark color palette.
 - `src/setup/client-entry.js`: browser bootstrap and global CSS import.
+
+The welcome page needs no request handler or custom browser state. Production
+serves its HTML from Static Assets, and its content and links work without
+JavaScript. The SVG dots animate natively and are hidden for reduced motion.
+Remove `FlowBackground` from the page to remove the decoration. System fonts
+keep the starter free of font downloads.
 
 Tailwind classes must appear as complete strings in source. Use a conditional
 between full class names instead of constructing names such as `bg-${color}-500`.
