@@ -17,13 +17,24 @@ export default function HomePage() {
       <p className="text-sm font-semibold uppercase tracking-widest text-indigo-700">
         Your next app starts here
       </p>
-      <h1 className="mt-4 text-4xl font-bold tracking-tight">Hello from Goribu.</h1>
+
+      <h1 className="mt-4 text-4xl font-bold tracking-tight">
+        Hello from Goribu.
+      </h1>
+
       <p className="mt-6 text-lg leading-relaxed text-slate-600">
-        Edit <code className="text-slate-950">src/routes/index.tsx</code> and make
-        this yours. Tailwind is ready to use.
+        Edit <code className="text-slate-950">src/routes/index.tsx</code> and
+        make this yours. Tailwind is ready to use.
       </p>
-      <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6" aria-label="Hydration example">
-        <p className="text-slate-600">Static HTML, interactive after hydration.</p>
+
+      <section
+        className="mt-10 rounded-2xl border border-slate-200 bg-white p-6"
+        aria-label="Hydration example"
+      >
+        <p className="text-slate-600">
+          Static HTML, interactive after hydration.
+        </p>
+
         <button
           type="button"
           onClick={() => setCount((value) => value + 1)}
@@ -32,8 +43,12 @@ export default function HomePage() {
           Count: {count}
         </button>
       </section>
+
       <p className="mt-8">
-        <Link href="/hello?name=friend" className="font-medium text-indigo-700 underline underline-offset-4">
+        <Link
+          href="/hello?name=friend"
+          className="font-medium text-indigo-700 underline underline-offset-4"
+        >
           Try a Worker-rendered page
         </Link>
       </p>

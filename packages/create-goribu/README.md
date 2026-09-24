@@ -7,7 +7,12 @@ It never installs packages, initializes Git, authenticates, provisions, or deplo
 
 The canonical TypeScript template remains `templates/basic-app/`. `pnpm run build`
 packages it and derives JavaScript into ignored `dist/template.json`;
-`pnpm pack` does this automatically. TypeScript is a packaging dependency only.
+`pnpm pack` does this automatically. Packaging checks TypeScript diagnostics,
+strips types with Sucrase while retaining the author's line boundaries, then
+formats the JavaScript with Prettier. This preserves blank lines between logical
+groups and produces readable multiline JSX. The TypeScript files are copied as
+authored. These tools are packaging dependencies only; generated apps do not
+inherit Sucrase, Prettier, or a formatting configuration.
 The packed CLI carries that snapshot, including dotfiles, and has no dependencies
 or runtime link to the source repository. Never hand-edit the generated snapshot.
 

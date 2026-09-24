@@ -46,6 +46,8 @@ for (const field of ["scripts", "devDependencies"]) {
 }
 // Conversion belongs to packaging. The published CLI has no compiler dependency.
 const { default: ts } = await import("typescript");
+const { transform } = await import("sucrase");
+const { format } = await import("prettier");
 const javascript = {};
 const javascriptPath = (path) => path.replace(/\.tsx$/, ".jsx").replace(/\.ts$/, ".js");
 const renamed = Object.keys(files).filter((path) => javascriptPath(path) !== path);
@@ -70,7 +72,20 @@ for (const [path, encoded] of Object.entries(files)) {
         getCurrentDirectory: () => source, getCanonicalFileName: (name) => name, getNewLine: () => "\n",
       })}`);
     }
-    content = result.outputText;
+    // The TypeScript printer discards authored blank lines. Keep its diagnostics,
+    // but strip types without losing line boundaries before formatting the JSX.
+    try {
+      content = transform(content, {
+        filePath: path,
+        transforms: ["typescript", "jsx"],
+        jsxRuntime: "preserve",
+        disableESTransforms: true,
+        keepUnusedImports: true,
+      }).code;
+      content = await format(content, { parser: "babel", tabWidth: 2, printWidth: 80 });
+    } catch (cause) {
+      throw new Error(`[Goribu] Cannot prepare readable JavaScript from ${path}. Fix the TypeScript starter before packaging: ${cause.message}`, { cause });
+    }
   }
   // Keep displayed edit paths synchronized with the generated filenames.
   for (const renamedPath of renamed) content = content.replaceAll(renamedPath, javascriptPath(renamedPath));

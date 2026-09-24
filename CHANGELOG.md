@@ -11,6 +11,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The JavaScript starter preserves the canonical template's logical spacing and
+  ships readable JSX instead of raw compiler output. Both starter variants use
+  clearer spacing and wrap long JSX opening tags. Their agent guidance reinforces
+  readable code and focused formatting changes.
+
 - Development recovers when a missing local import is created, including native
   TypeScript path aliases and omitted extensions, without editing its importer or
   restarting the server.

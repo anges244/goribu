@@ -56,6 +56,14 @@ add routes and dependencies only for actual application needs.
   with `PUBLIC_` or serialize them into page props.
 - `/_goribu/` is reserved. Do not create app routes or public files there.
 
+## Code readability
+
+- Follow nearby style, using blank lines between logical groups and declarations;
+  keep related statements together.
+- Prefer descriptive names and readable multiline code over compressed expressions
+  or JSX. Comment on intent and non-obvious choices.
+- Keep formatting changes local to the code you touch.
+
 ## Data and validation
 
 <!-- typescript-only:start -->
