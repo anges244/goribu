@@ -180,6 +180,9 @@ redirect navigation. It receives the final success/failure result and, for mutat
 Unmounting aborts the active request. A newer navigation also invalidates an
 older form completion, so stale data cannot overwrite the page the user has
 already reached.
+Once a GET or redirect destination has been accepted into history, navigation
+finishes its render and scrolling even if replacing the page unmounts the
+submitting Form. A newer navigation still takes precedence.
 
 ## Native behavior before hydration
 

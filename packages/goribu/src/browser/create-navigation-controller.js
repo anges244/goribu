@@ -25,7 +25,6 @@ export function createNavigationController(options) {
   const pageLoaders = options?.pageLoaders;
   const browserWindow = options?.browserWindow ?? globalThis.window;
   const fetchImplementation = options?.fetch ?? globalThis.fetch;
-  const afterRender = options?.afterRender ?? (() => waitForPaint(browserWindow));
   const applyMeta =
     options?.applyMeta ??
     ((metadata) => applyDocumentMeta(metadata, browserWindow.document));
@@ -35,7 +34,6 @@ export function createNavigationController(options) {
     pageLoaders,
     browserWindow,
     fetchImplementation,
-    afterRender,
     applyMeta,
   });
   const navigationBuildId = options?.navigationBuildId ?? null;
@@ -60,6 +58,8 @@ export function createNavigationController(options) {
   let renderedUrl = new URL(browserWindow.location.href);
   let scrollSaveTimer = null;
   let disposed = false;
+  let cancelPendingCommit = null;
+  let pendingRender = null;
 
   installInitialHistoryState();
   const previousScrollRestoration = browserWindow.history.scrollRestoration;
@@ -94,7 +94,7 @@ export function createNavigationController(options) {
       );
     }
     // External document loads also supersede pending page and Form work.
-    const version = ++navigationVersion;
+    const version = beginNavigation();
     if (destination.origin !== browserWindow.location.origin) {
       if (signal?.aborted === true) return;
       return hardLoad(destination.href, replace);
@@ -102,7 +102,8 @@ export function createNavigationController(options) {
 
     if (
       isSameDocumentHash(destination) &&
-      hasSameRouteLocation(destination, renderedUrl)
+      hasSameRouteLocation(destination, renderedUrl) &&
+      pendingRender === null
     ) {
       saveCurrentScroll();
       if (signal?.aborted === true) return;
@@ -113,7 +114,6 @@ export function createNavigationController(options) {
         logNavigationFailure(destination, error);
         return hardLoad(destination.href, replace);
       }
-      await afterRender();
       if (disposed || version !== navigationVersion || signal?.aborted === true) return;
       scrollToDestination(destination);
       saveCurrentScroll();
@@ -141,11 +141,11 @@ export function createNavigationController(options) {
     renderOptions = undefined,
   ) {
     const signal = resolveNavigationSignal(renderOptions);
-    const expectedVersion = resolveExpectedVersion(renderOptions);
+    const expectedVersion = resolveExpectedVersion(renderOptions) ?? navigationVersion;
     if (
       signal?.aborted === true ||
       disposed ||
-      (expectedVersion !== null && expectedVersion !== navigationVersion)
+      expectedVersion !== navigationVersion
     ) {
       return false;
     }
@@ -164,15 +164,84 @@ export function createNavigationController(options) {
     if (
       signal?.aborted === true ||
       disposed ||
-      (expectedVersion !== null && expectedVersion !== navigationVersion)
+      expectedVersion !== navigationVersion
     ) {
       return false;
     }
 
     applyMeta(metadata);
-    root.render(createLocatedPage(Page, props, browserWindow.location.href));
-    await afterRender();
-    return true;
+    return renderAndCommit(Page, props, browserWindow.location.href, {
+      version: expectedVersion,
+      signal,
+    });
+  }
+
+  function beginNavigation() {
+    navigationVersion += 1;
+    cancelPendingCommit?.();
+    return navigationVersion;
+  }
+
+  function renderAndCommit(Page, props, location, context, commit = () => {}) {
+    cancelPendingCommit?.();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let committed = false;
+      let failed = false;
+      const render = {};
+      function cleanup() {
+        if (settled) return false;
+        settled = true;
+        if (cancelPendingCommit === cancel) cancelPendingCommit = null;
+        context.signal?.removeEventListener?.("abort", cancel);
+        return true;
+      }
+      function cancel() {
+        if (cleanup()) resolve(false);
+      }
+      function fail(error) {
+        failed = true;
+        if (pendingRender === render) pendingRender = null;
+        if (!cleanup()) return false;
+        reject(error);
+        return true;
+      }
+      function onCommit() {
+        if (failed) return;
+        // Cancellation settles the caller, but cannot unschedule React work.
+        // Track what actually committed separately from who still owns scrolling.
+        if (!committed) {
+          committed = true;
+          renderedUrl = new URL(location);
+          if (pendingRender === render) pendingRender = null;
+        }
+        if (settled) return;
+        if (disposed || context.version !== navigationVersion || context.signal?.aborted) {
+          cancel();
+          return;
+        }
+        try {
+          commit();
+          if (cleanup()) resolve(true);
+        } catch (error) {
+          // Keep navigation failures on the native-load fallback path, rather
+          // than throwing them into the application's React error boundary.
+          fail(error);
+        }
+      }
+      cancelPendingCommit = cancel;
+      context.signal?.addEventListener?.("abort", cancel, { once: true });
+      if (disposed || context.version !== navigationVersion || context.signal?.aborted) {
+        cancel();
+        return;
+      }
+      try {
+        pendingRender = render;
+        root.render(createLocatedPage(Page, props, location, onCommit, fail));
+      } catch (error) {
+        fail(error);
+      }
+    });
   }
 
   async function performNavigation(destination, context) {
@@ -184,6 +253,7 @@ export function createNavigationController(options) {
           destination.pathname = entry.pathname;
           if (
             context.refresh &&
+            pendingRender === null &&
             destination.href === renderedUrl.href &&
             destination.href === browserWindow.location.href
           ) {
@@ -246,33 +316,20 @@ export function createNavigationController(options) {
 
       if (context.signal?.aborted === true) return;
       commitHistory(destination, context.historyMode);
-      renderedUrl = destination;
+      // The accepted destination now belongs to navigation, not the source
+      // Form: committing it can unmount that Form and abort its submission.
+      // Newer navigation and disposal still supersede this commit. The Form's
+      // signal continues to cancel work while fetching/loading, before here.
+      context = { ...context, signal: null };
       applyMeta(target.envelope.meta);
-      root.render(
-        createLocatedPage(
-          target.Page,
-          target.envelope.props,
-          destination.href,
-        ),
-      );
-      await afterRender();
-      if (
-        disposed ||
-        context.version !== navigationVersion ||
-        context.signal?.aborted === true
-      ) {
-        return;
-      }
-
-      if (context.restoreScroll !== null) {
-        browserWindow.scrollTo(
-          context.restoreScroll.x,
-          context.restoreScroll.y,
-        );
-      } else {
-        scrollToDestination(destination);
-      }
-      saveCurrentScroll();
+      await renderAndCommit(target.Page, target.envelope.props, destination.href, context, () => {
+        if (context.restoreScroll !== null) {
+          browserWindow.scrollTo(context.restoreScroll.x, context.restoreScroll.y);
+        } else {
+          scrollToDestination(destination);
+        }
+        saveCurrentScroll();
+      });
     } catch (error) {
       if (
         disposed ||
@@ -322,7 +379,7 @@ export function createNavigationController(options) {
   }
 
   function handlePopState(event) {
-    const version = ++navigationVersion;
+    const version = beginNavigation();
     cancelScheduledScrollSave();
     activateHistoryEntry(event.state);
     const destination = resolveHttpDestination(browserWindow.location.href);
@@ -334,7 +391,7 @@ export function createNavigationController(options) {
       return;
     }
 
-    const staysOnCurrentDocument = hasSameRouteLocation(destination, renderedUrl);
+    const staysOnCurrentDocument = pendingRender === null && hasSameRouteLocation(destination, renderedUrl);
     const restoreScroll = readScrollState(event.state, scrollByHistoryEntry);
     if (staysOnCurrentDocument) {
       renderedUrl = destination;
@@ -355,19 +412,19 @@ export function createNavigationController(options) {
     if (
       destination === null ||
       destination.origin !== browserWindow.location.origin ||
-      destination.href === renderedUrl.href
+      (destination.href === renderedUrl.href && pendingRender === null)
     ) {
       return;
     }
 
     cancelScheduledScrollSave();
-    if (!hasSameRouteLocation(destination, renderedUrl)) {
-      navigationVersion += 1;
+    if (pendingRender !== null || !hasSameRouteLocation(destination, renderedUrl)) {
+      beginNavigation();
       void hardLoad(destination.href, true);
       return;
     }
 
-    navigationVersion += 1;
+    beginNavigation();
     // A standalone hashchange is a browser-created same-document entry. It
     // inherits history.state, so give it its own scroll identity; hash changes
     // reached through popstate already updated renderedUrl and returned above.
@@ -376,8 +433,7 @@ export function createNavigationController(options) {
     saveCurrentScroll();
   }
 
-  async function restoreSameDocumentHistory(destination, restoreScroll, version) {
-    await afterRender();
+  function restoreSameDocumentHistory(destination, restoreScroll, version) {
     if (disposed || version !== navigationVersion) return;
     if (restoreScroll === null) {
       scrollToDestination(destination);
@@ -390,7 +446,7 @@ export function createNavigationController(options) {
   function dispose() {
     if (disposed) return;
     disposed = true;
-    navigationVersion += 1;
+    beginNavigation();
     cancelScheduledScrollSave();
     for (const timer of scheduledPrefetches.values()) {
       browserWindow.clearTimeout(timer);
@@ -611,7 +667,6 @@ function assertControllerInputs({
   pageLoaders,
   browserWindow,
   fetchImplementation,
-  afterRender,
   applyMeta,
 }) {
   if (root === null || typeof root !== "object" || typeof root.render !== "function") {
@@ -650,11 +705,6 @@ function assertControllerInputs({
   if (typeof fetchImplementation !== "function") {
     throw new TypeError(
       "[Goribu] createNavigationController() requires browser fetch to request the reserved navigation endpoint.",
-    );
-  }
-  if (typeof afterRender !== "function") {
-    throw new TypeError(
-      "[Goribu] createNavigationController() requires afterRender to be a function when provided.",
     );
   }
   if (typeof applyMeta !== "function") {
@@ -791,17 +841,6 @@ function findHashTarget(browserDocument, hash) {
     if (byName !== null) return byName;
   }
   return null;
-}
-
-function waitForPaint(browserWindow) {
-  if (typeof browserWindow.requestAnimationFrame !== "function") {
-    return new Promise((resolve) => browserWindow.setTimeout(resolve, 0));
-  }
-  return new Promise((resolve) => {
-    browserWindow.requestAnimationFrame(() => {
-      browserWindow.requestAnimationFrame(resolve);
-    });
-  });
 }
 
 function logNavigationFailure(destination, error) {

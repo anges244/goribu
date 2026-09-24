@@ -149,6 +149,13 @@ scroll data under a private key. New routes scroll to a matching fragment or the
 top; back and forward restore saved coordinates. Same-document hash links remain
 native so browser focus behavior is preserved.
 
+For a page transition, Goribu applies scrolling after React commits the
+destination and finishes synchronous layout updates, before the browser paints
+it. This prevents a frame of the new page at the old page's scroll position.
+In-place Form renders preserve scrolling and component state. Content that
+arrives later, such as images or asynchronously revealed sections, can still
+change the page's layout.
+
 A newer navigation invalidates older pending work. If an envelope, page module,
 metadata set, render, history operation, or redirect chain cannot be validated,
 Goribu loads the target document instead of committing partial client state.
@@ -175,3 +182,22 @@ redirect into it or render the current page in place. See [forms.md](./forms.md)
 
 Route metadata is validated before a transition commits, then only Goribu's
 marked route-owned head nodes are replaced. See [metadata.md](./metadata.md).
+
+## Framework regression checks
+
+The React commit tests use hydration and actual React updates, holding animation
+frames pending to verify scrolling already matches the destination. The browser
+check samples route identity, scroll coordinates, anchor geometry and code styles
+on each frame. With Node 22+, pnpm and an already installed Chrome/Chromium:
+
+```sh
+pnpm exec vitest run packages/goribu/tests/navigation-commit.test.js packages/goribu/tests/create-navigation-controller.test.js packages/goribu/tests/form.test.js --maxWorkers=1
+node scripts/check-navigation-paint.js /path/to/chrome
+```
+
+The browser check bundles its fixture in memory and fulfills requests through
+Chrome's debugging protocol. It starts no application server, installs nothing,
+and writes its report to a temporary directory. It covers top and fragment
+navigation, history, replace, newer navigation, synchronous layout updates,
+and actual Form transitions without mutation replay. It supplements production
+integration tests; it does not exercise Worker or Static Assets delivery.

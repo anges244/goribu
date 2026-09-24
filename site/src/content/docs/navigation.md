@@ -97,6 +97,12 @@ exact-current-URL navigation), preserves application fields in
 `history.state`, restores scroll on back/forward, and scrolls new routes to a
 fragment or the top. Same-document hash links remain native.
 
+Page transitions apply scrolling after React commits the destination and
+finishes synchronous layout updates, before the browser paints it. The new page
+does not briefly appear at the previous page's scroll position. In-place Form
+renders preserve scrolling and component state. Content that arrives later,
+such as images or asynchronously revealed sections, can still change layout.
+
 The static scroll-only behavior requires the destination to match both the
 address bar and the displayed page. If Back or Forward is still loading,
 clicking a link to the page still on screen navigates to that URL normally.

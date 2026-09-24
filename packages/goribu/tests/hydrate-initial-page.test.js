@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { hydrateInitialPage } from "../src/browser/hydrate-initial-page.js";
-import { LocationContext } from "../src/navigation/location-context.js";
 import {
   PROPS_SCRIPT_ID,
   ROUTE_SCRIPT_ID,
@@ -32,12 +31,11 @@ describe("hydrateInitialPage", () => {
     expect(hydrate).toHaveBeenCalledOnce();
     const [receivedRoot, page] = hydrate.mock.calls[0];
     expect(receivedRoot).toBe(rootElement);
-    expect(page.type).toBe(LocationContext.Provider);
-    expect(page.props.value).toBe(
+    expect(page.props.children.props.location).toBe(
       "https://example.com/docs?view=full#intro",
     );
-    expect(page.props.children.type).toBe(Page);
-    expect(page.props.children.props).toEqual(props);
+    expect(page.props.children.props.Page).toBe(Page);
+    expect(page.props.children.props.pageProps).toEqual(props);
   });
 
   it("does nothing when the server render intentionally has no hydration route", async () => {

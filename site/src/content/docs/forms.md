@@ -76,6 +76,10 @@ successful JSON or same-page render result. `onSubmit` may cancel enhancement;
 
 GET/POST submissions to cross-origin or non-HTTP actions, or non-`_self` targets, remain native. PUT/PATCH/DELETE require a same-origin HTTP(S) action and an omitted or `_self` target; unsupported destinations cancel submission with a repair instruction. A newer navigation or unmount invalidates an older submission so it cannot replace the current page.
 
+Once a GET or redirect destination has been accepted into history, navigation
+finishes its render and scrolling even if replacing the page unmounts the
+submitting Form. A newer navigation still takes precedence.
+
 ## Before hydration
 
 GET and POST render ordinary multipart forms. Before enhancement:

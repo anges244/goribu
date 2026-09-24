@@ -2,7 +2,6 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createNavigationController } from "../src/browser/create-navigation-controller.js";
-import { LocationContext } from "../src/navigation/location-context.js";
 
 describe("createNavigationController", () => {
   it("uses static assets for prefetch, query navigation, redirects and history, and only scrolls on a repeated static click", async () => {
@@ -83,7 +82,7 @@ describe("createNavigationController", () => {
       await controller.navigate("/about", { replace });
 
       expect(browser.location.href).toBe("https://example.com/about");
-      expect(root.render.mock.lastCall[0].props.value).toBe(browser.location.href);
+      expect(root.render.mock.lastCall[0].props.children.props.location).toBe(browser.location.href);
       expect(browser.history.pushState).toHaveBeenCalledTimes(replace ? 0 : 1);
       const renders = root.render.mock.calls.length;
       delayed.resolve(jsonResponse({ kind: "render", routeId: "page", props: { stale: true }, status: 200 }));
@@ -115,7 +114,7 @@ describe("createNavigationController", () => {
       appState: { app: "preserved" },
       hashTargets: { comments: hashTarget },
     });
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const loader = vi.fn(async () => ({ default: PostPage }));
     const applyMeta = vi.fn();
     const fetch = vi.fn(async () =>
@@ -131,7 +130,6 @@ describe("createNavigationController", () => {
       pageLoaders: { "src/routes/posts/[id].jsx": loader },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
       applyMeta,
     });
 
@@ -155,13 +153,12 @@ describe("createNavigationController", () => {
       "https://example.com/posts/42?view=full#comments",
     );
 
-    const locatedPage = root.render.mock.calls[0][0];
-    expect(locatedPage.type).toBe(LocationContext.Provider);
-    expect(locatedPage.props.value).toBe(
+    const locatedPage = root.render.mock.calls[0][0].props.children;
+    expect(locatedPage.props.location).toBe(
       "https://example.com/posts/42?view=full#comments",
     );
-    expect(locatedPage.props.children.type).toBe(PostPage);
-    expect(locatedPage.props.children.props).toEqual({ id: "42" });
+    expect(locatedPage.props.Page).toBe(PostPage);
+    expect(locatedPage.props.pageProps).toEqual({ id: "42" });
     expect(hashTarget.scrollIntoView).toHaveBeenCalledOnce();
     const pushes = browser.history.pushState.mock.calls.length;
     await controller.navigate("#comments");
@@ -175,7 +172,7 @@ describe("createNavigationController", () => {
   it("handles explicit redirects and reload directives without intermediate history", async () => {
     function PostPage() {}
     const browser = fakeBrowser("https://example.com/start");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const fetch = vi.fn(async (endpoint) => {
       const target = new URL(endpoint).searchParams.get("to");
       if (target === "/go") {
@@ -212,7 +209,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     await controller.navigate("/go");
@@ -242,11 +238,10 @@ describe("createNavigationController", () => {
   it("replaces the traversed entry when popstate falls back to a document load", async () => {
     const browser = fakeBrowser("https://example.com/current");
     const controller = createNavigationController({
-      root: { render: vi.fn() },
+      root: { render: vi.fn((page) => page.props.children.props.onCommit()) },
       pageLoaders: {},
       browserWindow: browser.window,
       fetch: vi.fn(async () => jsonResponse({ kind: "reload" })),
-      afterRender: async () => {},
     });
 
     browser.setHref("https://example.com/api");
@@ -267,7 +262,7 @@ describe("createNavigationController", () => {
     const browser = fakeBrowser("https://example.com/start", {
       hashTargets: { details: hashTarget },
     });
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const fetch = vi.fn(async (endpoint) => {
       const target = new URL(endpoint).searchParams.get("to");
       if (target === "/posts/8/") {
@@ -291,7 +286,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     await controller.navigate("/posts/8/#details");
@@ -306,7 +300,7 @@ describe("createNavigationController", () => {
     function PageA() {}
     function PageB() {}
     const browser = fakeBrowser("https://example.com/");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const responses = new Map();
     const fetch = vi.fn((endpoint) => {
       const target = new URL(endpoint).searchParams.get("to");
@@ -323,7 +317,6 @@ describe("createNavigationController", () => {
       pageLoaders: loaders,
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     const prefetched = controller.prefetch("/a");
@@ -355,7 +348,7 @@ describe("createNavigationController", () => {
     expect(loaders["src/routes/a.jsx"]).toHaveBeenCalledOnce();
     expect(loaders["src/routes/b.jsx"]).toHaveBeenCalledOnce();
     expect(root.render).toHaveBeenCalledOnce();
-    expect(root.render.mock.calls[0][0].props.children.type).toBe(PageB);
+    expect(root.render.mock.calls[0][0].props.children.props.Page).toBe(PageB);
     expect(browser.location.href).toBe("https://example.com/b");
     controller.dispose();
   });
@@ -366,7 +359,7 @@ describe("createNavigationController", () => {
     const browser = fakeBrowser("https://example.com/page", {
       hashTargets: { comments: hashTarget },
     });
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const pending = deferred();
     const fetch = vi.fn(() => pending.promise);
     const controller = createNavigationController({
@@ -376,7 +369,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     const slowNavigation = controller.navigate("/slow");
@@ -410,11 +402,10 @@ describe("createNavigationController", () => {
   it("keeps browser-owned hash entries distinct for scroll restoration", async () => {
     const browser = fakeBrowser("https://example.com/page#one");
     const controller = createNavigationController({
-      root: { render: vi.fn() },
+      root: { render: vi.fn((page) => page.props.children.props.onCommit()) },
       pageLoaders: {},
       browserWindow: browser.window,
       fetch: vi.fn(),
-      afterRender: async () => {},
     });
 
     browser.window.scrollY = 100;
@@ -439,7 +430,7 @@ describe("createNavigationController", () => {
     function CurrentPage() {}
     function PreviousPage() {}
     const browser = fakeBrowser("https://example.com/current");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const fetch = vi.fn(async (endpoint) => {
       const target = new URL(endpoint).searchParams.get("to");
       return jsonResponse({
@@ -460,7 +451,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
     const currentEntryState = browser.history.state;
 
@@ -483,7 +473,7 @@ describe("createNavigationController", () => {
   it("keeps the rendered route distinct while a popstate route is still loading", async () => {
     function PageB() {}
     const browser = fakeBrowser("https://example.com/a");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const pending = deferred();
     const fetch = vi.fn(() => pending.promise);
     const controller = createNavigationController({
@@ -493,7 +483,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     browser.setHref("https://example.com/b");
@@ -518,7 +507,7 @@ describe("createNavigationController", () => {
   it("expires completed prefetch data and tolerates failed scroll-state writes", async () => {
     function Page() {}
     const browser = fakeBrowser("https://example.com/");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const fetch = vi.fn(async () =>
       jsonResponse({
         kind: "render",
@@ -535,7 +524,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     try {
@@ -561,7 +549,7 @@ describe("createNavigationController", () => {
     const browser = fakeBrowser("https://example.com/todos?filter=done#list");
     browser.window.scrollX = 14;
     browser.window.scrollY = 28;
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const loader = vi.fn(async () => ({ default: UpdatedPage }));
     const fetch = vi.fn();
     const controller = createNavigationController({
@@ -569,7 +557,6 @@ describe("createNavigationController", () => {
       pageLoaders: { "src/routes/todos.jsx": loader },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
     browser.history.pushState.mockClear();
     browser.history.replaceState.mockClear();
@@ -590,20 +577,19 @@ describe("createNavigationController", () => {
     expect(browser.location.href).toBe(
       "https://example.com/todos?filter=done#list",
     );
-    const locatedPage = root.render.mock.calls[0][0];
-    expect(locatedPage.type).toBe(LocationContext.Provider);
-    expect(locatedPage.props.value).toBe(
+    const locatedPage = root.render.mock.calls[0][0].props.children;
+    expect(locatedPage.props.location).toBe(
       "https://example.com/todos?filter=done#list",
     );
-    expect(locatedPage.props.children.type).toBe(UpdatedPage);
-    expect(locatedPage.props.children.props).toEqual({ todos: ["one"] });
+    expect(locatedPage.props.Page).toBe(UpdatedPage);
+    expect(locatedPage.props.pageProps).toEqual({ todos: ["one"] });
     controller.dispose();
   });
 
   it("does not let an older Form render overwrite newer client navigation", async () => {
     function UpdatedPage() {}
     const browser = fakeBrowser("https://example.com/todos");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const pageModule = deferred();
     const controller = createNavigationController({
       root,
@@ -612,7 +598,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch: vi.fn(),
-      afterRender: async () => {},
     });
 
     const render = controller.renderInPlace(
@@ -635,7 +620,7 @@ describe("createNavigationController", () => {
   it("does not commit Form navigation or in-place rendering after abort", async () => {
     function Page() {}
     const browser = fakeBrowser("https://example.com/current");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const navigationResponse = deferred();
     const pageModule = deferred();
     const controller = createNavigationController({
@@ -646,7 +631,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch: vi.fn(() => navigationResponse.promise),
-      afterRender: async () => {},
     });
 
     const navigationAbort = new AbortController();
@@ -681,10 +665,37 @@ describe("createNavigationController", () => {
     controller.dispose();
   });
 
+  it.each([false, true])("keeps document fallback after a committed Form navigation fails (replace: %s)", async (replace) => {
+    const browser = fakeBrowser("https://example.com/current");
+    const submission = new AbortController();
+    const failure = new Error("destination render failed");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const controller = createNavigationController({
+      root: { render(page) {
+        // React can unmount the submitting Form before reporting the async
+        // destination error. That abort must not suppress document fallback.
+        submission.abort();
+        queueMicrotask(() => page.props.onError(failure));
+      } },
+      pageLoaders: { broken: async () => ({ default: function Page() {} }) },
+      browserWindow: browser.window,
+      fetch: async () => jsonResponse({ kind: "render", routeId: "broken", props: {}, status: 200 }),
+    });
+    try {
+      await controller.navigate("/broken", { replace, signal: submission.signal });
+      expect(browser.location[replace ? "replace" : "assign"]).toHaveBeenCalledExactlyOnceWith("https://example.com/broken");
+      expect(browser.window.scrollTo).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("full page load"), failure);
+    } finally {
+      controller.dispose();
+      log.mockRestore();
+    }
+  });
+
   it("restores saved scroll on popstate and hard-loads malformed protocol responses", async () => {
     function PreviousPage() {}
     const browser = fakeBrowser("https://example.com/current");
-    const root = { render: vi.fn() };
+    const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
     const fetch = vi.fn(async (endpoint) => {
       const target = new URL(endpoint).searchParams.get("to");
       if (target === "/previous") {
@@ -708,7 +719,6 @@ describe("createNavigationController", () => {
       },
       browserWindow: browser.window,
       fetch,
-      afterRender: async () => {},
     });
 
     try {
@@ -737,7 +747,7 @@ const staticBuildId = "1234567890abcdef1234567890abcdef";
 const staticAsset = `/_goribu/navigation/${staticBuildId}/${"a".repeat(64)}.json`;
 function staticController({ fault, dynamicResponse } = {}) {
   const browser = fakeBrowser("https://example.com/start");
-  const root = { render: vi.fn() };
+  const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
   const applyMeta = vi.fn();
   const fetch = vi.fn(async (url) => {
     const path = new URL(url).pathname;
@@ -762,7 +772,7 @@ function staticController({ fault, dynamicResponse } = {}) {
   });
   const controller = createNavigationController({
     root, browserWindow: browser.window, fetch, applyMeta, navigationBuildId: staticBuildId,
-    pageLoaders: { page: async () => ({ default: function Page() {} }) }, afterRender: async () => {},
+    pageLoaders: { page: async () => ({ default: function Page() {} }) },
   });
   return { controller, browser, root, fetch, applyMeta, manifestReady: async () => { await controller.prefetch("/start"); await new Promise((done) => setTimeout(done, 0)); } };
 }

@@ -11,6 +11,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Client navigation applies destination scrolling before paint, removing the
+  flash at the previous page's scroll position. Fragment targets and history
+  restoration use committed layout; superseded work cannot take over scrolling.
+
 - Production asset validation accepts legitimate all-lowercase content hashes
   while still rejecting fixed filenames in the immutable asset namespace.
 

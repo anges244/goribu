@@ -80,7 +80,7 @@ it("serves the index and the exact HTML snapshot's props and metadata without ex
 it("routes client navigation and prefetch through real Static Assets while dynamic pages still execute the Worker", async () => {
   const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", { url: `${origin}/` });
   dom.window.scrollTo = vi.fn();
-  const root = { render: vi.fn() };
+  const root = { render: vi.fn((page) => page.props.children.props.onCommit()) };
   const requests = [];
   const controller = createNavigationController({
     root, browserWindow: dom.window, navigationBuildId: manifest.buildId,
@@ -92,7 +92,6 @@ it("routes client navigation and prefetch through real Static Assets while dynam
       requests.push({ path: new URL(args[0]).pathname, worker: response.headers.get("x-worker-executed") });
       return response;
     },
-    afterRender: async () => {},
   });
   try {
     await controller.prefetch("/snapshot?q=client");
