@@ -8,8 +8,8 @@ import { readMigrations } from "../src/build/migrations/read-migrations.js";
 
 const cliPath = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
 const siteDir = fileURLToPath(new URL("../../../site", import.meta.url));
-const clientDir = join(siteDir, "dist", "client");
-const workerConfig = join(siteDir, "dist", "goribu_site", "wrangler.json");
+const clientDir = join(siteDir, ".goribu", "dist", "client");
+const workerConfig = join(siteDir, ".goribu", "dist", "goribu_site", "wrangler.json");
 const productionEntry =
   /\/_goribu\/assets\/client-entry-[A-Za-z0-9_-]{8}\.js/;
 const productionStyle =
@@ -20,7 +20,7 @@ const productionRoute =
 let build;
 
 function cleanBuildOutput() {
-  for (const dir of ["dist", ".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
+  for (const dir of [".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
     rmSync(join(siteDir, dir), { recursive: true, force: true });
   }
 }
@@ -64,7 +64,7 @@ describe("site production hydration", () => {
       '<title data-goribu-head="">Goribu - a React framework for Cloudflare Workers</title>',
     );
     expect(html).toContain('rel="modulepreload"');
-    expect(html).not.toContain('/src/client-entry.js');
+    expect(html).not.toContain('/src/setup/client-entry.js');
     expect(html).not.toContain(' nonce=');
     expect(html).toContain('aria-controls="why-goribu-details"');
     expect(html).toContain('aria-expanded="false"');
@@ -124,7 +124,7 @@ describe("site production hydration", () => {
       expect(html).toMatch(productionStyle);
       expect(html).toMatch(productionRoute);
       expect(html).toContain('rel="modulepreload"');
-      expect(html).not.toContain('/src/client-entry.js');
+      expect(html).not.toContain('/src/setup/client-entry.js');
       expect(html).toContain(
         '<title data-goribu-head="">Feedback - Goribu</title>',
       );

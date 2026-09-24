@@ -6,6 +6,7 @@
 // instruction rather than pretending to work.
 
 import { readFileSync } from "node:fs";
+import { relative } from "node:path";
 import { runCheck } from "../src/build/run-check.js";
 import { runCloudflareLogin } from "../src/build/run-cloudflare-login.js";
 import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
@@ -63,7 +64,13 @@ async function runBuild() {
   const { createBuilder } = await import("vite");
   const builder = await createBuilder({ root: process.cwd() });
   await builder.buildApp();
-  await prerenderStaticRoutes({ projectRoot: process.cwd() });
+  const { outputs } = await prerenderStaticRoutes({ projectRoot: process.cwd() });
+  console.log(
+    `[Goribu] Build complete.\n` +
+    `  HTML and browser assets: ${relative(process.cwd(), outputs.clientDir)}\n` +
+    `  Worker: ${relative(process.cwd(), outputs.workerFile)}\n` +
+    `  Deployment configuration: ${relative(process.cwd(), outputs.configPath)}`,
+  );
 }
 
 // Start the local development server for the app in the current directory. Vite

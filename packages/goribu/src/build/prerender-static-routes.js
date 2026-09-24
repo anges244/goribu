@@ -41,6 +41,7 @@ const RESERVED_ASSETS_DIR = "_goribu";
  * @returns {Promise<{
  *   prerendered: Array<{ id: string, assetPath: string, bytes: number }>,
  *   downgraded: Array<{ id: string, pattern: string, reason: string }>,
+ *   outputs: { configPath: string, clientDir: string, workerFile: string },
  * }>}
  */
 export async function prerenderStaticRoutes(options) {
@@ -68,7 +69,8 @@ export async function prerenderStaticRoutes(options) {
     middlewareByRoute,
   });
 
-  const { configPath, clientDir } = locateBuildOutputs(root);
+  const outputs = locateBuildOutputs(root);
+  const { configPath, clientDir } = outputs;
 
   // Fail closed on any published HTML asset that owns a route's URL, before this
   // step writes its own output into the same directory.
@@ -82,7 +84,7 @@ export async function prerenderStaticRoutes(options) {
   if (staticRoutes.length === 0) {
     navigationOutput.finish();
     log.log("[Goribu] No routes were statically output; every route renders on the Worker.");
-    return { prerendered: [], downgraded: allDowngraded };
+    return { prerendered: [], downgraded: allDowngraded, outputs };
   }
 
   const prerendered = [];
@@ -126,7 +128,7 @@ export async function prerenderStaticRoutes(options) {
 
   if (prerendered.length === 0) {
     log.log("[Goribu] No routes were statically output; every route renders on the Worker.");
-    return { prerendered, downgraded: allDowngraded };
+    return { prerendered, downgraded: allDowngraded, outputs };
   }
 
   log.log(
@@ -134,7 +136,7 @@ export async function prerenderStaticRoutes(options) {
       `without invoking the Worker: ${prerendered.map((route) => route.assetPath).join(", ")}.`,
   );
 
-  return { prerendered, downgraded: allDowngraded };
+  return { prerendered, downgraded: allDowngraded, outputs };
 }
 
 function announceDowngrade(log, route) {
@@ -331,9 +333,14 @@ function locateBuildOutputs(root) {
     );
   }
 
+  if (typeof wrangler.main !== "string" || wrangler.main.length === 0) {
+    throw new Error(`[Goribu] The built Worker configuration at "${configPath}" has no main entry. Run goribu build with Goribu's Worker environment enabled.`);
+  }
+
   return {
     configPath,
     clientDir: resolve(dirname(configPath), assetsDirectory),
+    workerFile: resolve(dirname(configPath), wrangler.main),
   };
 }
 

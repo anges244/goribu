@@ -3,7 +3,7 @@ title: Metadata & Document
 description: Route-owned head data, the document shell, graph assets, CSP nonces, response policy, and public browser environment.
 ---
 
-Route modules own page metadata; `src/routes/_document.jsx` owns the HTML shell;
+Route modules own page metadata; `src/setup/_document.jsx` owns the HTML shell;
 `responseHeaders()` owns defaults for responses that execute on the Worker.
 
 ## Route metadata
@@ -57,7 +57,7 @@ export default function Document({ children, head, nonce }) {
       </head>
       <body>
         <div id="root">{children}</div>
-        <ClientEntry src="/src/client-entry.js" />
+        <ClientEntry src="/src/setup/client-entry.js" />
       </body>
     </html>
   );

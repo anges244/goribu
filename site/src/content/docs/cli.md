@@ -69,12 +69,29 @@ otherwise Vite may choose another port at initial startup.
 ## `goribu build`
 
 Produce the production build: one pass emits the Worker bundle and the client
-bundle into `dist/`, along with the deploy-ready Wrangler configuration. Takes no
-arguments.
+bundle into `.goribu/dist/`, along with the deploy-ready Wrangler configuration.
+Takes no arguments.
 
 ```
 goribu build
 ```
+
+Successful builds print the discovered output paths after prerendering finishes.
+HTML, browser assets, and static-navigation data live in `.goribu/dist/client/`;
+the Worker bundle and deployment configuration live in
+`.goribu/dist/<worker-environment>/`. Generated framework asset URLs remain
+under `/_goribu/`; public file URLs are unchanged.
+
+Goribu owns these output locations. Remove conflicting `build.outDir`,
+per-environment output paths, and bundler `output.dir`/`output.file` overrides.
+`emptyOutDir: false` is rejected: each build must remove stale HTML and
+navigation snapshots. Cleanup stays inside the output directories, preserving
+Goribu's generated inputs and local Cloudflare state.
+
+When upgrading, update scripts or CI artifact paths that refer to root `dist/`.
+Goribu leaves any existing root `dist/` untouched; you can remove old generated
+output yourself. Keep `goribu.wrangler.jsonc` at the project root so environment
+file discovery continues to work.
 
 Builds suppress the bundler's `MODULE_LEVEL_DIRECTIVE` warning for `"use client"`
 in `node_modules`: library React Server Component annotations do not control

@@ -12,7 +12,7 @@ export default function Document({ children }) {
       </head>
       <body>
         <div id="root">{children}</div>
-        <ClientEntry src="/src/client-entry.js" />
+        <ClientEntry src="/src/setup/client-entry.js" />
       </body>
     </html>
   );

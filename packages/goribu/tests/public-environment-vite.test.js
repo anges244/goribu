@@ -88,7 +88,7 @@ describe("PUBLIC_* browser environment", () => {
       server: { middlewareMode: true },
     });
     developmentServers.push(server);
-    const source = (await server.transformRequest("/src/client-entry.js"))?.code;
+    const source = (await server.transformRequest("/src/setup/client-entry.js"))?.code;
 
     expect(source).toContain(publicDevelopmentValue);
     expect(source).not.toContain(publicBaseValue);
@@ -142,7 +142,7 @@ function createProject() {
   cleanupDirectories.push(projectRoot);
   writeProjectFile(
     projectRoot,
-    "src/client-entry.js",
+    "src/setup/client-entry.js",
     "globalThis.__GORIBU_PUBLIC_ENV__ = import.meta.env;\n",
   );
   writeProjectFile(
@@ -171,7 +171,7 @@ async function buildClientSource(projectRoot, overrides = {}) {
       minify: false,
       write: false,
       rollupOptions: {
-        input: join(projectRoot, "src/client-entry.js"),
+        input: join(projectRoot, "src/setup/client-entry.js"),
         preserveEntrySignatures: "strict",
       },
     },

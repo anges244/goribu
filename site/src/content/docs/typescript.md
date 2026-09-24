@@ -33,7 +33,7 @@ those declarations without that shortcut.
 
 Routes use `.ts` or `.tsx`. Configuration stays in `goribu.config.js`, which Node
 loads directly for development, builds, inspection, migrations, and deployment.
-`vite.config.js` and `src/client-entry.js` also keep their existing names. The
+`vite.config.js` and `src/setup/client-entry.js` also keep their existing names. The
 starter's `allowJs` and `checkJs` settings check these JavaScript files too.
 
 ## Type a route

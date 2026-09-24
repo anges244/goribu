@@ -24,12 +24,12 @@ describe("finalizeD1Binding", () => {
     const root = mkdtempSync(join(tmpdir(), "goribu-finalize-d1-"));
     created.push(root);
     const redirectDir = join(root, ".wrangler", "deploy");
-    const outputDir = join(root, "dist", "app");
+    const outputDir = join(root, ".goribu", "dist", "app");
     mkdirSync(redirectDir, { recursive: true });
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(
       join(redirectDir, "config.json"),
-      JSON.stringify({ configPath: "../../dist/app/wrangler.json" }),
+      JSON.stringify({ configPath: "../../.goribu/dist/app/wrangler.json" }),
     );
     writeFileSync(
       join(outputDir, "wrangler.json"),
@@ -69,12 +69,12 @@ describe("finalizeD1Binding", () => {
     const root = mkdtempSync(join(tmpdir(), "goribu-finalize-d1-"));
     created.push(root);
     const redirectDir = join(root, ".wrangler", "deploy");
-    const outputDir = join(root, "dist", "app");
+    const outputDir = join(root, ".goribu", "dist", "app");
     mkdirSync(redirectDir, { recursive: true });
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(
       join(redirectDir, "config.json"),
-      JSON.stringify({ configPath: "../../dist/app/wrangler.json" }),
+      JSON.stringify({ configPath: "../../.goribu/dist/app/wrangler.json" }),
     );
     writeFileSync(
       join(outputDir, "wrangler.json"),

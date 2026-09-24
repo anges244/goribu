@@ -62,7 +62,7 @@ export function writeWorkerEntry(options) {
       ? null
       : routeId(errorPages.serverError, root);
 
-  const documentFile = scanDocument(routesDir);
+  const documentFile = scanDocument(root);
   const documentId = documentFile === null ? null : routeId(documentFile, root);
 
   // Collect every module the Worker must import, keyed by its stable route ID so

@@ -11,6 +11,15 @@ import {
 } from "../src/rendering/render-context.js";
 
 describe("ClientEntry", () => {
+  it("reports an unmigrated Document URL even when production assets are available", () => {
+    for (const clientAssets of [null, { src: "/_goribu/assets/entry-hash.js", modulePreloads: [] }]) {
+      expect(() => renderToStaticMarkup(
+        h(RenderDataContext.Provider, { value: { clientAssets } },
+          h(ClientEntry, { src: "/src/client-entry.js" })),
+      )).toThrow(/Set <ClientEntry src="\/src\/setup\/client-entry.js"/);
+    }
+  });
+
   it("requires the development client module URL", () => {
     expect(() => renderToStaticMarkup(h(ClientEntry))).toThrow(
       /\[Goribu\].*<ClientEntry src> requires a non-empty client module URL/s,
@@ -29,14 +38,14 @@ describe("ClientEntry", () => {
             propsJson: serializePropsForScript(props),
           }),
         },
-        h(ClientEntry, { src: "/src/client-entry.js" }),
+        h(ClientEntry, { src: "/src/setup/client-entry.js" }),
       ),
     );
 
     const routeIndex = html.indexOf(`id="${ROUTE_SCRIPT_ID}"`);
     const propsIndex = html.indexOf(`id="${PROPS_SCRIPT_ID}"`);
     const entryIndex = html.indexOf(
-      '<script type="module" src="/src/client-entry.js"></script>',
+      '<script type="module" src="/src/setup/client-entry.js"></script>',
     );
 
     expect(routeIndex).toBeGreaterThan(-1);
@@ -63,7 +72,7 @@ describe("ClientEntry", () => {
             }),
           }),
         },
-        h(ClientEntry, { src: "/src/client-entry.js" }),
+        h(ClientEntry, { src: "/src/setup/client-entry.js" }),
       ),
     );
 
@@ -73,7 +82,7 @@ describe("ClientEntry", () => {
     expect(html).toContain(
       '<script type="module" src="/_goribu/assets/client-entry-hash.js"></script>',
     );
-    expect(html).not.toContain('/src/client-entry.js');
+    expect(html).not.toContain('/src/setup/client-entry.js');
   });
 
   it("uses the render nonce for inert data and the executable entry", () => {
@@ -87,7 +96,7 @@ describe("ClientEntry", () => {
             nonce: "request-nonce",
           }),
         },
-        h(ClientEntry, { src: "/src/client-entry.js", nonce: "stale" }),
+        h(ClientEntry, { src: "/src/setup/client-entry.js", nonce: "stale" }),
       ),
     );
 

@@ -10,6 +10,7 @@ import { planMigrations } from "./migrations/plan-migrations.js";
 import { executeD1 } from "./migrations/wrangler-d1.js";
 import { findDeclaredKVNamespace, listRemoteKVNamespaces } from "./inspect-kv.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
+import { BUILD_OUTPUT_DIRECTORY } from "./build-output.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -262,7 +263,7 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
     deployTarget: Object.freeze({
       worker: appConfig.name,
       environment: "production",
-      staticAssets: "dist/client",
+      staticAssets: `${BUILD_OUTPUT_DIRECTORY}/client`,
       compatibilityDate: appConfig.compatibilityDate,
       compatibilityFlags: appConfig.compatibilityFlags,
     }),

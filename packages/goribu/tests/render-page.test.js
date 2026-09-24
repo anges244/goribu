@@ -18,7 +18,7 @@ function CustomDocument({ children }) {
       "body",
       null,
       h("div", { id: "root" }, children),
-      h(ClientEntry, { src: "/src/client-entry.js" }),
+      h(ClientEntry, { src: "/src/setup/client-entry.js" }),
     ),
   );
 }
@@ -48,7 +48,7 @@ describe("renderPage hydration data", () => {
     });
     expect(readJsonScript(html, PROPS_SCRIPT_ID)).toEqual(props);
     expect(html).toContain(
-      '<script type="module" src="/src/client-entry.js"></script>',
+      '<script type="module" src="/src/setup/client-entry.js"></script>',
     );
     expect(html).not.toContain("</script><script>globalThis.pwned");
   });
@@ -83,7 +83,7 @@ describe("renderPage hydration data", () => {
     expect(html).toContain(
       '<link rel="modulepreload" href="/app/_goribu/assets/shared-hash.js"/>',
     );
-    expect(html).not.toContain('/src/client-entry.js');
+    expect(html).not.toContain('/src/setup/client-entry.js');
   });
 
   it("returns the streamed shell before suspended page work completes", async () => {
@@ -116,7 +116,7 @@ describe("renderPage hydration data", () => {
     expect(first.done).toBe(false);
     expect(html).toContain("Loading");
     expect(html).toContain(`id="${ROUTE_SCRIPT_ID}"`);
-    expect(html).toContain('src="/src/client-entry.js"');
+    expect(html).toContain('src="/src/setup/client-entry.js"');
 
     resolveContent("Ready");
     html += await readRemaining(reader);
@@ -135,7 +135,7 @@ describe("renderPage hydration data", () => {
           "body",
           null,
           h("div", { id: "root" }, props.children),
-          h(ClientEntry, { src: "/src/client-entry.js" }),
+          h(ClientEntry, { src: "/src/setup/client-entry.js" }),
         ),
       );
     }

@@ -15,12 +15,13 @@ pnpm dev
 <!-- typescript-only:start -->
 Run `pnpm typecheck` to check the app's types. `pnpm build` bundles the app;
 type checking is a separate command. Routes use `.ts` and `.tsx`, while
-`goribu.config.js`, `vite.config.js`, and `src/client-entry.js` remain JavaScript
+`goribu.config.js`, `vite.config.js`, and `src/setup/client-entry.js` remain JavaScript
 and are checked by the starter's `tsconfig.json` too.
 
 <!-- typescript-only:end -->
 
-`pnpm build` creates production output; `pnpm check` reads the deployment plan.
+`pnpm build` creates production output in `.goribu/dist/` and prints its paths.
+`pnpm check` reads the deployment plan.
 Development and standalone builds need no Cloudflare login. A generated app is
 independent of the framework repository. If it uses a local Goribu tarball,
 keep that archive available for future dependency installations.
@@ -53,9 +54,9 @@ JavaScript output is generated during scaffolder packaging.
 - `goribu.config.js`: Worker name and optional resource declarations.
 - `src/routes/index.tsx`: static home page and hydrated counter.
 - `src/routes/hello.tsx`: request-time GET handler and its page.
-- `src/routes/_document.tsx`: language, viewport, metadata, and framework assets.
-- `src/styles.css`: Tailwind entry, scanned against this app's source files.
-- `src/client-entry.js`: browser bootstrap and global CSS import.
+- `src/setup/_document.tsx`: language, viewport, metadata, and framework assets.
+- `src/styles/global.css`: Tailwind entry, scanned against this app's source files.
+- `src/setup/client-entry.js`: browser bootstrap and global CSS import.
 
 Tailwind classes must appear as complete strings in source. Use a conditional
 between full class names instead of constructing names such as `bg-${color}-500`.

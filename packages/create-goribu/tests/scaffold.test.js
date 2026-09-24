@@ -84,7 +84,7 @@ it("generates from the packed canonical template without installing or leaking l
   expect(config).toContain('name: "my-app-kv"');
   expect(readFileSync(join(app, ".gitignore"), "utf8"))
     .toBe(readFileSync(join(templateDir, ".gitignore"), "utf8"));
-  for (const path of ["src/routes/index.tsx", "src/routes/hello.tsx", "src/routes/_document.tsx", "src/styles.css", "vite.config.js", "AGENTS.md", "tsconfig.json"]) {
+  for (const path of ["src/routes/index.tsx", "src/routes/hello.tsx", "src/setup/_document.tsx", "src/setup/client-entry.js", "src/styles/global.css", "vite.config.js", "AGENTS.md", "tsconfig.json"]) {
     expect(readFileSync(join(app, path))).toEqual(readFileSync(join(templateDir, path)));
   }
   const readme = readFileSync(join(app, "README.md"), "utf8");
@@ -93,7 +93,7 @@ it("generates from the packed canonical template without installing or leaking l
   expect(readme).not.toContain("repository-only");
   expect(readFileSync(join(app, "pnpm-workspace.yaml"), "utf8"))
     .toBe("packages:\n  - .\n\nonlyBuiltDependencies:\n  - esbuild\n  - workerd\n");
-  for (const path of ["node_modules", "dist", ".goribu", ".wrangler", ".git", "pnpm-lock.yaml", ".env"]) {
+  for (const path of ["node_modules", "dist", ".goribu", ".wrangler", ".git", "pnpm-lock.yaml", ".env", "src/client-entry.js", "src/routes/_document.tsx", "src/styles.css"]) {
     expect(existsSync(join(app, path)), path).toBe(false);
   }
   expect(result.stdout).toContain("pnpm run deploy");

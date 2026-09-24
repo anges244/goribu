@@ -143,7 +143,7 @@ describe("createApp().fetch", () => {
           "body",
           null,
           h("div", { id: "root" }, children),
-          h(ClientEntry, { src: "/src/client-entry.js" }),
+          h(ClientEntry, { src: "/src/setup/client-entry.js" }),
         ),
       );
     }
@@ -196,13 +196,13 @@ describe("createApp().fetch", () => {
       'src="/app/_goribu/assets/client-entry-hash.js"',
     );
     expect(page).toContain('href="/app/_goribu/assets/index-hash.js"');
-    expect(page).not.toContain('/src/client-entry.js');
+    expect(page).not.toContain('/src/setup/client-entry.js');
     expect(missing).toContain(
       'src="/app/_goribu/assets/client-entry-hash.js"',
     );
     expect(missing).toContain('href="/app/_goribu/assets/shared-hash.js"');
     expect(missing).not.toContain('href="/app/_goribu/assets/index-hash.js"');
-    expect(missing).not.toContain('/src/client-entry.js');
+    expect(missing).not.toContain('/src/setup/client-entry.js');
   });
 
   it("matches a dynamic segment and renders the same page for any value", async () => {
@@ -512,7 +512,7 @@ describe("createApp().fetch — error boundaries", () => {
       });
       expect(body).toContain(`Reference ${pageProps.errorId} at /hello`);
       expect(body).toContain('src="/_goribu/assets/client-entry-hash.js"');
-      expect(body).not.toContain('/src/client-entry.js');
+      expect(body).not.toContain('/src/setup/client-entry.js');
       expect(body).not.toContain(failure.message);
       expect(body).not.toContain("query-secret");
       expect(consoleError).toHaveBeenCalledWith(

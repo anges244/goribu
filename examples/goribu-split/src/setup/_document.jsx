@@ -1,9 +1,6 @@
 import { ClientEntry, Stylesheet } from "goribu";
 
-// The site's document shell. The application owns html, head, and body; Goribu
-// renders each route's page as `children` inside the root element.
-//
-export default function Document({ children, head }) {
+export default function Document({ children, head, nonce }) {
   return (
     <html lang="en">
       <head>
@@ -12,9 +9,9 @@ export default function Document({ children, head }) {
         <Stylesheet />
         {head}
       </head>
-      <body>
+      <body className="bg-slate-50 text-slate-950 antialiased">
         <div id="root">{children}</div>
-        <ClientEntry src="/src/client-entry.js" />
+        <ClientEntry src="/src/setup/client-entry.js" nonce={nonce} />
       </body>
     </html>
   );

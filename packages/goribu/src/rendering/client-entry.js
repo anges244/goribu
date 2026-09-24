@@ -16,6 +16,11 @@ import {
  */
 export function ClientEntry(props) {
   const renderData = useContext(RenderDataContext);
+  if (props?.src === "/src/client-entry.js") {
+    throw new TypeError(
+      '[Goribu] The browser entry has moved. Set <ClientEntry src="/src/setup/client-entry.js" /> in src/setup/_document and move the entry file to src/setup/client-entry.js, updating its relative imports.',
+    );
+  }
   const resolved = renderData?.clientAssets ?? null;
   const src = resolved?.src ?? props?.src;
   const nonce = renderData?.nonce ?? props?.nonce;

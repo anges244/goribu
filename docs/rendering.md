@@ -23,7 +23,8 @@ the document's body content.
 
 The default shell includes route metadata, graph styles, the hydration root,
 inert render data, and the client entry. To control placement yourself, add
-`src/routes/_document.jsx`:
+`src/setup/_document.jsx` (or `.tsx`). This file is optional;
+`src/setup/client-entry.js` remains required with either shell:
 
 ```jsx
 import { ClientEntry, Stylesheet } from "goribu";
@@ -39,14 +40,14 @@ export default function Document({ children, head, nonce }) {
       </head>
       <body>
         <div id="root">{children}</div>
-        <ClientEntry src="/src/client-entry.js" />
+        <ClientEntry src="/src/setup/client-entry.js" />
       </body>
     </html>
   );
 }
 ```
 
-The Document is a **file in the route graph**, not a field in
+The Document is a **file in the application module graph**, not a field in
 `goribu.config.js`. Configuration is plain data that Node loads directly; a
 Document is a React component, so it lives where it can be compiled, styled, and
 audited for the client boundary. `goribu.config.js` rejects a

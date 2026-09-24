@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { generateManifest } from "../routing/generate-manifest.js";
 import { scanDocument } from "../routing/scan-document.js";
 import { scanErrorPages } from "../routing/scan-error-pages.js";
@@ -73,7 +73,9 @@ export function createDevelopmentRouteInventoryPlugin() {
       function onFile(event, file) {
         if (!["add", "unlink", "change", "addDir", "unlinkDir"].includes(event)) return;
         const path = relative(routesDir, resolve(file));
-        if (isAbsolute(path) || path === ".." || path.startsWith(`..${sep}`)) return;
+        const setupDir = resolve(projectRoot, "src/setup");
+        const inSetup = resolve(file) === setupDir || dirname(resolve(file)) === setupDir;
+        if (!inSetup && (isAbsolute(path) || path === ".." || path.startsWith(`..${sep}`))) return;
         if (event !== "addDir" && event !== "unlinkDir" && !isRouteFile(file)) return;
         schedule();
       }
@@ -103,7 +105,7 @@ function readInventory(projectRoot, routesDir) {
   const manifest = generateManifest({ projectRoot, routesDir });
   return JSON.stringify({
     manifest,
-    document: scanDocument(routesDir),
+    document: scanDocument(projectRoot),
     errorPages: scanErrorPages(routesDir),
     middleware: [...selectMiddlewareByRoute({ projectRoot, routesDir, manifest })],
   });

@@ -91,6 +91,7 @@ describe("goribu check", () => {
     );
     expect(written.join("")).toContain("Worker: goribu-site");
     expect(written.join("")).toContain("Environment: production");
+    expect(written.join("")).toContain("Static assets: .goribu/dist/client");
     expect(written.join("")).toContain("D1 reads, writes, and storage");
     expect(written.join("")).toMatch(/No changes were made\.\n$/);
   });

@@ -14,18 +14,18 @@ let clientDir;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "goribu-production-styles-"));
-  clientDir = join(root, "dist/client");
+  clientDir = join(root, ".goribu/dist/client");
   cpSync(join(fixture, "src"), join(root, "src"), { recursive: true });
   for (const name of ["package.json", "goribu.config.js"]) cpSync(join(fixture, name), join(root, name));
   symlinkSync(join(fixture, "node_modules"), join(root, "node_modules"), "dir");
   writeFileSync(join(root, "vite.config.js"),
     'import { goribu } from "goribu/vite";\nexport default { plugins: [goribu()], build: { assetsInlineLimit: 0 } };\n');
 
-  const document = join(root, "src/routes/_document.jsx");
+  const document = join(root, "src/setup/_document.jsx");
   writeFileSync(document, readFileSync(document, "utf8")
     .replace("{ ClientEntry }", "{ ClientEntry, Stylesheet }")
     .replace("<title>", "<Stylesheet /><title>"));
-  writeFileSync(join(root, "src/client-entry.js"), 'import "goribu/client";\nimport "./styles.css";\n');
+  writeFileSync(join(root, "src/setup/client-entry.js"), 'import "goribu/client";\nimport "../styles.css";\n');
   writeFileSync(join(root, "src/styles.css"), 'body { --shared-style: global; }\n');
   writeFileSync(join(root, "src/home.css"), '@import "./palette.css";\nh1 { --page-style: home; background-image: url("./tile.svg"); }\n');
   writeFileSync(join(root, "src/palette.css"), 'body { --palette: home; }\n');
@@ -68,7 +68,7 @@ it("keeps build paths out of emitted CSS filenames and public client output", ()
 });
 
 it("serves static and Worker pages with their own CSS, shared CSS, and working asset URLs", async () => {
-  const harness = createTestHarness({ workers: [{ configPath: join(root, "dist/goribu_basic_app/wrangler.json") }] });
+  const harness = createTestHarness({ workers: [{ configPath: join(root, ".goribu/dist/goribu_basic_app/wrangler.json") }] });
   try {
     const { url } = await harness.listen();
     for (const [path, style, otherStyle] of [["/", "home", "greeting"], ["/greet?name=CSS", "greeting", "home"]]) {

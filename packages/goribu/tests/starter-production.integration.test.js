@@ -31,8 +31,8 @@ function succeeds(result) {
 describe.each(["typescript", "javascript"])("packed %s starter production output", (language) => {
 const appName = `starter-${language}`;
 const appDir = join(task, appName);
-const clientDir = join(appDir, "dist", "client");
-const workerConfig = join(appDir, "dist", `starter_${language}`, "wrangler.json");
+const clientDir = join(appDir, ".goribu", "dist", "client");
+const workerConfig = join(appDir, ".goribu", "dist", `starter_${language}`, "wrangler.json");
 
 beforeAll(() => {
   succeeds(spawnSync(process.execPath, [join(task, "package/bin/create-goribu.js"), appName, ...(language === "javascript" ? ["--js"] : [])], {

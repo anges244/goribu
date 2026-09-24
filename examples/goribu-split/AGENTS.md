@@ -7,12 +7,14 @@ add routes and dependencies only for actual application needs.
 
 - Use Node.js 22+ and pnpm. Run app commands from this directory.
 - `pnpm dev` starts local development; `pnpm build` produces production output.
+- Production HTML/assets live in `.goribu/dist/client/`; the Worker and its
+  deploy configuration live in `.goribu/dist/<worker-environment>/`.
 - `pnpm check` reads the production plan without changing resources.
 - Deployment uses `pnpm run deploy`; bare `pnpm deploy` invokes pnpm's own
   command instead of the app script.
 - The maintainer installs dependencies, commits, and deploys. Provide the exact
   command and wait for confirmation; do not perform these actions yourself.
-- Preserve unrelated work. Never edit generated `dist/`, `.goribu/`, `.wrangler/`,
+- Preserve unrelated work. Never edit generated `.goribu/`, `.wrangler/`,
   or `node_modules/`, and do not commit credentials or local environment files.
 
 ## Application conventions
@@ -27,12 +29,14 @@ add routes and dependencies only for actual application needs.
   Import them from handlers, never from browser-reachable page code.
 - `goribu` contains shared UI APIs; `goribu/server` contains runtime/config APIs;
   `goribu/client` bootstraps the browser; `goribu/vite` is build-only.
+- App setup lives in `src/setup/`: required `client-entry.js` and optional
+  `_document`. Global CSS starts at `src/styles/global.css`.
 - Keep `<Stylesheet />` and `{head}` in the Document head and `<ClientEntry />`
   after `#root`. The explicit client-entry URL is the development fallback;
   production resolves hashed assets. Preserve the request nonce.
 - Use Goribu's `Link` and `Form` for hydrated navigation and form behavior.
   Static output and hydration are separate: static pages can be interactive.
-- Global CSS is imported from `src/client-entry.js`. Tailwind belongs to this
+- Global CSS is imported from `src/setup/client-entry.js`. Tailwind belongs to this
   app's Vite configuration, not to the framework. Write complete class names.
 - Only `PUBLIC_*` environment values are browser-visible. Never prefix secrets
   with `PUBLIC_` or serialize them into page props.

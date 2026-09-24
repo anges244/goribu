@@ -15,7 +15,7 @@ export default function Document({ children, head, nonce }: DocumentProps) {
       <body className="bg-slate-50 text-slate-950 antialiased">
         <div id="root">{children}</div>
 
-        <ClientEntry src="/src/client-entry.js" nonce={nonce} />
+        <ClientEntry src="/src/setup/client-entry.js" nonce={nonce} />
       </body>
     </html>
   );

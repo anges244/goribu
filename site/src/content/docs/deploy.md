@@ -148,7 +148,7 @@ changes and upload run, so pending migrations must be compatible with it. See
 - D1/KV provisioning prints only changes it made; an existing matching resource is
   reused without a creation message.
 - A failed or interrupted deploy exits non-zero and does not report success.
-- The build output lives in `dist/`; `.wrangler/deploy/config.json` redirects
+- The build output lives in `.goribu/dist/`; `.wrangler/deploy/config.json` redirects
   Wrangler to the emitted Worker configuration and static assets there. The
   redirect, build output, `goribu.wrangler.jsonc`, and `.goribu/` build inputs are generated and are not
   committed.

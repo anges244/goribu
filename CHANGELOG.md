@@ -11,6 +11,9 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Production asset validation accepts legitimate all-lowercase content hashes
+  while still rejecting fixed filenames in the immutable asset namespace.
+
 - Form renders with a missing or unusable Referer now request a document GET
   instead of generating a 500. Mutation cookies and headers are preserved;
   recovery never repeats the mutation. Verified cross-page renders still fail.
@@ -32,6 +35,25 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   restart. Ordinary component and CSS edits retain Vite's hot updates.
 
 ### Changed
+
+- Starter Git ignore rules now cover dependency caches, TypeScript build state,
+  test coverage, logs, and OS/editor temporary files.
+
+- **Build layout:** app output now lives in `.goribu/dist/`, with `client/` and
+  Worker environment subdirectories. Builds validate final output paths and
+  reject `emptyOutDir: false` so removed pages and navigation snapshots cannot
+  survive a successful rebuild. Successful builds print discovered artifact paths
+  after prerendering. Update scripts/CI paths that refer to root `dist/`; existing
+  root output is left untouched. The root `goribu.wrangler.jsonc`, local Wrangler
+  state, and scaffolder package output keep their existing locations.
+
+- **Breaking:** application setup now lives in `src/setup/`. Move the required
+  `src/client-entry.js` there and move any custom `src/routes/_document.*` beside
+  it. Update the Document's `<ClientEntry src>` to `/src/setup/client-entry.js`
+  and adjust relative imports. Old locations fail with migration instructions;
+  the framework default Document remains available. Starter global CSS now lives
+  in `src/styles/global.css`, with Tailwind scanning all of `src/`.
+  See [the migration steps](docs/installation.md#migrating-existing-apps-to-srcsetup).
 
 - **Breaking:** `req.body()` now normalizes multipart forms into field objects,
   matching URL-encoded forms. Uploads remain `File` values and repeated names

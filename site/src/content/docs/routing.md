@@ -73,9 +73,12 @@ Names beginning with `_` are never URLs, and an underscore-prefixed folder
 excludes its whole subtree from routing. Goribu uses this namespace for special
 files:
 
-- `_document.jsx` — the document shell every page renders inside. See
-  [Rendering](/docs/rendering).
 - `_404.jsx` — the page rendered for an unmatched URL.
+- `_500.jsx` — the page rendered for a production server error.
+- `_middleware.js` — request middleware for its folder and descendants.
+
+The application-wide Document lives separately in `src/setup/_document.jsx`
+(or `.tsx`). See [Rendering](/docs/rendering).
 
 ## What a route must export
 

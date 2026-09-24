@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { createClientAssetFingerprints } from "./client-asset-fingerprints.js";
 import { generateManifest } from "../routing/generate-manifest.js";
 import { createClientAssetManifestPlugin } from "./create-client-asset-manifest-plugin.js";
 import {
@@ -18,9 +19,10 @@ import { createDevelopmentStylesPlugin } from "./create-development-styles-plugi
 import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
 import { createDevelopmentImportRecoveryPlugin } from "./development-import-recovery.js";
 import { createDevelopmentRouteInventoryPlugin } from "./development-route-inventory.js";
+import { BUILD_OUTPUT_DIRECTORY, assertBuildOutputs, createBuildOutputGuardPlugin } from "./build-output.js";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
-const CLIENT_ENTRY = "src/client-entry.js";
+const CLIENT_ENTRY = "src/setup/client-entry.js";
 const GENERATED_DIRECTORY = ".goribu";
 const CLIENT_ASSETS_MODULE = "virtual:goribu/client-assets";
 const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
@@ -33,7 +35,6 @@ const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
 // no content hash — however the app configured Rollup output or whatever plugin
 // emitted it. Cloudflare treats `_headers` as configuration and never serves it.
 const GENERATED_ASSETS_DIR = "_goribu/assets";
-const RESERVED_ASSETS_PREFIX = "_goribu/assets/";
 const ASSET_HEADERS = `/_goribu/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/_goribu/navigation/*\n  Cache-Control: public, max-age=31536000, immutable\n/_goribu/navigation.json\n  Cache-Control: no-store\n`;
 
 /**
@@ -53,7 +54,7 @@ const ASSET_HEADERS = `/_goribu/assets/*\n  Cache-Control: public, max-age=31536
 export function goribu(options) {
   if (options !== undefined) {
     throw new TypeError(
-      "[Goribu] goribu() does not accept options. Set Vite's root to the application directory and keep the client entry at src/client-entry.js.",
+      "[Goribu] goribu() does not accept options. Set Vite's root to the application directory and keep the client entry at src/setup/client-entry.js.",
     );
   }
 
@@ -68,10 +69,20 @@ export function goribu(options) {
     createDevelopmentStylesPlugin(),
     createDevelopmentLifecyclePlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
+    createBuildOutputGuardPlugin(),
   ];
 }
 
 function createGoribuPlugin(navigationBuildId) {
+  const fingerprints = createClientAssetFingerprints();
+  const assetNameTracker = {
+    name: "goribu:asset-fingerprints",
+    outputOptions: {
+      order: "post",
+      handler(options) { return fingerprints.outputOptions(options); },
+    },
+  };
+
   return {
     name: "goribu",
     enforce: "pre",
@@ -99,9 +110,13 @@ function createGoribuPlugin(navigationBuildId) {
     async config(config, environment = {}) {
       assertCanonicalEnvPrefix(config?.envPrefix, true);
       const root = config.root ? resolve(config.root) : process.cwd();
+      if (config.build?.outDir !== undefined && resolve(root, config.build.outDir) !== resolve(root, BUILD_OUTPUT_DIRECTORY)) {
+        throw new Error(`[Goribu] Production output belongs in ${BUILD_OUTPUT_DIRECTORY}. Remove the conflicting build.outDir override from your Vite configuration.`);
+      }
       const mode =
         environment.command === "serve" ? "development" : "production";
       assertNoReservedPublicFiles(root, config.publicDir);
+      assertClientEntry(root);
       writeWorkerEntry({ projectRoot: root, mode });
       const appConfig = await loadApplicationConfig({ projectRoot: root });
       await assertNoDuplicateD1Declaration({ projectRoot: root, appConfig });
@@ -109,8 +124,9 @@ function createGoribuPlugin(navigationBuildId) {
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
         envPrefix: PUBLIC_ENV_PREFIX,
+        build: { outDir: BUILD_OUTPUT_DIRECTORY },
         builder: {
-          buildApp: buildClientBeforeWorkers,
+          buildApp: (builder) => buildClientBeforeWorkers(builder, assetNameTracker),
         },
         server: {
           watch: {
@@ -158,6 +174,7 @@ function createGoribuPlugin(navigationBuildId) {
               rollupOptions: {
                 input: resolve(root, CLIENT_ENTRY),
                 output: {
+                  plugins: [assetNameTracker],
                   assetFileNames(asset) {
                     // Extracted CSS uses the original chunk name, independently of
                     // chunkFileNames below, so it can carry the same encoded path.
@@ -209,7 +226,7 @@ function createGoribuPlugin(navigationBuildId) {
       if (Object.keys(bundle).some((name) => name.startsWith("_goribu/navigation/"))) {
         this.error("[Goribu] Only Goribu's prerender step may write /_goribu/navigation/ snapshots. Remove the plugin output in that reserved namespace so immutable data always has a verified content hash.");
       }
-      const unhashed = findUnhashedReservedAsset(bundle);
+      const unhashed = fingerprints.findUnhashed(bundle, this);
       if (unhashed !== null) {
         this.error(
           `[Goribu] The file ${JSON.stringify(unhashed)} is served from the reserved /_goribu/assets/ namespace but its name carries no content hash. ` +
@@ -221,7 +238,7 @@ function createGoribuPlugin(navigationBuildId) {
   };
 }
 
-async function buildClientBeforeWorkers(builder) {
+async function buildClientBeforeWorkers(builder, assetNameTracker) {
   // Cloudflare's default orchestration builds Workers first. Goribu's Worker
   // embeds the completed browser graph, so the client must finish before any
   // Worker environment can request the virtual asset module.
@@ -232,6 +249,18 @@ async function buildClientBeforeWorkers(builder) {
     );
   }
 
+  assertBuildOutputs(builder.environments);
+
+  // Output plugins run after input plugins. Keep our post hook last among the
+  // resolved output plugins too, so it wraps the final naming option regardless
+  // of app/plugin ordering. Preserve all other hooks and make repeat builds safe.
+  const bundler = client.config.build.rolldownOptions ??= client.config.build.rollupOptions ?? {};
+  const outputs = bundler.output ??= {};
+  for (const output of Array.isArray(outputs) ? outputs : [outputs]) {
+    output.plugins = [output.plugins].flat(Infinity)
+      .filter((plugin) => plugin && plugin !== assetNameTracker)
+      .concat(assetNameTracker);
+  }
   await builder.build(client);
   const workers = Object.values(builder.environments).filter(
     (environment) => environment !== client,
@@ -420,37 +449,6 @@ function requireClientAssetManifestPlugin(plugin) {
 }
 
 /**
- * Return the first file under the reserved immutable namespace whose name has no
- * content hash, or null when every such file is fingerprinted.
- *
- * Vite's generated content hash is the final eight base64url characters after a
- * hyphen. The hash itself may contain `-`, so its known length — not the final
- * hyphen — anchors the boundary. A real hash also carries at least one digit or
- * uppercase letter, separating it from a dictionary tail such as `fallback`.
- * This guard is deliberately pinned to Vite's default hash length: if a future
- * Vite changes that contract, the build fails closed until Goribu verifies it.
- */
-function findUnhashedReservedAsset(bundle) {
-  for (const fileName of Object.keys(bundle)) {
-    if (!fileName.startsWith(RESERVED_ASSETS_PREFIX)) continue;
-    if (!isHashedAssetName(fileName)) return fileName;
-  }
-  return null;
-}
-
-function isHashedAssetName(fileName) {
-  const base = fileName.slice(fileName.lastIndexOf("/") + 1);
-  const stem = base.replace(/(?:\.[A-Za-z0-9]+)+$/, "");
-  const token = stem.slice(-8);
-
-  return (
-    stem.at(-9) === "-" &&
-    /^[A-Za-z0-9_-]{8}$/.test(token) &&
-    /[0-9A-Z]/.test(token)
-  );
-}
-
-/**
  * Fail the build when the app's `public/` directory would collide with output
  * Goribu owns. Goribu generates the `_headers` file, so an app-authored one would
  * be silently overwritten; and `/_goribu/` is reserved for framework internals,
@@ -473,6 +471,19 @@ function assertNoReservedPublicFiles(root, configuredPublicDir) {
     throw new Error(
       `[Goribu] The /_goribu/ URL namespace is reserved for Goribu's generated assets, so ${JSON.stringify(reservedDir)} cannot be published. ` +
         "Move those files under a different folder in public/.",
+    );
+  }
+}
+
+function assertClientEntry(root) {
+  if (existsSync(join(root, "src/client-entry.js"))) {
+    throw new Error(
+      '[Goribu] src/client-entry.js has moved. Move it to src/setup/client-entry.js, update its relative imports, and set <ClientEntry src="/src/setup/client-entry.js" /> in your Document. Keep only the setup copy.',
+    );
+  }
+  if (!statSync(join(root, CLIENT_ENTRY), { throwIfNoEntry: false })?.isFile()) {
+    throw new Error(
+      '[Goribu] Missing required src/setup/client-entry.js. Create it with import "goribu/client"; and import your global CSS there. The browser entry is required even when you use the default Document.',
     );
   }
 }

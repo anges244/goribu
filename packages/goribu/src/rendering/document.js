@@ -2,14 +2,14 @@ import { createElement as h } from "react";
 import { ClientEntry } from "./client-entry.js";
 import { Stylesheet } from "./stylesheet.js";
 
-const DEV_CLIENT_ENTRY = "/src/client-entry.js";
+const DEV_CLIENT_ENTRY = "/src/setup/client-entry.js";
 
 /**
  * Goribu's default HTML document shell.
  *
  * Goribu owns the html, head, and body structure so every route produces one
  * consistent, valid document. An application intervenes by adding a top-level
- * `src/routes/_document.jsx` that default-exports its own `Document`; that
+ * `src/setup/_document.jsx` that default-exports its own `Document`; that
  * component receives the rendered page as `children` and is responsible for the
  * same three elements. The `root` wrapper is where the client runtime hydrates,
  * and `<ClientEntry>` emits the inert render data and browser module entry after

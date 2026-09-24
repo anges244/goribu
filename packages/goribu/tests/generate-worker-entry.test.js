@@ -66,17 +66,17 @@ describe("writeWorkerEntry", () => {
     writeRoute(root, "index.jsx");
     writeRoute(root, "_404.jsx");
     writeRoute(root, "_500.jsx");
-    writeRoute(root, "_document.jsx");
+    writeRoute(root, "../setup/_document.jsx");
 
     const { source } = writeWorkerEntry({ projectRoot: root });
 
     expect(source).toContain('import * as module1 from "../src/routes/_404.jsx"');
     expect(source).toContain('import * as module2 from "../src/routes/_500.jsx"');
-    expect(source).toContain('import * as module3 from "../src/routes/_document.jsx"');
+    expect(source).toContain('import * as module3 from "../src/setup/_document.jsx"');
     expect(source).toContain(
       'const errorPages = { notFound: "src/routes/_404.jsx", serverError: "src/routes/_500.jsx" };',
     );
-    expect(source).toContain('const documentId = "src/routes/_document.jsx";');
+    expect(source).toContain('const documentId = "src/setup/_document.jsx";');
   });
 
   it("emits an explicitly selected development mode", () => {

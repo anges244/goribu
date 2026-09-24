@@ -21,7 +21,7 @@ describe("client hydration bootstrap", () => {
         minify: false,
         write: false,
         rollupOptions: {
-          input: join(projectRoot, "src", "client-entry.js"),
+          input: join(projectRoot, "src", "setup", "client-entry.js"),
           preserveEntrySignatures: "strict",
         },
       },
@@ -37,7 +37,7 @@ describe("client hydration bootstrap", () => {
       .filter((chunk) => chunk.isDynamicEntry)
       .flatMap((chunk) => Object.keys(chunk.modules));
 
-    expect(bundledModules).toContain(join(projectRoot, "src/client-entry.js"));
+    expect(bundledModules).toContain(join(projectRoot, "src/setup/client-entry.js"));
     expect(bundledModules).toContain(
       fileURLToPath(new URL("../src/client.js", import.meta.url)),
     );

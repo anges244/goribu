@@ -17,11 +17,11 @@ beforeAll(async () => {
   cpSync(join(fixture, "src"), join(root, "src"), { recursive: true });
   for (const name of ["package.json", "goribu.config.js"]) cpSync(join(fixture, name), join(root, name));
   symlinkSync(join(fixture, "node_modules"), join(root, "node_modules"), "dir");
-  const document = join(root, "src/routes/_document.jsx");
+  const document = join(root, "src/setup/_document.jsx");
   writeFileSync(document, readFileSync(document, "utf8")
     .replace("{ ClientEntry }", "{ ClientEntry, Stylesheet }")
     .replace("<title>", "<Stylesheet /><title>"));
-  writeFileSync(join(root, "src/client-entry.js"), 'import "goribu/client";\nimport "./styles.css";\nimport "./ignored.css?inline";\n');
+  writeFileSync(join(root, "src/setup/client-entry.js"), 'import "goribu/client";\nimport "../styles.css";\nimport "../ignored.css?inline";\n');
   writeFileSync(join(root, "src/styles.css"), '@import "./tokens.css";\nh1 { font-size: 36px; }\n');
   writeFileSync(join(root, "src/tokens.css"), 'body { color: rgb(10, 20, 30); }\n');
   writeFileSync(join(root, "src/ignored.css"), 'h1 { font-size: 99px; }\n');
@@ -64,7 +64,7 @@ it("uses the current Vite graph after a stylesheet import changes and rejects un
   const url = new URL("/_goribu/dev-styles.css?route=src%2Froutes%2Findex.jsx", origin);
   expect(await (await fetch(url)).text()).toContain("/src/styles.css?direct");
   writeFileSync(join(root, "src/replacement.css"), "h1 { font-size: 42px; }\n");
-  writeFileSync(join(root, "src/client-entry.js"), 'import "goribu/client";\nimport "./replacement.css";\n');
+  writeFileSync(join(root, "src/setup/client-entry.js"), 'import "goribu/client";\nimport "../replacement.css";\n');
   await vi.waitFor(async () => {
     const response = await fetch(url);
     expect(response.status).toBe(200);

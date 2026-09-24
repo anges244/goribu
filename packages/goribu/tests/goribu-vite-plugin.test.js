@@ -34,6 +34,8 @@ function clientAssetsPlugin() {
 }
 
 function writeMinimalProject(root) {
+  mkdirSync(join(root, "src/setup"), { recursive: true });
+  writeFileSync(join(root, "src/setup/client-entry.js"), 'import "goribu/client";\n');
   mkdirSync(join(root, "src", "routes"), { recursive: true });
   writeFileSync(
     join(root, "src", "routes", "index.jsx"),
@@ -53,6 +55,27 @@ afterEach(() => {
 });
 
 describe("goribu()", () => {
+  it("requires the setup entry and rejects legacy entries in development and production", async () => {
+    for (const command of ["serve", "build"]) {
+      const root = makeProject();
+      writeMinimalProject(root);
+      const entry = join(root, "src/setup/client-entry.js");
+      rmSync(entry);
+      await expect(goribuPlugin().config({ root }, { command })).rejects.toThrow(
+        /Missing required src\/setup\/client-entry.js.*import "goribu\/client"/,
+      );
+      writeFileSync(join(root, "src/client-entry.js"), 'import "goribu/client";\n');
+      await expect(goribuPlugin().config({ root }, { command })).rejects.toThrow(
+        /Move it to src\/setup\/client-entry.js/,
+      );
+      writeFileSync(entry, 'import "goribu/client";\n');
+      await expect(goribuPlugin().config({ root }, { command })).rejects.toThrow(/Keep only the setup copy/);
+      rmSync(join(root, "src/client-entry.js"));
+      const config = await goribuPlugin().config({ root }, { command });
+      expect(config.environments.client.build.rollupOptions.input).toBe(entry);
+    }
+  });
+
   it("rejects duplicate KV ownership during both development and production setup", async () => {
     for (const command of ["serve", "build"]) {
       const root = makeProject();
@@ -91,9 +114,12 @@ describe("goribu()", () => {
       { root },
       { command: "build" },
     );
-    const client = { name: "client" };
-    const workerA = { name: "worker-a" };
-    const workerB = { name: "worker-b" };
+    const environment = (name) => ({ name, config: {
+      root, build: { outDir: join(root, ".goribu/dist", name) },
+    } });
+    const client = environment("client");
+    const workerA = environment("worker-a");
+    const workerB = environment("worker-b");
     const order = [];
 
     await configured.builder.buildApp({
@@ -201,12 +227,24 @@ describe("goribu()", () => {
       .toThrow(/Only Goribu's prerender step/);
   });
 
-  it("passes Vite hashes containing dashes and ignores files outside the reserved namespace", () => {
+  it("passes generated hashes including lowercase and dashes, and ignores other namespaces", () => {
     expect(() =>
       auditBundle({
-        "_goribu/assets/client-pages-Dh-wBXR4.js": { type: "chunk" },
-        "_goribu/assets/client-route__encoded-N1sL-lhX.js": { type: "chunk" },
-        "_goribu/assets/logo-A1b2C3d4.svg": { type: "asset" },
+        "_goribu/assets/client-pages-Dh-wBXR4.js": {
+          type: "chunk",
+          fileName: "_goribu/assets/client-pages-Dh-wBXR4.js",
+          preliminaryFileName: "_goribu/assets/client-pages-!~{000}~.js",
+        },
+        "_goribu/assets/client-route__encoded-N1sL-lhX.js": {
+          type: "chunk",
+          fileName: "_goribu/assets/client-route__encoded-N1sL-lhX.js",
+          preliminaryFileName: "_goribu/assets/client-route__encoded-!~{001}~.js",
+        },
+        "_goribu/assets/client-qhtdyqap.js": {
+          type: "chunk",
+          fileName: "_goribu/assets/client-qhtdyqap.js",
+          preliminaryFileName: "_goribu/assets/client-!~{002}~.js",
+        },
         "robots.txt": { type: "asset" },
         "assets/vendor.js": { type: "chunk" },
       }),
@@ -224,7 +262,7 @@ describe("goribu()", () => {
       auditBundle({ "_goribu/assets/entry.js": { type: "chunk" } }),
     ).toThrow(/carries no content hash/);
 
-    // A dictionary-word segment has no entropy, so it is not mistaken for a hash.
+    // A fixed name has no bundler hash placeholder, even if it looks like a hash.
     expect(() =>
       auditBundle({ "_goribu/assets/client-fallback.js": { type: "chunk" } }),
     ).toThrow(/carries no content hash/);

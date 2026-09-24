@@ -36,7 +36,7 @@ it("prebundles lazy-page React imports with the bootstrap on a cold dev start", 
       expect(readFileSync(optimized[id].file, "utf8").length).toBeGreaterThan(0);
     }
     const firstHash = optimizer.metadata.browserHash;
-    const entry = await server.transformRequest("/src/client-entry.js");
+    const entry = await server.transformRequest("/src/setup/client-entry.js");
     expect(entry.code).toContain("goribu_client.js");
     const page = await server.transformRequest("/src/routes/index.jsx");
     expect(page.code).toContain("react.js");

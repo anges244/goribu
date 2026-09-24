@@ -104,9 +104,10 @@ The production secrets upload includes `PUBLIC_*` keys if they are in
 `.env.production`. Storing a value as a Worker secret does not make it private
 in the browser bundle. Never give a private API key a `PUBLIC_` prefix.
 
-Cloudflare may also write local values into `dist/<worker>/.dev.vars` for local
-preview. Wrangler does not deploy that preview file. Build output can therefore
-contain local secrets; Goribu does not create its own copy in `.goribu/`.
+Cloudflare may also write local values into
+`.goribu/dist/<worker>/.dev.vars` for local preview. Wrangler does not deploy
+that preview file. Build output can therefore contain local secrets. Cloudflare
+owns this preview copy; Goribu adds no separate secrets file.
 
 ## Migrating from the older env loader
 

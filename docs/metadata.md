@@ -3,7 +3,7 @@
 Goribu keeps related page-boundary responsibilities explicit:
 
 - route modules describe page-specific metadata with `meta`;
-- `src/routes/_document.jsx` owns the HTML shell and places framework helpers;
+- `src/setup/_document.jsx` owns the HTML shell and places framework helpers;
 - `responseHeaders()` defines application-wide defaults for Worker responses;
 - `PUBLIC_*` values are the only environment values admitted to browser code.
 
@@ -99,7 +99,7 @@ the current request.
 ## Document
 
 The built-in shell works without configuration. To customize it, default-export
-`src/routes/_document.jsx`:
+`src/setup/_document.jsx`:
 
 ```jsx
 import { ClientEntry, Stylesheet } from "goribu";
@@ -115,7 +115,7 @@ export default function Document({ children, head, nonce }) {
       </head>
       <body>
         <div id="root">{children}</div>
-        <ClientEntry src="/src/client-entry.js" />
+        <ClientEntry src="/src/setup/client-entry.js" />
       </body>
     </html>
   );
@@ -133,7 +133,7 @@ not need to be forwarded to `ClientEntry`.
 
 ### Graph-owned styles
 
-Import CSS from `src/client-entry.js` or code reachable from the client route
+Import CSS from `src/setup/client-entry.js` or code reachable from the client route
 graph. In production, `<Stylesheet />` emits the hashed CSS resolved for the
 entry and current page. In development it emits a render-blocking stylesheet
 that follows the entry and current page's static CSS imports through Vite's

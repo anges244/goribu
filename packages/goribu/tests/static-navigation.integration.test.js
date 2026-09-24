@@ -14,7 +14,7 @@ let root, clientDir, harness, origin, manifest;
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "goribu-static-navigation-"));
-  clientDir = join(root, "dist/client");
+  clientDir = join(root, ".goribu/dist/client");
   cpSync(join(fixture, "src"), join(root, "src"), { recursive: true });
   cpSync(join(fixture, "package.json"), join(root, "package.json"));
   symlinkSync(join(fixture, "node_modules"), join(root, "node_modules"), "dir");
@@ -39,7 +39,7 @@ export default function Snapshot({ token, text }) { return <main data-id="__GORI
   expect(result.error, String(result.error)).toBeUndefined();
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
   manifest = JSON.parse(readFileSync(join(clientDir, "_goribu/navigation.json"), "utf8"));
-  harness = createTestHarness({ workers: [{ configPath: join(root, "dist/static_navigation_test/wrangler.json") }] });
+  harness = createTestHarness({ workers: [{ configPath: join(root, ".goribu/dist/static_navigation_test/wrangler.json") }] });
   const { url } = await harness.listen();
   origin = new URL(url).origin;
 }, 120000);

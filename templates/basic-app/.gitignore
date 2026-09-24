@@ -1,11 +1,33 @@
+# Dependencies and caches
 node_modules/
-dist/
+.pnpm-store/
+.vite/
+*.tsbuildinfo
+
+# Generated Goribu output and local Cloudflare state
 .goribu/
 goribu.wrangler.jsonc
 .wrangler/
+# Legacy build output
+dist/
+
+# Local environment files; commit only placeholder examples
 .env
 .env.*
 !.env.example
 .dev.vars
 .dev.vars.*
+
+# Test output and logs
+/coverage/
+/.nyc_output/
+*.log
+
+# OS metadata and editor temporary files
 .DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

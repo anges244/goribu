@@ -6,12 +6,12 @@ import { scanDocument } from "../src/routing/scan-document.js";
 
 const created = [];
 
-function makeRoutesDir() {
+function makeProject() {
   const root = mkdtempSync(join(tmpdir(), "goribu-document-"));
   created.push(root);
-  const routesDir = join(root, "routes");
-  mkdirSync(routesDir, { recursive: true });
-  return routesDir;
+  const setupDir = join(root, "src/setup");
+  mkdirSync(setupDir, { recursive: true });
+  return root;
 }
 
 afterEach(() => {
@@ -21,32 +21,50 @@ afterEach(() => {
 });
 
 describe("scanDocument", () => {
-  it("returns null when no _document exists", () => {
-    expect(scanDocument(makeRoutesDir())).toBeNull();
+  it("rejects legacy Documents even when a setup Document also exists", () => {
+    for (const extension of ["js", "jsx", "ts", "tsx"]) {
+      const root = makeProject();
+      mkdirSync(join(root, "src/routes"));
+      const legacy = join(root, `src/routes/_document.${extension}`);
+      writeFileSync(legacy, "export default 1;\n");
+      expect(() => scanDocument(root)).toThrow(/Move it to src\/setup\/_document/);
+      const current = join(root, `src/setup/_document.${extension}`);
+      writeFileSync(current, "export default 1;\n");
+      expect(() => scanDocument(root)).toThrow(/Keep only the setup copy/);
+      rmSync(legacy);
+      expect(scanDocument(root)).toBe(current);
+    }
   });
 
-  it("returns null when the routes directory is missing", () => {
-    expect(scanDocument(join(tmpdir(), "goribu-does-not-exist-xyz", "routes"))).toBeNull();
+  it("returns null when no _document exists", () => {
+    expect(scanDocument(makeProject())).toBeNull();
+  });
+
+  it("returns null when the setup directory is missing", () => {
+    expect(scanDocument(join(tmpdir(), "goribu-does-not-exist-xyz"))).toBeNull();
   });
 
   it("discovers a top-level _document module", () => {
-    const routesDir = makeRoutesDir();
-    const filePath = join(routesDir, "_document.jsx");
+    const root = makeProject();
+    const setupDir = join(root, "src/setup");
+    const filePath = join(setupDir, "_document.jsx");
     writeFileSync(filePath, "export default function Document() { return null; }\n");
-    expect(scanDocument(routesDir)).toBe(filePath);
+    expect(scanDocument(root)).toBe(filePath);
   });
 
   it("ignores a _document nested below the top level", () => {
-    const routesDir = makeRoutesDir();
-    mkdirSync(join(routesDir, "blog"), { recursive: true });
-    writeFileSync(join(routesDir, "blog", "_document.jsx"), "export default 1;\n");
-    expect(scanDocument(routesDir)).toBeNull();
+    const root = makeProject();
+    const setupDir = join(root, "src/setup");
+    mkdirSync(join(setupDir, "blog"), { recursive: true });
+    writeFileSync(join(setupDir, "blog", "_document.jsx"), "export default 1;\n");
+    expect(scanDocument(root)).toBeNull();
   });
 
   it("fails closed when two _document modules disagree on extension", () => {
-    const routesDir = makeRoutesDir();
-    writeFileSync(join(routesDir, "_document.js"), "export default 1;\n");
-    writeFileSync(join(routesDir, "_document.jsx"), "export default 1;\n");
-    expect(() => scanDocument(routesDir)).toThrow(/Multiple _document modules/);
+    const root = makeProject();
+    const setupDir = join(root, "src/setup");
+    writeFileSync(join(setupDir, "_document.js"), "export default 1;\n");
+    writeFileSync(join(setupDir, "_document.jsx"), "export default 1;\n");
+    expect(() => scanDocument(root)).toThrow(/Multiple _document modules/);
   });
 });

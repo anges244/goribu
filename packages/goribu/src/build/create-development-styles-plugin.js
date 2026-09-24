@@ -26,7 +26,7 @@ export function createDevelopmentStylesPlugin() {
 
         try {
           const routeId = url.searchParams.get("route");
-          const roots = ["/src/client-entry.js"];
+          const roots = ["/src/setup/client-entry.js"];
           if (routeId !== null) {
             const routes = generateManifest({
               projectRoot: server.config.root,

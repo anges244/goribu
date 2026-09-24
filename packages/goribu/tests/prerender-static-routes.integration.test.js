@@ -12,13 +12,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const cliPath = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
 const appDir = fileURLToPath(new URL("../../../fixtures/basic-app", import.meta.url));
-const clientDir = join(appDir, "dist", "client");
-const workerConfig = join(appDir, "dist", "goribu_basic_app", "wrangler.json");
+const clientDir = join(appDir, ".goribu", "dist", "client");
+const workerConfig = join(appDir, ".goribu", "dist", "goribu_basic_app", "wrangler.json");
 
 let build;
 
 function cleanBuildOutput() {
-  for (const dir of ["dist", ".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
+  for (const dir of [".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
     rmSync(join(appDir, dir), { recursive: true, force: true });
   }
 }

@@ -8,13 +8,14 @@ import { relative, sep } from "node:path";
  * scanner still owns what it selects from the deterministic Dirent snapshot.
  *
  * @param {string} routesDir
- * @param {{ caller: string, subject: string }} context
+ * @param {{ caller: string, subject: string, directoryLabel?: string }} context
  * @returns {import("node:fs").Dirent[]|null}
  */
 export function readScanRoot(routesDir, context) {
+  const directoryLabel = context.directoryLabel ?? "src/routes";
   if (typeof routesDir !== "string" || routesDir.length === 0) {
     throw new TypeError(
-      `[Goribu] ${context.caller}(routesDir) requires the path to your src/routes directory.`,
+      `[Goribu] ${context.caller}(routesDir) requires the path to your ${directoryLabel} directory.`,
     );
   }
 
@@ -29,7 +30,7 @@ export function readScanRoot(routesDir, context) {
   if (!routesDirStat.isDirectory()) {
     throw new Error(
       `[Goribu] Could not scan ${context.subject} because "${routesDir}" is not a directory. ` +
-        "Pass the path to your application's src/routes directory.",
+        `Use a directory at ${directoryLabel} in your application.`,
     );
   }
 

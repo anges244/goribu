@@ -103,7 +103,7 @@ describe("defineConfig", () => {
   it("rejects a Document field and points to _document.jsx", () => {
     expect(() =>
       defineConfig({ name: "app", compatibilityDate: "2024-01-01", Document: () => null }),
-    ).toThrow(/Document belongs in src\/routes\/_document\.jsx/);
+    ).toThrow(/Document belongs in src\/setup\/_document\.jsx/);
   });
 
   it("rejects getter-backed configuration fields", () => {

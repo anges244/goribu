@@ -50,13 +50,13 @@ afterEach(() => {
 describe("Vite client server-only boundary", () => {
   it("rejects a transitive server module imported through browser code", async () => {
     const root = makeProject({
-      "src/client-entry.js": 'import "./browser.js";\n',
+      "src/setup/client-entry.js": 'import "../browser.js";\n',
       "src/browser.js":
         'import { secret } from "./database.server.js";\nconsole.log(secret);\n',
       "src/database.server.js": 'export const secret = "DATABASE_SECRET";\n',
     });
 
-    await expect(buildClient(root, "src/client-entry.js")).rejects.toThrow(
+    await expect(buildClient(root, "src/setup/client-entry.js")).rejects.toThrow(
       /\[Goribu\].*database\.server\.js.*reached client code.*browser\.js.*Move the import into a route handler/s,
     );
   });
@@ -103,12 +103,12 @@ describe("Vite client server-only boundary", () => {
 
   it("rejects case-variant server module names", async () => {
     const root = makeProject({
-      "src/client-entry.js":
-        'import { secret } from "./Database.Server.JS";\nconsole.log(secret);\n',
+      "src/setup/client-entry.js":
+        'import { secret } from "../Database.Server.JS";\nconsole.log(secret);\n',
       "src/Database.Server.JS": 'export const secret = "CASE_SECRET";\n',
     });
 
-    await expect(buildClient(root, "src/client-entry.js")).rejects.toThrow(
+    await expect(buildClient(root, "src/setup/client-entry.js")).rejects.toThrow(
       /\[Goribu\].*Database\.Server\.JS.*reached client code.*client-entry\.js/s,
     );
   });

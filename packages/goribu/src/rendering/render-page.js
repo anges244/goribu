@@ -46,7 +46,7 @@ export async function renderPage(options) {
   if (typeof Document !== "function") {
     throw new TypeError(
       "[Goribu] Cannot render HTML because Document is not a React component. " +
-        "Default-export a component that accepts { children, head, nonce } from src/routes/_document.jsx, or remove _document.jsx to use the default.",
+        "Default-export a component that accepts { children, head, nonce } from src/setup/_document.jsx, or remove _document.jsx to use the default.",
     );
   }
 

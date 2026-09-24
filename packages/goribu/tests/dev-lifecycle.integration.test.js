@@ -194,13 +194,13 @@ it("refreshes special route selections and retries an invalid intermediate inven
 
   // Replacing special-file identities changes generated imports and selection;
   // ordinary edits within a selected module continue through Vite's HMR graph.
-  rmSync(join(routes, "_document.jsx"));
+  rmSync(join(session.root, "src/setup/_document.jsx"));
   rmSync(join(routes, "_404.jsx"));
   rmSync(join(routes, "_500.jsx"));
-  writeFileSync(join(routes, "_document.tsx"), `
+  writeFileSync(join(session.root, "src/setup/_document.tsx"), `
 import { ClientEntry } from "goribu";
 export default function Document({ children }) {
-  return <html><body data-document="reselected"><div id="root">{children}</div><ClientEntry src="/src/client-entry.js" /></body></html>;
+  return <html><body data-document="reselected"><div id="root">{children}</div><ClientEntry src="/src/setup/client-entry.js" /></body></html>;
 }
 `);
   writeFileSync(join(routes, "_404.tsx"), 'export default function Missing() { return <h1>Reselected missing page</h1>; }\n');
@@ -215,6 +215,25 @@ export default function Document({ children }) {
   rmSync(join(routes, "_middleware.js"));
   expect(await session.awaitGeneration(4)).toMatchObject({ port, listeners: 1 });
   expect((await session.get("/added", port)).headers.has("x-new-middleware")).toBe(false);
+
+  // Setup-only changes must update discovery without any route edits.
+  const document = join(session.root, "src/setup/_document.tsx");
+  const source = readFileSync(document, "utf8");
+  rmSync(document);
+  expect(await session.awaitGeneration(5)).toMatchObject({ port, listeners: 1 });
+  const fallback = await (await session.get("/added", port)).text();
+  expect(fallback).not.toContain('data-document="reselected"');
+  expect(fallback).toContain('src="/src/setup/client-entry.js"');
+
+  writeFileSync(document, source);
+  expect(await session.awaitGeneration(6)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/added", port)).text()).toContain('data-document="reselected"');
+
+  writeFileSync(document, source.replace("reselected", "edited"));
+  await session.waitFor(async () => {
+    expect(await (await session.get("/added", port)).text()).toContain('data-document="edited"');
+  });
+  expect(session.events).toHaveLength(6);
 }, 120000);
 
 it("picks up routes created while the replacement server is starting", async () => {

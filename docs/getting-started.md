@@ -59,11 +59,11 @@ controls and client navigation require JavaScript.
 
 Edit `src/routes/index.tsx` to change the home page, or
 `src/routes/hello.tsx` to change the greeting. Tailwind belongs to the app's
-Vite configuration, and `src/styles.css` scans the app's source. Use complete
+Vite configuration, and `src/styles/global.css` scans the app's source. Use complete
 class names rather than constructing names such as `bg-${color}-500`.
 
 The generated `AGENTS.md` explains the application conventions and maintainer
-ownership. Do not edit `node_modules/`, `dist/`, `.goribu/`, `.wrangler/`, or
+ownership. Do not edit `node_modules/`, `.goribu/`, `.wrangler/`, or
 the generated root `goribu.wrangler.jsonc`.
 
 ## 3. Build and review the target
@@ -149,3 +149,18 @@ reread does not prove a write succeeded across KV's distributed caches.
 
 **Next:** [The CLI](./cli.md) for the complete command reference, or
 [Routing](./routing.md) to add your own pages.
+
+## Upgrading the app layout
+
+Move `src/client-entry.js` to `src/setup/client-entry.js` and any custom
+`src/routes/_document.*` to `src/setup/_document.*`. Update the Document's
+`<ClientEntry src>` to `/src/setup/client-entry.js`, fix relative imports, and
+remove the old copies. The client entry remains required; the custom Document
+is optional. Error pages and middleware stay under routes.
+
+The starter's global CSS now lives at `src/styles/global.css`, imported as
+`../styles/global.css` from the client entry. If you move your CSS too, update
+relative asset paths and Tailwind's source base: use
+`@import "tailwindcss" source("../");` to scan all of `src/`. CSS placement is
+an app convention, not a framework requirement. Restart development after
+migrating, then run your type check (if present) and production build.

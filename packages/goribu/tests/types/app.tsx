@@ -98,7 +98,7 @@ export const meta: Meta<Props> = ({ props, url }) => ({
 const badMeta: Meta<Props> = async () => ({ title: "async" });
 
 function Document({ children, head, nonce }: DocumentProps) {
-  return <html><head><Stylesheet />{head}</head><body><div id="root">{children}</div><ClientEntry src="/src/client-entry.js" nonce={nonce} /></body></html>;
+  return <html><head><Stylesheet />{head}</head><body><div id="root">{children}</div><ClientEntry src="/src/setup/client-entry.js" nonce={nonce} /></body></html>;
 }
 const ui = <>
   <Link href="/hello" replace prefetch={false} onClick={(event) => event.preventDefault()}>Hello</Link>

@@ -71,5 +71,5 @@ provisions resources.
 - `src/routes/index.jsx`: accessible inputs and live calculation result.
 - `src/split-bill.js`: integer-cent calculation and euro formatting.
 - `src/routes/about.jsx`: static explanation and return link.
-- `src/routes/_document.jsx`, `src/client-entry.js`, `src/styles.css`: unchanged
+- `src/setup/_document.jsx`, `src/setup/client-entry.js`, `src/styles/global.css`: unchanged
   generated Document, hydration entry, and Tailwind setup.

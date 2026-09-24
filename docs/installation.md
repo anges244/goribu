@@ -97,15 +97,18 @@ export default function IndexPage() {
 Add more routes by adding files — `src/routes/about.jsx` serves `/about`,
 `src/routes/posts/[id].jsx` serves `/posts/:id`. See [routing.md](./routing.md).
 
-### `src/client-entry.js`
+### `src/setup/client-entry.js`
 
+This file is required, including when you use Goribu's default Document.
 The browser entry hydrates the initial page and installs navigation and forms:
 
 ```js
 import "goribu/client";
 ```
 
-Import global browser CSS here as well. Production fingerprints this graph;
+Import global browser CSS here as well, for example
+`import "../styles/global.css";`. Its path is an app convention, not a
+framework requirement. Production fingerprints this graph;
 development serves it through Vite. Browser-visible environment values must use
 the `PUBLIC_` prefix; see [metadata.md](./metadata.md#public-browser-environment).
 
@@ -119,3 +122,23 @@ Install dependencies with your package manager, then use the CLI:
 
 See [cli.md](./cli.md) for the full command reference and
 [deploy.md](./deploy.md) for deploying.
+
+## Migrating existing apps to `src/setup/`
+
+When upgrading from the previous layout:
+
+1. Move `src/client-entry.js` to `src/setup/client-entry.js`.
+2. Move your custom `src/routes/_document.*` to `src/setup/_document.*`, retaining
+   its extension. If you use the default Document, there is nothing to move.
+3. Set the custom Document's entry to
+   `<ClientEntry src="/src/setup/client-entry.js" nonce={nonce} />`.
+4. Update relative imports in both moved files. To adopt the starter's CSS layout,
+   move `src/styles.css` to `src/styles/global.css` and import it as
+   `../styles/global.css` from the client entry. Update CSS-relative asset paths
+   and Tailwind's source base too: the starter uses
+   `@import "tailwindcss" source("../");` to scan all of `src/`.
+
+Remove the old copies. Development and builds report migration errors for old
+setup locations instead of silently ignoring your Document. `_404`, `_500`, and
+folder-level `_middleware` remain under `src/routes/`. Restart development after
+migrating, then run your type check (if present) and production build.

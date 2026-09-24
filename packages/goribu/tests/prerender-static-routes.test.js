@@ -34,20 +34,20 @@ function writeRoute(root, relativePath, source = "export default function Page()
 // Give the orchestrator the deploy handoff it reads to locate the Worker entry
 // and the client asset directory, plus the directory itself.
 function writeBuildOutputs(root) {
-  mkdirSync(join(root, "dist", "client"), { recursive: true });
-  writeFile(root, "dist/client/_goribu/navigation.json", JSON.stringify({ buildId, routes: null }));
-  writeFile(root, join("dist", "app", "index.js"), "export default { fetch() {} };\n");
+  mkdirSync(join(root, ".goribu", "dist", "client"), { recursive: true });
+  writeFile(root, ".goribu/dist/client/_goribu/navigation.json", JSON.stringify({ buildId, routes: null }));
+  writeFile(root, join(".goribu", "dist", "app", "index.js"), "export default { fetch() {} };\n");
   writeFile(
     root,
-    join("dist", "app", "wrangler.json"),
+    join(".goribu", "dist", "app", "wrangler.json"),
     JSON.stringify({ main: "index.js", assets: { directory: "../client" } }),
   );
   writeFile(
     root,
     join(".wrangler", "deploy", "config.json"),
-    JSON.stringify({ configPath: "../../dist/app/wrangler.json" }),
+    JSON.stringify({ configPath: "../../.goribu/dist/app/wrangler.json" }),
   );
-  return join(root, "dist", "client");
+  return join(root, ".goribu", "dist", "client");
 }
 
 function manifestFor(root) {
@@ -129,7 +129,7 @@ describe("assertNoAssetRouteCollisions", () => {
   it("passes when no published HTML asset owns a route URL", () => {
     const root = makeProject();
     writeRoute(root, "about.jsx");
-    const clientDir = join(root, "dist", "client");
+    const clientDir = join(root, ".goribu", "dist", "client");
     mkdirSync(clientDir, { recursive: true });
     writeFileSync(join(clientDir, "standalone.html"), "<h1>ok</h1>");
 
@@ -141,7 +141,7 @@ describe("assertNoAssetRouteCollisions", () => {
   it("fails when a published HTML asset shadows a dynamic route", () => {
     const root = makeProject();
     writeRoute(root, "posts/[id].jsx");
-    const clientDir = join(root, "dist", "client");
+    const clientDir = join(root, ".goribu", "dist", "client");
     mkdirSync(join(clientDir, "posts"), { recursive: true });
     writeFileSync(join(clientDir, "posts", "hello.html"), "<h1>hand</h1>");
 
@@ -153,7 +153,7 @@ describe("assertNoAssetRouteCollisions", () => {
   it("catches a percent-encoded asset name that decodes onto a route", () => {
     const root = makeProject();
     writeRoute(root, "percent%2F.jsx");
-    const clientDir = join(root, "dist", "client");
+    const clientDir = join(root, ".goribu", "dist", "client");
     mkdirSync(clientDir, { recursive: true });
     writeFileSync(join(clientDir, "percent%2F.html"), "<h1>hand</h1>");
 
@@ -165,7 +165,7 @@ describe("assertNoAssetRouteCollisions", () => {
   it("ignores the reserved fingerprinted namespace", () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");
-    const clientDir = join(root, "dist", "client");
+    const clientDir = join(root, ".goribu", "dist", "client");
     mkdirSync(join(clientDir, "_goribu", "assets"), { recursive: true });
     writeFileSync(join(clientDir, "_goribu", "assets", "index.html"), "<h1>internal</h1>");
 
