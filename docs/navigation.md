@@ -160,6 +160,11 @@ A newer navigation invalidates older pending work. If an envelope, page module,
 metadata set, render, history operation, or redirect chain cannot be validated,
 Goribu loads the target document instead of committing partial client state.
 
+If recovery targets the URL already in the address bar, Goribu removes its
+fragment to force a document GET, preserving the query. A render failure after
+history has accepted the destination replaces that entry, so Back does not land
+on an extra failed transition. Ordinary fragment navigation is unchanged.
+
 ## Intent prefetch
 
 `<Link>` prefetches only destinations that would be eligible for enhancement:
@@ -191,7 +196,7 @@ check samples route identity, scroll coordinates, anchor geometry and code style
 on each frame. With Node 22+, pnpm and an already installed Chrome/Chromium:
 
 ```sh
-pnpm exec vitest run packages/goribu/tests/navigation-commit.test.js packages/goribu/tests/create-navigation-controller.test.js packages/goribu/tests/form.test.js --maxWorkers=1
+pnpm exec vitest run packages/goribu/tests/navigation-commit.test.js packages/goribu/tests/render-recovery.test.js packages/goribu/tests/create-navigation-controller.test.js packages/goribu/tests/form.test.js --maxWorkers=1
 node scripts/check-navigation-paint.js /path/to/chrome
 ```
 
@@ -199,5 +204,10 @@ The browser check bundles its fixture in memory and fulfills requests through
 Chrome's debugging protocol. It starts no application server, installs nothing,
 and writes its report to a temporary directory. It covers top and fragment
 navigation, history, replace, newer navigation, synchronous layout updates,
-and actual Form transitions without mutation replay. It supplements production
-integration tests; it does not exercise Worker or Static Assets delivery.
+and actual Form transitions without mutation replay. Recovery checks count
+document GETs and verify a new document, action queries, history behavior, Form
+removal before a layout error, and newer navigation taking precedence. They
+include a document error response: a
+GET can still fail, but recovery must not automatically repeat it. The browser
+check supplements production integration tests; it does not exercise Worker or
+Static Assets delivery.

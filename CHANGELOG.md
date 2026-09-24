@@ -11,6 +11,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Client render recovery forces a document GET for current-URL fragment targets
+  and replaces an already accepted navigation entry. Failed in-place Form
+  renders recover even when the response removes the Form before a layout
+  effect throws, using its action query and history preference without replaying
+  the mutation. Prior cancellation and newer navigation still take precedence.
+
 - Client navigation applies destination scrolling before paint, removing the
   flash at the previous page's scroll position. Fragment targets and history
   restoration use committed layout; superseded work cannot take over scrolling.

@@ -397,7 +397,10 @@ describe("Form", () => {
       "src/routes/current.jsx",
       { count: 2 },
       { title: "Count 2" },
-      { signal: expect.any(AbortSignal), version: 0 },
+      {
+        signal: expect.any(AbortSignal), version: 0,
+        recoveryUrl: `${window.location.origin}/operations/save`, replace: true,
+      },
     );
   });
 

@@ -245,34 +245,6 @@ it("keeps the restored page when Back supersedes a suspended destination", async
   expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith(8, 420);
 });
 
-it("rejects a failed page render and can commit a subsequent in-place render", async () => {
-  const failure = new Error("page render failed");
-  function ThrowingPage({ fail = false }) {
-    if (fail) throw failure;
-    return h(InitialPage);
-  }
-  const { controller } = await mount({ initial: ThrowingPage });
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  let rendered;
-  let settled = false;
-  try {
-    await act(async () => {
-      rendered = controller.renderInPlace("initial", { fail: true }, {});
-      void rendered.then(() => { settled = true; }, () => { settled = true; });
-    });
-  } catch (error) {
-    expect(error).toBe(failure);
-  }
-  expect(settled).toBe(true);
-  await expect(rendered).rejects.toThrow("page render failed");
-
-  await act(async () => {
-    rendered = controller.renderInPlace("initial", { fail: false }, {});
-  });
-  await expect(rendered).resolves.toBe(true);
-  expect(document.querySelector("main").dataset.page).toBe("initial");
-});
-
 it("reports an application render error after navigation has already completed", async () => {
   const failure = new Error("later application error");
   function InteractivePage() {

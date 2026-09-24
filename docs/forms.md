@@ -151,6 +151,17 @@ navigation, including an external `navigate()` from `onResult`.
 That GET uses the route's normal page data. Props returned only by the mutation,
 such as an unsaved preview, are not carried across the reload.
 
+If the page throws while a Form render response is being committed, the browser
+also requests the submitted action URL with GET. It preserves the action's query
+and the Form's `replace` preference, removes the fragment, and never repeats the
+mutation. Recovery continues if the response removes the submitting Form before
+a layout effect throws in the same commit. That removed Form does not run
+`reset` or `onResult`. Cancellation before the response starts committing,
+controller disposal, and newer navigation still prevent stale recovery. Errors
+after a completed render retain normal React error handling.
+The document GET can still return an error page; recovery does not repair the
+application error or retry automatically.
+
 Return `res.redirect()` when the user should move to another route, or
 `res.json()` when the current component should handle returned data without
 re-rendering the page.
@@ -183,6 +194,10 @@ already reached.
 Once a GET or redirect destination has been accepted into history, navigation
 finishes its render and scrolling even if replacing the page unmounts the
 submitting Form. A newer navigation still takes precedence.
+For an in-place render response, the controller owns completion and error
+recovery once React starts committing it, before the response can remove the
+Form. Removing the Form while the response is still loading or suspended
+cancels completion as usual; newer navigation and disposal can cancel throughout.
 
 ## Native behavior before hydration
 

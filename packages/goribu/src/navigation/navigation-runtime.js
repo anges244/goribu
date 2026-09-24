@@ -72,6 +72,8 @@ export function renderFormPage(routeId, props, metadata, options) {
   return activeRuntime.renderInPlace(routeId, props, metadata, {
     signal,
     version: options?.version,
+    recoveryUrl: options?.recoveryUrl,
+    replace: options?.replace,
   });
 }
 

@@ -92,6 +92,11 @@ A newer navigation invalidates older work. Any malformed envelope, missing page
 module, mismatched build, missing snapshot, failed render, unsafe redirect, or history failure falls back to the
 document rather than leaving partial client state.
 
+When recovery targets the URL already in the address bar, Goribu removes its
+fragment to force a document GET and preserves the query. If history already
+accepted the destination before its render failed, recovery replaces that entry
+instead of adding another one. Ordinary fragment navigation is unchanged.
+
 Goribu pushes one history entry by default (reusing the current entry for an
 exact-current-URL navigation), preserves application fields in
 `history.state`, restores scroll on back/forward, and scrolls new routes to a

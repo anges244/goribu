@@ -406,6 +406,8 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
         {
           signal,
           version: navigationVersion,
+          recoveryUrl: actionUrl.href,
+          replace,
         },
       );
     } catch {

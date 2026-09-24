@@ -58,6 +58,16 @@ The GET uses normal page data, so mutation-only props such as an unsaved preview
 do not survive the reload. A verified different pathname remains an error with
 a repair instruction and document fallback.
 
+If the page throws while committing a Form render response, the browser makes a
+GET of the submitted action URL even if the response removes the Form before
+a layout effect throws in the same commit. It preserves the action query and
+`replace`, removes the fragment, and never replays
+the mutation. The removed Form runs neither `reset` nor `onResult`. Cancellation
+before the response starts committing, disposal, and newer navigation still
+take precedence. Mutation-only props are lost, and the GET may return an error
+page; there is no automatic retry.
+Errors after a completed render retain normal React error handling.
+
 `await req.body()` returns an object for both form encodings: read `body.name`
 for a text field or `body.file` for an upload. Uploaded values are `File` objects;
 repeated names become arrays, and missing fields are absent. Validate the values
@@ -79,6 +89,10 @@ GET/POST submissions to cross-origin or non-HTTP actions, or non-`_self` targets
 Once a GET or redirect destination has been accepted into history, navigation
 finishes its render and scrolling even if replacing the page unmounts the
 submitting Form. A newer navigation still takes precedence.
+For an in-place render response, the controller owns completion and error
+recovery once React starts committing it, before the response can remove the
+Form. Removing the Form while the response is still loading or suspended
+cancels completion as usual; newer navigation and disposal can cancel throughout.
 
 ## Before hydration
 

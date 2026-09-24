@@ -170,10 +170,27 @@ export function createNavigationController(options) {
     }
 
     applyMeta(metadata);
-    return renderAndCommit(Page, props, browserWindow.location.href, {
+    const location = browserWindow.location.href;
+    const context = {
       version: expectedVersion,
       signal,
-    });
+    };
+    try {
+      return await renderAndCommit(Page, props, location, context);
+    } catch (error) {
+      if (disposed || context.version !== navigationVersion || context.signal?.aborted) return false;
+      // The failed page may already have unmounted its submitting Form. Own
+      // recovery here instead of asking that Form to complete another effect.
+      const destination = resolveHttpDestination(renderOptions?.recoveryUrl ?? location);
+      if (destination === null || destination.origin !== browserWindow.location.origin) {
+        throw new TypeError("[Goribu] Form render recovery requires a same-origin HTTP(S) document URL. Pass the submitted action URL through the Form runtime.");
+      }
+      destination.hash = "";
+      const replace = renderOptions?.replace === undefined ? true : resolveReplace(renderOptions);
+      logNavigationFailure(destination, error);
+      await hardLoad(destination.href, replace);
+      return false;
+    }
   }
 
   function beginNavigation() {
@@ -198,6 +215,14 @@ export function createNavigationController(options) {
       }
       function cancel() {
         if (cleanup()) resolve(false);
+      }
+      function onCommitStart() {
+        if (settled || disposed || context.version !== navigationVersion || context.signal?.aborted) return;
+        // React is committing the response. Its own Form removal must not
+        // cancel completion or recovery from a later error in this commit.
+        // Loading/suspended renders retain the signal; navigation/disposal win.
+        context.signal?.removeEventListener?.("abort", cancel);
+        context.signal = null;
       }
       function fail(error) {
         failed = true;
@@ -237,7 +262,7 @@ export function createNavigationController(options) {
       }
       try {
         pendingRender = render;
-        root.render(createLocatedPage(Page, props, location, onCommit, fail));
+        root.render(createLocatedPage(Page, props, location, onCommit, fail, onCommitStart));
       } catch (error) {
         fail(error);
       }
@@ -320,7 +345,9 @@ export function createNavigationController(options) {
       // Form: committing it can unmount that Form and abort its submission.
       // Newer navigation and disposal still supersede this commit. The Form's
       // signal continues to cancel work while fetching/loading, before here.
-      context = { ...context, signal: null };
+      // A fallback replaces this accepted entry, including after a push, so a
+      // failed render never leaves an extra broken entry in Back/Forward.
+      context = { ...context, historyMode: "replace", signal: null };
       applyMeta(target.envelope.meta);
       await renderAndCommit(target.Page, target.envelope.props, destination.href, context, () => {
         if (context.restoreScroll !== null) {
@@ -652,6 +679,18 @@ export function createNavigationController(options) {
   }
 
   async function hardLoad(target, replace) {
+    const destination = new URL(target, browserWindow.location.href);
+    const current = new URL(browserWindow.location.href);
+    if (
+      destination.origin === current.origin &&
+      hasSameRouteLocation(destination, current) &&
+      destination.href.includes("#")
+    ) {
+      // Assigning a current-document fragment does not fetch a document. This
+      // also handles a bare '#', for which URL.hash is empty. Keep the query.
+      destination.hash = "";
+      target = destination.href;
+    }
     if (replace && typeof browserWindow.location.replace === "function") {
       browserWindow.location.replace(target);
     } else if (typeof browserWindow.location.assign === "function") {

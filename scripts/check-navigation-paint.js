@@ -40,7 +40,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><title>Page a</ti
 const origin = "http://goribu-navigation.test";
 const task = await mkdtemp(join(tmpdir(), "goribu-navigation-paint-"));
 const profile = join(task, "chrome");
-const report = { task, scenarios: [], errors: [], mutations: 0 };
+const report = { task, scenarios: [], errors: [], mutations: 0, documents: [] };
 const chrome = spawn(executable, [
   "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`,
   "--no-first-run", "--no-default-browser-check", "--disable-background-networking",
@@ -81,18 +81,32 @@ async function evaluate(expression) {
   return result.result.value;
 }
 
-async function fulfill(requestId, body, contentType) {
+async function fulfill(requestId, body, contentType, responseCode = 200) {
   await send("Fetch.fulfillRequest", {
-    requestId, responseCode: 200,
+    requestId, responseCode,
     responseHeaders: [{ name: "Content-Type", value: contentType }],
     body: Buffer.from(body).toString("base64"),
   });
 }
 
-async function serve({ requestId, request }) {
+async function serve({ requestId, request, resourceType }) {
   const url = new URL(request.url);
   if (url.origin !== origin) return send("Fetch.failRequest", { requestId, errorReason: "BlockedByClient" });
+  if (resourceType === "Document") {
+    report.documents.push({ url: request.url, method: request.method });
+    if (url.pathname === "/broken" || (url.pathname === "/form-failure" && url.searchParams.get("from") === "mutation")) {
+      // A server error document must remain the final fallback, without client
+      // retries or replay of the mutation that produced the failed render.
+      return fulfill(requestId, `<!doctype html><title>Document recovery</title><main data-document-recovery>Server error document</main>`, "text/html", 500);
+    }
+  }
   if (url.pathname === "/fixture.js") return fulfill(requestId, script, "text/javascript");
+  if (url.pathname === "/form-failure" && request.method === "POST") {
+    report.mutations += 1;
+    const fail = url.searchParams.get("failure") === "layout" ? "layout" : true;
+    return fulfill(requestId, JSON.stringify({ type: "render", route: "form-failure", props: { fail }, meta: {} }),
+      "application/vnd.goribu.form+json");
+  }
   if (url.pathname === "/mutation") {
     assert.equal(request.method, "POST");
     report.mutations += 1;
@@ -137,6 +151,64 @@ async function inspect(label, destination, expected, action) {
   report.scenarios.push({ label, expected, frames, invalid });
   assert.equal(invalid.length, 0,
     `${label}: destination appeared at the wrong scroll position or without code styles: ${JSON.stringify(invalid)}`);
+}
+
+async function inspectRecovery(label, replace, form, newer = false, fragment = "#target") {
+  const previousDocument = await evaluate("performance.timeOrigin");
+  await send("Page.navigate", { url: `${origin}/a?case=${encodeURIComponent(label)}` });
+  await until(() => evaluate(`Boolean(window.navigationPaint) && performance.timeOrigin !== ${previousDocument}`).catch(() => false), `${label} fixture startup`);
+  const failureQuery = form === "layout" ? "&failure=layout" : "";
+  if (form) {
+    await evaluate(`navigationPaint.controller.navigate('/form-failure?from=document&replace=${replace}${failureQuery}#target')`);
+    await until(() => evaluate("Boolean(document.getElementById('failure-submit'))"), `${label} Form ready`);
+  }
+  const documentCount = report.documents.length;
+  const mutationCount = report.mutations;
+  const historyLength = await evaluate("history.length");
+  const beforeDocument = await evaluate("performance.timeOrigin");
+  const errorCount = report.errors.length;
+  await evaluate("sessionStorage.removeItem('navigationPaintResults')");
+  const destination = form ? `/form-failure?from=mutation&replace=${replace}${failureQuery}` : `/broken?replace=${replace}`;
+  const scenario = { label, replace, form, newer, destination };
+  report.scenarios.push(scenario);
+  try {
+    // Do not await an evaluation promise across document replacement: Chrome
+    // correctly destroys that execution context when the fallback succeeds.
+    await evaluate(form
+      ? `navigationPaint.newerOnUnmount = ${newer}; document.getElementById('failure-submit').click(); void 0`
+      : `void navigationPaint.controller.navigate('${destination}${fragment}', { replace: ${replace} })`);
+    await until(() => evaluate(newer
+      ? "document.querySelector('[data-page]')?.dataset.page === 'b'"
+      : "Boolean(document.querySelector('[data-document-recovery]'))").catch(() => false), label);
+    // Give accidental retries enough time to issue another document request.
+    await settleFrames();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    scenario.documents = report.documents.slice(documentCount);
+    scenario.mutations = report.mutations - mutationCount;
+    scenario.historyDelta = await evaluate("history.length") - historyLength;
+    scenario.errors = report.errors.slice(errorCount);
+    scenario.results = await evaluate("JSON.parse(sessionStorage.getItem('navigationPaintResults') ?? '[]')");
+    assert.equal(scenario.mutations, form ? 1 : 0, `${label}: mutation replay`);
+    assert.deepEqual(scenario.results, [], `${label}: a failed render must not report a false submission failure`);
+    assert.deepEqual(scenario.documents, newer ? [] : [{ url: `${origin}${destination}`, method: "GET" }],
+      `${label}: recovery must issue exactly one document GET with its query and no fragment`);
+    if (newer) {
+      assert.equal(await evaluate("location.pathname"), "/b");
+      assert.equal(await evaluate("performance.timeOrigin"), beforeDocument);
+    } else {
+      assert.notEqual(await evaluate("performance.timeOrigin"), beforeDocument, `${label}: document was not replaced`);
+      assert.equal(scenario.historyDelta, replace ? 0 : 1, `${label}: unexpected history entry`);
+      assert.equal(await evaluate("location.href"), `${origin}${destination}`, `${label}: recovery URL changed`);
+      assert.equal(await evaluate("typeof navigationPaint"), "undefined", `${label}: old page runtime survived`);
+    }
+    assert(scenario.errors.every((error) => error.includes("Intentional") && error.includes("recovery fixture failure")),
+      `${label}: unexpected browser error: ${scenario.errors.join("\n")}`);
+    scenario.passed = true;
+  } catch (error) {
+    scenario.failure = String(error);
+    scenario.documents = report.documents.slice(documentCount);
+    scenario.mutations = report.mutations - mutationCount;
+  }
 }
 
 try {
@@ -232,8 +304,20 @@ try {
     () => evaluate("document.getElementById('get-submit').click()"));
   assert.equal(report.mutations, 1, "the form mutation must not be replayed");
   assert.deepEqual(report.errors, []);
+  for (const replace of [false, true]) {
+    await inspectRecovery(`fragment render recovery (${replace ? "replace" : "push"})`, replace, false);
+    await inspectRecovery(`Form render recovery (${replace ? "replace" : "push"})`, replace, true);
+    await inspectRecovery(`newer navigation prevents Form recovery (${replace ? "replace" : "push"})`, replace, true, true);
+  }
+  await inspectRecovery("bare fragment render recovery", false, false, false, "#");
+  for (const replace of [false, true]) {
+    await inspectRecovery(`Form removal before layout failure (${replace ? "replace" : "push"})`, replace, "layout");
+  }
+  await inspectRecovery("newer navigation prevents layout failure recovery", false, "layout", true);
+  const failures = report.scenarios.filter((scenario) => scenario.failure);
+  assert.equal(failures.length, 0, failures.map(({ label, failure }) => `${label}: ${failure}`).join("\n"));
   report.passed = true;
-  console.log(`Passed ${report.scenarios.length} navigation paint scenarios without a server.`);
+  console.log(`Passed ${report.scenarios.length} navigation paint and recovery scenarios without a server.`);
 } catch (error) {
   report.failure = String(error);
   if (socket?.readyState === WebSocket.OPEN) {

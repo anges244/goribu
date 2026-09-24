@@ -4,8 +4,8 @@ import { Component, createContext, createElement as h, useLayoutEffect } from "r
 export const LocationContext = createContext(null);
 
 /** Render one route page under the location value observed by NavLink. */
-export function createLocatedPage(Page, props, location, onCommit, onError) {
-  return h(PageErrorBoundary, { onError },
+export function createLocatedPage(Page, props, location, onCommit, onError, onCommitStart) {
+  return h(PageErrorBoundary, { onError, onCommitStart },
     h(LocatedPage, { Page, pageProps: props, location, onCommit }),
   );
 }
@@ -22,6 +22,17 @@ class PageErrorBoundary extends Component {
 
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+
+  getSnapshotBeforeUpdate() {
+    // Take ownership before mutations can remove the submitting Form. Even a
+    // successful render can throw in a layout effect after that Form is gone.
+    this.props.onCommitStart?.();
+    return null;
+  }
+
+  componentDidUpdate() {
+    // React requires this lifecycle alongside getSnapshotBeforeUpdate.
   }
 
   componentDidCatch(error) {

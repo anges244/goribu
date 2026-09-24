@@ -682,8 +682,10 @@ describe("createNavigationController", () => {
       fetch: async () => jsonResponse({ kind: "render", routeId: "broken", props: {}, status: 200 }),
     });
     try {
-      await controller.navigate("/broken", { replace, signal: submission.signal });
-      expect(browser.location[replace ? "replace" : "assign"]).toHaveBeenCalledExactlyOnceWith("https://example.com/broken");
+      await controller.navigate("/broken?q=kept#target", { replace, signal: submission.signal });
+      expect(browser.history.pushState).toHaveBeenCalledTimes(replace ? 0 : 1);
+      expect(browser.location.replace).toHaveBeenCalledExactlyOnceWith("https://example.com/broken?q=kept");
+      expect(browser.location.assign).not.toHaveBeenCalled();
       expect(browser.window.scrollTo).not.toHaveBeenCalled();
       expect(log).toHaveBeenCalledWith(expect.stringContaining("full page load"), failure);
     } finally {
