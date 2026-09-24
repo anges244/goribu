@@ -11,6 +11,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Browser and Worker builds suppress dependency `"use client"` directive warnings
+  from libraries such as Base UI. Application directives and other diagnostics
+  still reach the configured log handlers; emitted bundles are unchanged.
+
 - The JavaScript starter preserves the canonical template's logical spacing and
   ships readable JSX instead of raw compiler output. Both starter variants use
   clearer spacing and wrap long JSX opening tags. Their agent guidance reinforces

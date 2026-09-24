@@ -73,6 +73,11 @@ arguments.
 goribu build
 ```
 
+Builds suppress the bundler's `MODULE_LEVEL_DIRECTIVE` warning for `"use client"`
+in `node_modules`: library React Server Component annotations do not control
+Goribu's rendering. Application directives, `"use server"`, and other diagnostics
+still reach your configured log handlers. This affects logging only, not bundles.
+
 ## `goribu cloudflare-login`
 
 Log in to Cloudflare through Goribu's installed Wrangler. Takes no arguments.

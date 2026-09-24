@@ -77,6 +77,22 @@ function createGoribuPlugin(navigationBuildId) {
     enforce: "pre",
     sharedDuringBuild: true,
 
+    // Library RSC annotations don't control Goribu's SSR or hydration. Filter
+    // only this known diagnostic; a plugin hook preserves app log handlers.
+    onLog(level, log) {
+      if (
+        level === "warn" &&
+        log.code === "MODULE_LEVEL_DIRECTIVE" &&
+        typeof log.id === "string" &&
+        !log.id.startsWith("\0") &&
+        /(?:^|[/\\])node_modules[/\\]/.test(log.id) &&
+        typeof log.message === "string" &&
+        log.message.includes('module level directive "use client" in ')
+      ) {
+        return false;
+      }
+    },
+
     // Runs before the Cloudflare plugin resolves configPath (this plugin is
     // enforce: "pre"), so the generated Worker entry and Wrangler config are on
     // disk by the time it reads them.
