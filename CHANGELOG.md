@@ -9,6 +9,15 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Development recovers when a missing local import is created, including native
+  TypeScript path aliases and omitted extensions, without editing its importer or
+  restarting the server.
+- Route additions, removals, renames, and structural export changes refresh Worker
+  dispatch and browser page loaders together through the existing controlled
+  restart. Ordinary component and CSS edits retain Vite's hot updates.
+
 ### Changed
 
 - **Behavior change:** production client navigation and prefetch to prerendered

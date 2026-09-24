@@ -1,7 +1,7 @@
 import { execFileSync, fork } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,7 @@ function startDevSession(initialOptions) {
   ) =>
     writeFileSync(join(root, "vite.config.js"), `
 import { goribu } from "goribu/vite";
+import { existsSync, writeFileSync } from "node:fs";
 export default {
   plugins: [${failingPlugin === "before" ? hostile : ""}goribu(), ${failingPlugin === "after" ? hostile : ""}{
     name: "observe-dev-listeners",
@@ -93,7 +94,7 @@ export default {
   };
   session.waitFor = (assertion, timeout = 30000) => vi.waitFor(() => {
     expect(session.output).not.toMatch(/Module runner already initialized|server restart failed/);
-    assertion();
+    return assertion();
   }, { timeout, interval: 100 }).catch((error) => {
     throw new Error(`${error.message}\nDev output:\n${session.output}`, { cause: error });
   });
@@ -126,6 +127,118 @@ afterEach(async () => {
   }
   sessions.clear();
 });
+
+it("refreshes Worker dispatch and browser loaders for route changes without restarting ordinary edits", async () => {
+  const session = startDevSession();
+  const { port } = await session.awaitGeneration(1);
+  const loaderSource = async () => (await session.get("/@id/__x00__virtual:goribu/client-pages", port)).text();
+  let path = join(session.root, "src/routes/fresh.jsx");
+  const page = 'export default function Page({ label = "Fresh page" }) { return <h1>{label}</h1>; }\n';
+
+  writeFileSync(path, page);
+  expect(await session.awaitGeneration(2)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/fresh", port)).text()).toContain("Fresh page");
+  expect(await loaderSource()).toContain("src/routes/fresh.jsx");
+
+  writeFileSync(path, page.replace("Fresh page", "Ordinary body edit"));
+  writeFileSync(join(session.root, "src/routes/_page.css"), "h1 { color: red; }\n");
+  await session.waitFor(async () => {
+    expect(await (await session.get("/fresh", port)).text()).toContain("Ordinary body edit");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(session.events).toHaveLength(2);
+
+  writeFileSync(path, `export const prerender = false;\n${page}`);
+  expect(await session.awaitGeneration(3)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/fresh", port)).text()).toMatch(/nonce="[^"]+"/);
+
+  writeFileSync(path, `${page}\nexport function GET(req, res) { return res.render({ label: "Fresh handler" }); }\n`);
+  expect(await session.awaitGeneration(4)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/fresh", port)).text()).toContain("Fresh handler");
+
+  const renamed = join(session.root, "src/routes/renamed.jsx");
+  renameSync(path, renamed);
+  path = renamed;
+  expect(await session.awaitGeneration(5)).toMatchObject({ port, listeners: 1 });
+  expect((await session.get("/fresh", port)).status).toBe(404);
+  expect(await (await session.get("/renamed", port)).text()).toContain("Fresh handler");
+  const renamedLoaders = await loaderSource();
+  expect(renamedLoaders).toContain("src/routes/renamed.jsx");
+  expect(renamedLoaders).not.toContain("src/routes/fresh.jsx");
+
+  writeFileSync(path, 'export function GET(req, res) { return res.json({ value: "API only" }); }\n');
+  expect(await session.awaitGeneration(6)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/renamed", port)).json()).toEqual({ value: "API only" });
+  expect(await loaderSource()).not.toContain("src/routes/renamed.jsx");
+
+  rmSync(path);
+  expect(await session.awaitGeneration(7)).toMatchObject({ port, listeners: 1 });
+  expect((await session.get("/renamed", port)).status).toBe(404);
+  expect(workerPids(session.child.pid)).toHaveLength(1);
+  expect([...session.workers].filter(isAlive)).toEqual(workerPids(session.child.pid));
+}, 120000);
+
+it("refreshes special route selections and retries an invalid intermediate inventory", async () => {
+  const session = startDevSession();
+  const { port } = await session.awaitGeneration(1);
+  const routes = join(session.root, "src/routes");
+  const conflict = join(routes, "index.tsx");
+  writeFileSync(conflict, 'export default function Page() { return <h1>Conflicting page</h1>; }\n');
+  await session.waitFor(() => expect(session.output).toContain("[Goribu] The development server did not restart and is still running"));
+  expect(session.events).toHaveLength(1);
+  expect((await session.get("/", port)).status).toBe(200);
+
+  renameSync(conflict, join(routes, "added.tsx"));
+  expect(await session.awaitGeneration(2)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/added", port)).text()).toContain("Conflicting page");
+
+  // Replacing special-file identities changes generated imports and selection;
+  // ordinary edits within a selected module continue through Vite's HMR graph.
+  rmSync(join(routes, "_document.jsx"));
+  rmSync(join(routes, "_404.jsx"));
+  rmSync(join(routes, "_500.jsx"));
+  writeFileSync(join(routes, "_document.tsx"), `
+import { ClientEntry } from "goribu";
+export default function Document({ children }) {
+  return <html><body data-document="reselected"><div id="root">{children}</div><ClientEntry src="/src/client-entry.js" /></body></html>;
+}
+`);
+  writeFileSync(join(routes, "_404.tsx"), 'export default function Missing() { return <h1>Reselected missing page</h1>; }\n');
+  writeFileSync(join(routes, "_500.tsx"), 'export default function Failed() { return <h1>Reselected failure page</h1>; }\n');
+  writeFileSync(join(routes, "_middleware.js"), 'export default function middleware(req, res) { res.headers({ "x-new-middleware": "yes" }); }\n');
+  expect(await session.awaitGeneration(3)).toMatchObject({ port, listeners: 1 });
+  const page = await session.get("/added", port);
+  expect(page.headers.get("x-new-middleware")).toBe("yes");
+  expect(await page.text()).toContain('data-document="reselected"');
+  expect(await (await session.get("/not-a-route", port)).text()).toContain("Reselected missing page");
+
+  rmSync(join(routes, "_middleware.js"));
+  expect(await session.awaitGeneration(4)).toMatchObject({ port, listeners: 1 });
+  expect((await session.get("/added", port)).headers.has("x-new-middleware")).toBe(false);
+}, 120000);
+
+it("picks up routes created while the replacement server is starting", async () => {
+  const session = startDevSession({ setup: `
+      const during = server.config.root + "/src/routes/during.jsx";
+      const late = server.config.root + "/src/routes/late.jsx";
+      if (existsSync(during) && !existsSync(late)) {
+        writeFileSync(late, 'export default function Late() { return <h1>Late route</h1>; }');
+      }
+  ` });
+  const { port } = await session.awaitGeneration(1);
+  writeFileSync(join(session.root, "src/routes/during.jsx"), 'export default function During() { return <h1>During route</h1>; }');
+  expect(await session.awaitGeneration(3)).toMatchObject({ port, listeners: 1 });
+  expect(await (await session.get("/during", port)).text()).toContain("During route");
+  expect(await (await session.get("/late", port)).text()).toContain("Late route");
+  const loaders = await (await session.get("/@id/__x00__virtual:goribu/client-pages", port)).text();
+  expect(loaders).toContain("src/routes/during.jsx");
+  expect(loaders).toContain("src/routes/late.jsx");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(session.events).toHaveLength(3);
+  expect(session.events.every((event) => event.port === port && event.listeners === 1)).toBe(true);
+  expect(workerPids(session.child.pid)).toHaveLength(1);
+  expect([...session.workers].filter(isAlive)).toEqual(workerPids(session.child.pid));
+}, 120000);
 
 it.each([".env", ".dev.vars"])("loads root %s bindings and reloads edits without leaking a generation", async (source) => {
   const session = startDevSession({ prepare(root) {

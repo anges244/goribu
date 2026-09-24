@@ -16,6 +16,8 @@ import { GENERATED_WRANGLER_CONFIG, writeWranglerConfig } from "./generate-wrang
 import { APPLICATION_CONFIG_FILENAME, loadApplicationConfig } from "./load-application-config.js";
 import { createDevelopmentStylesPlugin } from "./create-development-styles-plugin.js";
 import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
+import { createDevelopmentImportRecoveryPlugin } from "./development-import-recovery.js";
+import { createDevelopmentRouteInventoryPlugin } from "./development-route-inventory.js";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const CLIENT_ENTRY = "src/client-entry.js";
@@ -57,10 +59,12 @@ export function goribu(options) {
 
   const navigationBuildId = randomBytes(16).toString("hex");
   return [
+    createDevelopmentRouteInventoryPlugin(),
     createGoribuPlugin(navigationBuildId),
     createConfiguredClientBoundaryPlugin(),
     createConfiguredClientPageManifestPlugin(navigationBuildId),
     createConfiguredClientAssetsPlugin(navigationBuildId),
+    createDevelopmentImportRecoveryPlugin(),
     createDevelopmentStylesPlugin(),
     createDevelopmentLifecyclePlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),

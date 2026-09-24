@@ -41,6 +41,19 @@ reach your app. Goribu's generated `.goribu/` directory is not watched either,
 because Goribu writes it and a rewrite is not a reason to restart. The generated
 root `goribu.wrangler.jsonc` is excluded for the same reason.
 
+Adding, removing, or renaming routes also restarts the session so Worker routing
+and browser page loaders stay synchronized. Changes to a route's default export,
+HTTP handler exports, or `prerender` setting, and changes to selected middleware,
+Document, or error-page files use the same path. Rapid edits are checked again
+after startup. Ordinary component bodies and styles keep using Vite's hot updates.
+An invalid route edit is reported and retried when repaired; because source files
+still participate in HMR, the page can show an error until that repair.
+
+If an import points to a local file that does not exist yet, creating that file
+inside the watched project retries the affected server modules and reloads the
+browser. You do not need to edit the importing file again or restart the server.
+Resolution still follows Vite, including aliases and omitted extensions.
+
 Local Worker values come from root `.env` plus `.env.local`, or from `.dev.vars`
 which suppresses both. Edits reload the session. See
 [Environment variables](./environment-variables.md) for precedence and how
