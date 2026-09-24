@@ -29,6 +29,9 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Starter agent guidance explicitly calls for displaying form-level errors from
+  `res.invalid("message")` through `errors.root`.
+
 - **Behavior change:** production client navigation and prefetch to prerendered
   pages now use Static Assets without invoking the Worker. HTML and navigation
   data share one build-time snapshot, including explicitly prerendered GET props

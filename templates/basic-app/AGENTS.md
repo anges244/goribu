@@ -50,6 +50,8 @@ add routes and dependencies only for actual application needs.
   Use `res.render(props)` only for intentional rendering of the handler's own
   page; a separate action cannot use it to replace the submitting page at
   another pathname.
+- Render field errors and `errors.root`; `res.invalid("message")` sets the
+  form-level error.
 - Global CSS is imported from `src/client-entry.js`. Tailwind belongs to this
   app's Vite configuration, not to the framework. Write complete class names.
 - Only `PUBLIC_*` environment values are browser-visible. Never prefix secrets
