@@ -637,8 +637,8 @@ function canonicalPathname(pathname) {
 /**
  * Resolve the same-page render context for an enhanced form request. res.render()
  * may re-render only the page the form is on, proven from a parseable same-origin
- * Referer whose pathname equals the action pathname; the response builder rejects
- * res.render() otherwise and teaches res.redirect()/res.json() instead.
+ * Referer whose pathname equals the action pathname. Unavailable context asks
+ * for a document GET; a verified different pathname remains a developer error.
  */
 function resolveFormRenderContext(request) {
   const requestUrl = new URL(request.url);
@@ -657,7 +657,7 @@ function resolveFormRenderContext(request) {
         displayedUrl = refererUrl.href;
       }
     } catch {
-      // res.render() fails closed when the displayed pathname cannot be proven.
+      // res.render() requests a document GET when the pathname cannot be proven.
     }
   }
 

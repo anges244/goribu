@@ -295,6 +295,28 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
     if (!mountedRef.current || signal.aborted) return;
     if (abandonIfStale(navigationVersion, signal)) return;
 
+    if (envelope.type === "reload") {
+      settle({
+        signal,
+        navigationVersion,
+        errors: null,
+        data: null,
+        invalidErrors: null,
+        shouldReset: false,
+        action: actionUrl.href,
+        result: { ok: true, response },
+        afterResult: () => {
+          if (abandonIfStale(navigationVersion, signal)) return;
+          // A fragment-only navigation can leave the old document in place.
+          // Recovery must request the action again, including its query.
+          const documentUrl = new URL(actionUrl);
+          documentUrl.hash = "";
+          return loadDocument(documentUrl.href, { replace });
+        },
+      });
+      return;
+    }
+
     if (envelope.type === "json") {
       if (response.ok) {
         settle({

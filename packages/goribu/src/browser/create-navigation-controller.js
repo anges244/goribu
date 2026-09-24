@@ -93,12 +93,13 @@ export function createNavigationController(options) {
         `[Goribu] Cannot navigate to ${JSON.stringify(target)} because it is not a valid HTTP(S) URL or path. Pass a same-origin application path or an HTTP(S) document URL.`,
       );
     }
+    // External document loads also supersede pending page and Form work.
+    const version = ++navigationVersion;
     if (destination.origin !== browserWindow.location.origin) {
       if (signal?.aborted === true) return;
       return hardLoad(destination.href, replace);
     }
 
-    const version = ++navigationVersion;
     if (
       isSameDocumentHash(destination) &&
       hasSameRouteLocation(destination, renderedUrl)

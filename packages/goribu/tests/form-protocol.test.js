@@ -286,6 +286,37 @@ describe("enhanced form negotiation", () => {
     });
   });
 
+  it("requests a document GET when the render Referer is unavailable, preserving mutation effects", async () => {
+    const mutate = vi.fn((req, res) => {
+      req.cookies.set("saved", "yes", { path: "/" });
+      return res.headers({ "x-saved": "yes", etag: '"discard"' }).render({ draft: "private preview" });
+    });
+    const meta = vi.fn(() => { throw new Error("Reload must not resolve render metadata"); });
+    const app = createApp({
+      manifest: [routes[0]],
+      errorPages: { notFound: null, serverError: null },
+      documentId: null,
+      modules: new Map([[FEEDBACK_ID, { default: FeedbackPage, POST: mutate, meta }]]),
+      mode: "production",
+    });
+
+    for (const referer of [undefined, "", "not a URL", "https://other.example/feedback", "file:///feedback"]) {
+      mutate.mockClear();
+      const response = await formRequest(app, "/feedback?view=full", { referer });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(FORM_MEDIA_TYPE);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("vary")).toBe("Accept");
+      expect(response.headers.get("set-cookie")).toContain("saved=yes");
+      expect(response.headers.get("x-saved")).toBe("yes");
+      expect(response.headers.get("etag")).toBeNull();
+      expect(await response.json()).toEqual({ type: "reload" });
+      expect(mutate).toHaveBeenCalledOnce();
+      expect(meta).not.toHaveBeenCalled();
+    }
+  });
+
   it("fails closed to the error boundary when a form render crosses pages", async () => {
     const app = createFormApp();
     const response = await formRequest(app, "/cross", {

@@ -47,10 +47,16 @@ Error object keys match control names; a string becomes `errors.root`. The
 application renders error text and owns `aria-describedby`. Goribu applies and
 clears its own `aria-invalid` markers.
 
-`res.render()` is allowed only when the action pathname matches the page already
-displayed. Query strings may differ. A verified same-origin `Referer` proves the
-relationship; if it cannot be proven, Goribu recovers through a full document
-GET and never repeats the mutation.
+`res.render()` can update the page in place only when a same-origin `Referer`
+identifies the action pathname; query strings may differ. A missing or unusable
+Referer requests a full document GET of the action URL without generating a 500.
+Cookies and handler headers are preserved, and the mutation is never repeated.
+Recovery preserves the query and removes the fragment to force a document request.
+A newer navigation, including an external `navigate()` from `onResult`, takes
+precedence over recovery.
+The GET uses normal page data, so mutation-only props such as an unsaved preview
+do not survive the reload. A verified different pathname remains an error with
+a repair instruction and document fallback.
 
 ## Submission behavior
 

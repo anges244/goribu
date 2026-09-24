@@ -126,15 +126,24 @@ selects the narrowest correct encoding.
 
 ## Same-page render safety
 
-`res.render(props)` is allowed for an enhanced form only when the action pathname
-matches the page already displayed. Rendering a different route without changing
-the address bar would create an incoherent page/URL state, so Goribu throws with
-a repair instruction instead.
+An enhanced form can apply `res.render(props)` in place only when the action
+pathname matches the page already displayed. A valid same-origin `Referer` that
+identifies a different pathname still causes an error with a repair instruction:
+rendering another route without changing the address bar would leave the page
+and URL inconsistent. The browser recovers through a document GET.
 
 The browser proves the displayed page through a same-origin `Referer`. Query
-strings may differ and the displayed query is retained for metadata. If the
-relationship cannot be proven, Goribu performs a full document GET after the
-response; it never replays the mutation.
+strings may differ and the displayed query is retained for metadata. A missing,
+malformed, or non-same-origin Referer instead produces an explicit document-reload
+response, without a framework-generated 500. Cookies and headers from the handler
+are preserved. The browser loads the action URL with GET, preserving its query
+and removing its fragment so the browser cannot treat recovery as an in-page
+anchor change. It never replays the mutation. Before leaving the page, the
+fallback does not apply Form's `reset` or invent a submission failure, and it yields to a newer
+navigation, including an external `navigate()` from `onResult`.
+
+That GET uses the route's normal page data. Props returned only by the mutation,
+such as an unsaved preview, are not carried across the reload.
 
 Return `res.redirect()` when the user should move to another route, or
 `res.json()` when the current component should handle returned data without

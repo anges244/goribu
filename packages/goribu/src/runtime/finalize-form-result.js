@@ -3,7 +3,7 @@ import { isResponseResult } from "./create-response.js";
 import { markProtocolResponse } from "./protocol-response.js";
 
 const BODYLESS_STATUSES = new Set([204, 205, 304]);
-const FORM_RESULT_KINDS = new Set(["json", "invalid", "redirect", "render"]);
+const FORM_RESULT_KINDS = new Set(["json", "invalid", "redirect", "render", "form-reload"]);
 const REPRESENTATION_HEADERS = Object.freeze([
   "accept-ranges",
   "cdn-cache-control",
@@ -45,7 +45,9 @@ export function finalizeFormResult(result, options) {
   }
 
   let payload;
-  if (result.kind === "json") {
+  if (result.kind === "form-reload") {
+    payload = { type: "reload" };
+  } else if (result.kind === "json") {
     payload = { type: "json", data: JSON.parse(result.body) };
   } else if (result.kind === "invalid") {
     payload = { type: "invalid", errors: JSON.parse(result.body).errors };

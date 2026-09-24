@@ -11,6 +11,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Form renders with a missing or unusable Referer now request a document GET
+  instead of generating a 500. Mutation cookies and headers are preserved;
+  recovery never repeats the mutation. Verified cross-page renders still fail.
+
 - Browser and Worker builds suppress dependency `"use client"` directive warnings
   from libraries such as Base UI. Application directives and other diagnostics
   still reach the configured log handlers; emitted bundles are unchanged.

@@ -30,6 +30,10 @@ export async function readFormEnvelope(response) {
     throw invalidEnvelope("a type-tagged object");
   }
 
+  if (payload.type === "reload") {
+    return Object.freeze({ type: "reload" });
+  }
+
   if (payload.type === "json") {
     if (!Object.hasOwn(payload, "data")) {
       throw invalidEnvelope('JSON data shaped as { type: "json", data }');
@@ -79,7 +83,7 @@ export async function readFormEnvelope(response) {
     });
   }
 
-  throw invalidEnvelope('type "json", "invalid", "redirect", or "render"');
+  throw invalidEnvelope('type "json", "invalid", "redirect", "render", or "reload"');
 }
 
 function invalidEnvelope(expectation) {

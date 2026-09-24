@@ -56,7 +56,9 @@ it.each(["POST", "PUT", "PATCH", "DELETE"])("dispatches real %s handlers with ev
   async function submit(fields, { accept = FORM_MEDIA_TYPE, multipart = false, referer = action.href } = {}) {
     const body = multipart ? new FormData() : new URLSearchParams();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
-    return fetch(action, { method, body, headers: { accept, referer }, redirect: "manual" });
+    const headers = { accept };
+    if (referer !== null) headers.referer = referer;
+    return fetch(action, { method, body, headers, redirect: "manual" });
   }
 
   for (const multipart of [false, true]) {
@@ -82,6 +84,14 @@ it.each(["POST", "PUT", "PATCH", "DELETE"])("dispatches real %s handlers with ev
 
   const preview = await submit({ name: "Ada", intent: "preview" });
   expect(await preview.json()).toMatchObject({ type: "render", route: "src/routes/forms.jsx", props: { message: `${method}: Ada` } });
+
+  const unverifiedPreview = await submit({ name: "Ada", intent: "preview" }, { referer: null });
+  expect(unverifiedPreview.status).toBe(200);
+  expect(unverifiedPreview.headers.get("content-type")).toBe(FORM_MEDIA_TYPE);
+  expect(unverifiedPreview.headers.get("set-cookie")).toContain(`last_method=${method}`);
+  expect(unverifiedPreview.headers.get("x-form-handler")).toBe(method);
+  expect(await unverifiedPreview.json()).toEqual({ type: "reload" });
+
   const unsafePreview = await submit({ name: "Ada", intent: "preview" }, { referer: new URL("/greet", origin).href });
   expect(unsafePreview.status).toBe(500);
   expect(unsafePreview.headers.get("content-type")).not.toBe(FORM_MEDIA_TYPE);

@@ -4,6 +4,7 @@ import { FORM_MEDIA_TYPE } from "../src/forms/form-protocol.js";
 
 describe("readFormEnvelope", () => {
   it.each([
+    [{ type: "reload" }, { type: "reload" }],
     [
       { type: "json", data: { saved: true } },
       { type: "json", data: { saved: true } },

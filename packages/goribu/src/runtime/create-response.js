@@ -129,6 +129,15 @@ export function createResponse(options) {
       assertFormRenderPath(formRenderContext);
       assertPropsObject(props, "res.render(props)");
       assertSerializableProps(props, "res.render(props)");
+      if (formRenderContext?.displayedPathname === null) {
+        // The mutation has already run. Recover through GET without exposing
+        // unverified in-place props or treating missing browser context as 500.
+        return terminal({
+          kind: "form-reload",
+          status,
+          headers: snapshotHeaders(pendingHeaders),
+        });
+      }
       return terminal({
         kind: "render",
         status,
@@ -323,8 +332,7 @@ function assertFormRenderPath(context) {
   const displayedPathname = context?.displayedPathname;
   if (
     typeof actionPathname === "string" &&
-    typeof displayedPathname === "string" &&
-    actionPathname === displayedPathname
+    (displayedPathname === null || actionPathname === displayedPathname)
   ) {
     return;
   }

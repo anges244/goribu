@@ -6,7 +6,8 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Form } from "../src/forms/form.js";
 import { FORM_FAILURE_MESSAGE, FORM_MEDIA_TYPE } from "../src/forms/form-protocol.js";
-import { installNavigationRuntime } from "../src/navigation/navigation-runtime.js";
+import { createNavigationController } from "../src/browser/create-navigation-controller.js";
+import { navigate, installNavigationRuntime } from "../src/navigation/navigation-runtime.js";
 
 let mountedRoots;
 let uninstallRuntime;
@@ -493,6 +494,107 @@ describe("Form", () => {
       ok: false,
       errors: { root: FORM_FAILURE_MESSAGE },
     });
+  });
+
+  it.each([false, true])("handles explicit document reload without mutation replay (callback navigates: %s)", async (callbackNavigates) => {
+    let navigationVersion = 0;
+    const runtime = installRuntime({ captureVersion: () => navigationVersion });
+    const origin = window.location.origin;
+    const response = formResponse({ type: "reload" });
+    const fetch = vi.fn(async () => response);
+    vi.stubGlobal("fetch", fetch);
+    const onResult = vi.fn(() => {
+      if (callbackNavigates) navigationVersion += 1;
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { container } = await mount(
+      h(Form, { method: "put", action: "/current?view=updated", reset: true, replace: true, onResult },
+        h("input", { name: "title", defaultValue: "initial" }),
+        h("button", null, "Save")),
+    );
+    const form = container.querySelector("form");
+    form.elements.namedItem("title").value = "edited";
+    const assign = vi.fn();
+    const replace = vi.fn();
+    vi.stubGlobal("window", {
+      location: { href: `${origin}/current?view=full`, assign, replace },
+    });
+
+    await submit(form, container.querySelector("button"));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0][1].method).toBe("PUT");
+    if (callbackNavigates) {
+      expect(replace).not.toHaveBeenCalled();
+    } else {
+      expect(replace).toHaveBeenCalledExactlyOnceWith(`${origin}/current?view=updated`);
+    }
+    expect(assign).not.toHaveBeenCalled();
+    expect(runtime.navigate).not.toHaveBeenCalled();
+    expect(runtime.renderInPlace).not.toHaveBeenCalled();
+    expect(onResult).toHaveBeenCalledExactlyOnceWith({ ok: true, response });
+    expect(form.elements.namedItem("title").value).toBe("edited");
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("removes fragments from recovery GET targets (replace: %s)", async (replace) => {
+    installRuntime();
+    const origin = window.location.origin;
+    const assign = vi.fn();
+    const replaceLocation = vi.fn();
+    const fetch = vi.fn(async () => formResponse({ type: "reload" }));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("window", {
+      location: { href: `${origin}/current?view=full#form`, assign, replace: replaceLocation },
+    });
+
+    for (const action of [undefined, "/current?view=full#other", "/current?view=full#"]) {
+      const { container } = await mount(
+        h(Form, { method: "post", action, replace }, h("button", null, "Save")),
+      );
+      await submit(container.querySelector("form"), container.querySelector("button"));
+    }
+
+    const load = replace ? replaceLocation : assign;
+    expect(load.mock.calls).toEqual(Array(3).fill([`${origin}/current?view=full`]));
+    expect(replace ? assign : replaceLocation).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([false, true])("lets external onResult navigation own the document (replace: %s)", async (replace) => {
+    const browserWindow = {
+      location: { href: window.location.href, origin: window.location.origin, assign: vi.fn(), replace: vi.fn() },
+      history: window.history,
+      document,
+      addEventListener: window.addEventListener.bind(window),
+      removeEventListener: window.removeEventListener.bind(window),
+      setTimeout, clearTimeout,
+      scrollTo: vi.fn(),
+      scrollX: 0, scrollY: 0,
+    };
+    const fetch = vi.fn(async () => formResponse({ type: "reload" }));
+    vi.stubGlobal("fetch", fetch);
+    const controller = createNavigationController({
+      root: { render: vi.fn() }, pageLoaders: {}, browserWindow, fetch,
+    });
+    uninstallRuntime = installNavigationRuntime(controller);
+    try {
+      const { container } = await mount(
+        h(Form, {
+          method: "post", replace,
+          onResult: () => navigate("https://external.example/done", { replace }),
+        }, h("button", null, "Save")),
+      );
+      vi.stubGlobal("window", browserWindow);
+      await submit(container.querySelector("form"), container.querySelector("button"));
+
+      const load = replace ? browserWindow.location.replace : browserWindow.location.assign;
+      expect(load).toHaveBeenCalledExactlyOnceWith("https://external.example/done");
+      expect(replace ? browserWindow.location.assign : browserWindow.location.replace).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      controller.dispose();
+    }
   });
 
   it("loads an ordinary response document without reporting a protocol error or replaying the mutation", async () => {
