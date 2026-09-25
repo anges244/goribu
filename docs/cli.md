@@ -54,6 +54,11 @@ inside the watched project retries the affected server modules and reloads the
 browser. You do not need to edit the importing file again or restart the server.
 Resolution still follows Vite, including aliases and omitted extensions.
 
+Development styles load before hydration through `/_goribu/dev-styles.css`.
+Repeated requests reuse discovered imports from unchanged Vite transforms;
+edited imports are inspected again. Stylesheet contents and hot updates remain
+owned by Vite, so this optimization needs no application configuration.
+
 Local Worker values come from root `.env` plus `.env.local`, or from `.dev.vars`
 which suppresses both. Edits reload the session. See
 [Environment variables](./environment-variables.md) for precedence and how

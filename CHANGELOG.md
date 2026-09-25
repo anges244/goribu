@@ -9,6 +9,13 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Development stylesheet discovery reuses parsed import lists from unchanged
+  Vite transforms and the configured page inventory, avoiding repeated JavaScript
+  parsing and route scans on reload. Edited imports still use Vite's current
+  transforms; obsolete cache entries can be garbage-collected.
+
 ## [0.8.1] - 2026-09-25
 
 ### Fixed

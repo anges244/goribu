@@ -75,3 +75,30 @@ it("uses the current Vite graph after a stylesheet import changes and rejects un
   url.searchParams.set("route", "../../private.js");
   expect((await fetch(url)).status).toBe(404);
 }, 10000);
+
+it("refreshes nested imports and recovers deleted dependencies after the discovery cache is warm", async () => {
+  const url = new URL("/_goribu/dev-styles.css?route=src%2Froutes%2Findex.jsx", origin);
+  const entry = join(root, "src/setup/client-entry.js");
+  const nested = join(root, "src/nested-styles.js");
+  writeFileSync(nested, 'export * from "./leaf-styles.js";\n');
+  writeFileSync(join(root, "src/leaf-styles.js"), 'import "./styles.css";\n');
+  writeFileSync(entry, 'import "goribu/client";\nimport "../nested-styles.js";\n');
+  async function expectStyles(expected, absent) {
+    await vi.waitFor(async () => {
+      const response = await fetch(url);
+      expect(response.status).toBe(200);
+      const css = await response.text();
+      expect(css).toContain(expected);
+      if (absent) expect(css).not.toContain(absent);
+    }, { timeout: 10000 });
+  }
+  await expectStyles("/src/styles.css?");
+  const warm = await Promise.all(Array.from({ length: 10 }, async () => (await fetch(url)).text()));
+  expect(new Set(warm).size).toBe(1);
+  writeFileSync(join(root, "src/leaf-styles.js"), 'import "./replacement.css";\n');
+  await expectStyles("/src/replacement.css?", "/src/styles.css?");
+  rmSync(join(root, "src/leaf-styles.js"));
+  await vi.waitFor(async () => expect((await fetch(url)).status).toBe(500), { timeout: 10000 });
+  writeFileSync(join(root, "src/leaf-styles.js"), 'import "./styles.css";\n');
+  await expectStyles("/src/styles.css?", "/src/replacement.css?");
+}, 30000);

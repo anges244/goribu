@@ -59,14 +59,15 @@ export function goribu(options) {
   }
 
   const navigationBuildId = randomBytes(16).toString("hex");
+  const developmentPageIds = new Set();
   return [
     createDevelopmentRouteInventoryPlugin(),
     createGoribuPlugin(navigationBuildId),
     createConfiguredClientBoundaryPlugin(),
-    createConfiguredClientPageManifestPlugin(navigationBuildId),
+    createConfiguredClientPageManifestPlugin(navigationBuildId, developmentPageIds),
     createConfiguredClientAssetsPlugin(navigationBuildId),
     createDevelopmentImportRecoveryPlugin(),
-    createDevelopmentStylesPlugin(),
+    createDevelopmentStylesPlugin(developmentPageIds),
     createDevelopmentLifecyclePlugin(),
     ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
     createBuildOutputGuardPlugin(),
@@ -328,7 +329,7 @@ function requireClientBoundary(boundary) {
  * imports this virtual module; preparing it here keeps Worker and browser route
  * IDs aligned without introducing a second scan convention.
  */
-function createConfiguredClientPageManifestPlugin(navigationBuildId) {
+function createConfiguredClientPageManifestPlugin(navigationBuildId, developmentPageIds) {
   let pageManifest;
   let production = false;
 
@@ -344,6 +345,12 @@ function createConfiguredClientPageManifestPlugin(navigationBuildId) {
         projectRoot: root,
         routesDir: resolve(root, "src/routes"),
       });
+      developmentPageIds.clear();
+      if (!production) {
+        for (const route of manifest) {
+          if (route.hasDefaultExport) developmentPageIds.add(route.id);
+        }
+      }
       pageManifest = createClientPageManifestPlugin(manifest);
     },
 

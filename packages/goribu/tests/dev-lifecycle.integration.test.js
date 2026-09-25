@@ -132,6 +132,7 @@ it("refreshes Worker dispatch and browser loaders for route changes without rest
   const session = startDevSession();
   const { port } = await session.awaitGeneration(1);
   const loaderSource = async () => (await session.get("/@id/__x00__virtual:goribu/client-pages", port)).text();
+  const styles = (name) => session.get(`/_goribu/dev-styles.css?route=src/routes/${name}.jsx`, port);
   let path = join(session.root, "src/routes/fresh.jsx");
   const page = 'export default function Page({ label = "Fresh page" }) { return <h1>{label}</h1>; }\n';
 
@@ -139,6 +140,7 @@ it("refreshes Worker dispatch and browser loaders for route changes without rest
   expect(await session.awaitGeneration(2)).toMatchObject({ port, listeners: 1 });
   expect(await (await session.get("/fresh", port)).text()).toContain("Fresh page");
   expect(await loaderSource()).toContain("src/routes/fresh.jsx");
+  expect((await styles("fresh")).status).toBe(200);
 
   writeFileSync(path, page.replace("Fresh page", "Ordinary body edit"));
   writeFileSync(join(session.root, "src/routes/_page.css"), "h1 { color: red; }\n");
@@ -165,11 +167,14 @@ it("refreshes Worker dispatch and browser loaders for route changes without rest
   const renamedLoaders = await loaderSource();
   expect(renamedLoaders).toContain("src/routes/renamed.jsx");
   expect(renamedLoaders).not.toContain("src/routes/fresh.jsx");
+  expect((await styles("fresh")).status).toBe(404);
+  expect((await styles("renamed")).status).toBe(200);
 
   writeFileSync(path, 'export function GET(req, res) { return res.json({ value: "API only" }); }\n');
   expect(await session.awaitGeneration(6)).toMatchObject({ port, listeners: 1 });
   expect(await (await session.get("/renamed", port)).json()).toEqual({ value: "API only" });
   expect(await loaderSource()).not.toContain("src/routes/renamed.jsx");
+  expect((await styles("renamed")).status).toBe(404);
 
   rmSync(path);
   expect(await session.awaitGeneration(7)).toMatchObject({ port, listeners: 1 });
