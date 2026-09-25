@@ -2,6 +2,87 @@ import { describe, expect, it } from "vitest";
 import { analyzeRouteModule } from "../src/routing/analyze-route-module.js";
 
 describe("analyzeRouteModule", () => {
+  it("rejects incorrectly cased runtime handler exports with the filename and repair", () => {
+    const cases = [
+      ['export function post() {}', 'post', 'POST'],
+      ['export const Get = () => {};', 'Get', 'GET'],
+      ['const save = () => {}; export { save as put };', 'put', 'PUT'],
+      ['export { save as pAtCh } from "./actions.js";', 'pAtCh', 'PATCH'],
+      ['export { remove as "delete" } from "./actions.js";', 'delete', 'DELETE'],
+      ['export class Head {}', 'Head', 'HEAD'],
+      ['export const { nested: [Options = () => {}] } = source;', 'Options', 'OPTIONS'],
+      ['export const [post] = actions;', 'post', 'POST'],
+      ['export const { ...post } = actions;', 'post', 'POST'],
+      ['export enum post { Save }', 'post', 'POST'],
+      ['export * as post from "./actions.js";', 'post', 'POST'],
+      ['export function POST() {} export function post() {}', 'post', 'POST'],
+    ];
+    for (const [source, name, method] of cases) {
+      // A page used to let the typo silently become a static route with no handler.
+      expect(() => analyzeRouteModule(
+        `export default function Page() { return null; } ${source}`,
+        "src/routes/items.tsx",
+      ), source).toThrow(
+        `[Goribu] Route "src/routes/items.tsx" exports "${name}". HTTP handlers must use uppercase names. Rename "${name}" to "${method}".`,
+      );
+    }
+  });
+
+  it("checks public names without rejecting local helpers, other exports, or erased types", () => {
+    expect(analyzeRouteModule(`
+      function post() {}
+      export { post as POST };
+      export const { post: PUT } = { post };
+      export default function get() { return null; }
+      export const postCount = 0;
+      export const { post: helper } = { post };
+      export type { post } from "./types.js";
+      export { type put } from "./types.js";
+      export interface patch {}
+      export declare function head(): void;
+      export declare const options: unknown;
+      type DeleteHandler = () => void;
+      import type { Remote } from "./types.js";
+      export { DeleteHandler as Delete, Remote as Get };
+    `, "src/routes/items.tsx")).toEqual({
+      hasDefaultExport: true, methods: ["POST", "PUT"], prerender: null,
+    });
+  });
+
+  it("ignores erased namespaces and their local export aliases", () => {
+    expect(analyzeRouteModule(`
+      export namespace post { export type Payload = { title: string }; }
+      export namespace Get {
+        export namespace Payload { export interface Fields { title: string } }
+      }
+      export namespace patch.Payload { export type Title = string; }
+      export namespace put {}
+      namespace Types { export interface Payload { title: string } }
+      export { Types as Delete, Types as POST, Types as prerender, Types as default };
+    `, "src/routes/types.ts")).toEqual({
+      hasDefaultExport: false, methods: [], prerender: null,
+    });
+  });
+
+  it("still rejects runtime namespaces, including merged type and value declarations", () => {
+    const cases = [
+      'export namespace post { export const value = 1; }',
+      'export namespace post { export namespace Nested { export const value = 1; } }',
+      'export namespace post { export const enum Option { Save } }',
+      'export namespace post { console.log("side effect"); }',
+      'export namespace post { ; }',
+      'export namespace post { export declare function save(): void; }',
+      'export namespace post { declare const value: number; }',
+      'namespace Types { export type Payload = string; } namespace Types { export const value = 1; } export { Types as post };',
+      'namespace Types { export const value = 1; } namespace Types { export type Payload = string; } export { Types as post };',
+      'function Types() {} namespace Types { export type Payload = string; } export { Types as post };',
+    ];
+    for (const source of cases) {
+      expect(() => analyzeRouteModule(source, "src/routes/items.ts"), source)
+        .toThrow('HTTP handlers must use uppercase names. Rename "post" to "POST".');
+    }
+  });
+
   it("extracts page, handler, and prerender facts from TSX", () => {
     const analysis = analyzeRouteModule(
       `

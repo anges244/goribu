@@ -5,6 +5,19 @@ method — `GET`, `POST`, `PUT`, `PATCH`, `DELETE` — and Goribu calls it for t
 method instead of rendering. A handler receives the request and a response
 builder, and returns an intent describing the response.
 
+Handler export names must be uppercase: `GET`, `POST`, `PUT`, `PATCH`,
+`DELETE`, `HEAD`, and `OPTIONS`. Development and production builds reject
+runtime exports such as `post` or `Post` with the route filename and the correct
+spelling. These names are reserved even when the exported value has another use;
+rename it or keep it local to the module.
+
+The exported name matters: `function post() {}` with `export { post as POST }`
+is valid. Named re-exports and destructured variable exports follow the same
+rule. Explicit type-only exports and ambient declarations do not define handlers.
+Namespaces containing only interfaces and type aliases are ignored too, including
+nested namespaces and local export aliases. Namespaces with runtime values remain
+subject to the casing rule.
+
 ```js
 // src/routes/hello.js
 export function GET(req, res) {

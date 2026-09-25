@@ -16,6 +16,13 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Route analysis rejects lowercase or mixed-case HTTP handler exports with a
+  filename and uppercase repair instruction, instead of silently omitting the
+  handler or incorrectly classifying its page as static. Destructured handler
+  exports are recognized by their exported binding names too. Namespaces
+  containing only interfaces and type aliases, including nested namespaces and
+  local export aliases, remain valid.
+
 - Cloudflare diagnostics direct ordinary login through `pnpm exec goribu
   cloudflare-login`. Resource checks and remote migrations now include that
   recovery instruction, preserving Wrangler's error details and failure status.

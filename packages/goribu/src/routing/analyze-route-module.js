@@ -52,8 +52,8 @@ export function analyzeRouteModule(source, filePath) {
   }
 
   // Record which local names survive TypeScript erasure before reading exports.
-  // This stays within the same parsed top-level syntax tree; it does not trace
-  // imported modules or inspect function bodies.
+  // This stays within the same parsed syntax tree, including namespace bodies;
+  // it does not trace imported modules or inspect function bodies.
   const bindingKinds = collectBindingKinds(syntaxTree.program.body);
 
   // Store every runtime route fact discovered from the parsed module. A Set
@@ -113,6 +113,7 @@ export function analyzeRouteModule(source, filePath) {
       }
 
       const name = exportedName(specifier.exported);
+      assertHandlerCasing(name, filePath);
       if (name === "default") found.hasDefaultExport = true;
       if (isHandlerMethod(name)) found.methods.add(name);
       if (name === "prerender") throw invalidPrerenderError(filePath);
@@ -232,7 +233,8 @@ function isRuntimeDeclaration(declaration) {
     declaration.type === "FunctionDeclaration" ||
     declaration.type === "ClassDeclaration" ||
     declaration.type === "VariableDeclaration" ||
-    declaration.type === "TSEnumDeclaration"
+    declaration.type === "TSEnumDeclaration" ||
+    declaration.type === "TSModuleDeclaration"
   );
 }
 
@@ -256,6 +258,8 @@ function inspectDeclaration(declaration, filePath, found) {
   // those values. They cannot satisfy Goribu's runtime route contract.
   if (isTypeOnlyDeclaration(declaration)) return;
 
+  assertHandlerCasing(declaration.id?.name, filePath);
+
   if (
     declaration.type === "FunctionDeclaration" ||
     declaration.type === "ClassDeclaration"
@@ -273,11 +277,15 @@ function inspectDeclaration(declaration, filePath, found) {
 
   // One statement may declare several values: `export const GET = ..., x = ...`.
   for (const declarator of declaration.declarations) {
-    // Destructuring has no single exported binding name to compare here.
+    // Destructuring can export several handlers. Use binding names, not keys.
+    collectPatternBindings(declarator.id, (name) => {
+      assertHandlerCasing(name, filePath);
+      if (isHandlerMethod(name)) found.methods.add(name);
+    });
+    // The prerender override still requires a direct boolean declaration.
     if (declarator.id.type !== "Identifier") continue;
 
     const name = declarator.id.name;
-    if (isHandlerMethod(name)) found.methods.add(name);
     if (name !== "prerender") continue;
 
     // Goribu accepts only the two forms a person can understand immediately:
@@ -295,6 +303,17 @@ function inspectDeclaration(declaration, filePath, found) {
   }
 }
 
+function assertHandlerCasing(name, filePath) {
+  if (typeof name !== "string") return;
+  const method = name.toUpperCase();
+  if (name === method || !isHandlerMethod(method)) return;
+
+  throw new Error(
+    `[Goribu] Route "${filePath}" exports "${name}". ` +
+      `HTTP handlers must use uppercase names. Rename "${name}" to "${method}".`,
+  );
+}
+
 /**
  * Identify declarations erased by TypeScript rather than emitted as module
  * values. The `declare` flag covers ambient functions, classes, and variables.
@@ -304,8 +323,30 @@ function isTypeOnlyDeclaration(declaration) {
     declaration?.declare === true ||
     declaration?.type === "TSDeclareFunction" ||
     declaration?.type === "TSInterfaceDeclaration" ||
-    declaration?.type === "TSTypeAliasDeclaration"
+    declaration?.type === "TSTypeAliasDeclaration" ||
+    (declaration?.type === "TSModuleDeclaration" && isErasedNamespace(declaration))
   );
+}
+
+function isErasedNamespace(declaration) {
+  const body = declaration.body;
+  // Babel represents a dotted namespace as nested module declarations.
+  if (body?.type === "TSModuleDeclaration") return isErasedNamespace(body);
+  if (body?.type !== "TSModuleBlock") return false;
+
+  // Only type declarations and similarly erased namespaces prove erasure.
+  // Ambient value declarations and even empty statements can make Vite emit
+  // a namespace object, so the general declaration predicate is too broad here.
+  return body.body.every((statement) => {
+    const member = statement.type === "ExportNamedDeclaration"
+      ? statement.declaration
+      : statement;
+    return (
+      member?.type === "TSInterfaceDeclaration" ||
+      member?.type === "TSTypeAliasDeclaration" ||
+      (member?.type === "TSModuleDeclaration" && isErasedNamespace(member))
+    );
+  });
 }
 
 /**
