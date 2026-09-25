@@ -3,7 +3,9 @@ title: TypeScript
 description: Typed routes, forms, configuration, and request validation.
 ---
 
-TypeScript support is prepared for the upcoming 0.8.0 release.
+TypeScript support was introduced in 0.8.0. Examples here follow the current
+source layout; see the [setup migration](/docs/installation)
+when upgrading an older app.
 
 New apps use TypeScript by default. Add `--js` to generate JavaScript:
 

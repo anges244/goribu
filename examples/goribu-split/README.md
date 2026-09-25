@@ -13,25 +13,24 @@ JavaScript; returning from About starts a fresh example.
 
 ## Install and run
 
-Use Node 22+ and pnpm. From the repository root, first pack the unpublished
-framework if its archive is missing:
+Use Node 22+ and pnpm. From the repository root, pack the current framework
+and install it in this independent app:
 
 ```sh
+GORIBU_VERSION="$(node -p 'require("./packages/goribu/package.json").version')"
 pnpm --dir packages/goribu pack --pack-destination "$PWD/examples/.artifacts"
+cd examples/goribu-split
+pnpm add --save-exact "file:../.artifacts/goribu-$GORIBU_VERSION.tgz"
+pnpm dev
 ```
 
-Then the maintainer runs:
-
-```sh
-pnpm --dir examples/goribu-split install
-pnpm --dir examples/goribu-split dev
-```
-
-This app has its own pnpm workspace and installation. Its framework dependency is
-`file:../.artifacts/goribu-0.0.0.tgz`, not a link to framework source. Keep that
-ignored archive available for future installs. The relative path lets the source
-checkout move without recording one developer's absolute path. Framework changes
-require a deliberate repack and app reinstall.
+The maintainer runs installation. This app has its own pnpm workspace and uses
+a packed framework rather than a workspace link. Its checked-in manifest and
+lockfile retain the original `0.0.0` proof archive. That archive is not in a fresh
+clone; the add command selects the current archive and updates both dependency
+files. Review those changes before committing them. Keep the ignored archive
+available for future installs. The relative path keeps the checkout portable.
+Framework changes require a deliberate repack and repeating the add command.
 
 ## Validate
 
@@ -62,7 +61,7 @@ pnpm --dir examples/goribu-split run deploy
 ```
 
 If authentication is needed, run
-`pnpm --dir examples/goribu-split/node_modules/goribu exec wrangler login` first.
+`pnpm --dir examples/goribu-split exec goribu cloudflare-login` first.
 Deployment is production-only. Nothing in the test/build commands deploys or
 provisions resources.
 

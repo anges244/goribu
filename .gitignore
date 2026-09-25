@@ -1,5 +1,6 @@
 workspace/
 START.md
+/local-history/
 
 # Dependencies and build output
 node_modules/
@@ -10,6 +11,7 @@ dist/
 .goribu/
 goribu.wrangler.jsonc
 *.tsbuildinfo
+*.tgz
 
 # Test output and logs
 coverage/

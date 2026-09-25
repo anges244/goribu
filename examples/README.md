@@ -4,20 +4,23 @@
 `create-goribu` path for Block 8. It is intentionally outside the framework's
 pnpm workspace: installs and builds use a packed framework, not a workspace link.
 
-From the repository root, prepare its unpublished framework dependency:
+From the repository root, pack the current framework and select that archive
+in the example's independent installation:
 
 ```sh
+GORIBU_VERSION="$(node -p 'require("./packages/goribu/package.json").version')"
 pnpm --dir packages/goribu pack --pack-destination "$PWD/examples/.artifacts"
+cd examples/goribu-split
+pnpm add --save-exact "file:../.artifacts/goribu-$GORIBU_VERSION.tgz"
+pnpm dev
 ```
 
-Then the maintainer installs the app's dependencies:
+The maintainer runs the installation command. The checked-in manifest and
+lockfile preserve the original `0.0.0` proof archive; a fresh clone does not have
+that archive. The `pnpm add` step replaces that reference and refreshes the
+example's lockfile for the current version. Review those local dependency changes
+before committing them. Keep the ignored archive available for later installs.
+Repack and repeat the add step to test further framework changes. Do not commit
+archives, installed dependencies, or generated output.
 
-```sh
-pnpm --dir examples/goribu-split install
-```
-
-The package references `../.artifacts/goribu-0.0.0.tgz`. Keep that ignored archive
-available for future installs. Packing it again deliberately updates the local
-artifact; reinstall the app when testing those framework changes. Do not commit
-archives, installed dependencies, or generated output. No npm package is
-published by these commands.
+See the [app README](goribu-split/README.md) for behavior, checks, and deployment.

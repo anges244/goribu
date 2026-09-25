@@ -72,7 +72,7 @@ Errors after a completed render retain normal React error handling.
 for a text field or `body.file` for an upload. Uploaded values are `File` objects;
 repeated names become arrays, and missing fields are absent. Validate the values
 you expect; there is no need to check for `FormData`. See
-[Reading the body](/docs/handlers#reading-the-body) for migration details.
+[Reading the body](/docs/handlers) for migration details.
 
 ## Submission behavior
 

@@ -1,51 +1,67 @@
 # Goribu
 
-A React framework for Cloudflare Workers. Server-rendered and hydrated by
-default, with the platform's own primitives — workerd, Static Assets, Wrangler —
-as first-class parts of the pipeline rather than adapted afterwards.
+A React framework for Cloudflare Workers. File-based routes stream server-rendered
+HTML and hydrate in the browser. Pages that need no request-time work build to
+HTML served by Cloudflare Static Assets. Goribu also provides route handlers,
+forms, client navigation, and app-configured D1 databases, migrations, and KV.
 
-Under active development. This checkout adds TypeScript by default, JavaScript
-through `--js`, and public type declarations for the next release.
-Follow the [getting-started guide](docs/getting-started.md); see
-[Releasing](docs/releasing.md) for the shared version policy.
+The starter uses TypeScript and Tailwind; add `--js` for JavaScript.
+The framework itself is JavaScript ESM, with public TypeScript declarations.
+Interactive forms and client navigation require JavaScript.
 
-## Commands
+## Create an app
 
-Run from an app directory (where `goribu.config.js` lives):
+Use Node.js 22+ and pnpm:
+
+```sh
+pnpm create goribu@latest my-app
+cd my-app
+pnpm install
+pnpm typecheck
+pnpm dev
+```
+
+For JavaScript, use `pnpm create goribu@latest my-app --js` and skip
+`pnpm typecheck`. The scaffolder creates files and prints next steps; it does
+not install dependencies or deploy. A Cloudflare account is needed for deployment,
+not local development.
+
+See the [documentation](https://goribu.dev/docs/introduction) for the published
+guides. This repository can contain changes ahead of npm; check the
+[changelog](CHANGELOG.md) and [upgrade notes](docs/releasing.md) when working
+from source.
+
+## App commands
+
+Run these from the generated app directory:
 
 | Command | What it does |
-|---|---|
-| `goribu dev` | Start the local dev server (Vite + workerd) with HMR. |
-| `goribu build` | Produce the production Worker and client bundles. |
-| `goribu cloudflare-login` | Log in to Cloudflare through Wrangler. |
-| `goribu deploy` | Build and deploy to Cloudflare. |
+| --- | --- |
+| `pnpm dev` | Start Vite and workerd with hot updates. |
+| `pnpm build` | Build the Worker, browser assets, and static HTML. |
+| `pnpm typecheck` | Check a TypeScript app without emitting files. |
+| `pnpm check` | Inspect the production resource and migration plan. |
+| `pnpm exec goribu cloudflare-login` | Log in to Cloudflare through Wrangler. |
+| `pnpm run deploy` | Build, provision resources, apply migrations, and deploy. |
 
-`goribu --help` prints usage; `goribu --version` prints the version.
+Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.
 
-## Running the example in this repo
+## Working on Goribu
 
-This repository is a pnpm workspace, and its example app is
-[`fixtures/basic-app`](fixtures/basic-app). Run the CLI against it through the
-workspace filter from the repo root:
+Read [Contributing](CONTRIBUTING.md) for workspace setup, local development,
+and tests. The [documentation index](docs/README.md) lists the repository guides
+and contributor references. The [release guide](docs/releasing.md) covers the
+shared `goribu` and `create-goribu` version and publication process.
 
-```
-pnpm --filter basic-app exec goribu dev
-pnpm --filter basic-app exec goribu build
-pnpm --filter basic-app exec goribu deploy
-```
+| Directory | Purpose |
+| --- | --- |
+| `packages/goribu/` | Framework runtime, build integration, CLI, and declarations. |
+| `packages/create-goribu/` | Dependency-free app scaffolder. |
+| `templates/basic-app/` | Canonical TypeScript/Tailwind starter. |
+| `fixtures/basic-app/` | Behavioral integration test app. |
+| `site/` | Legacy site retained for integration tests; the public website is maintained separately. |
+| `examples/` | Independent example app using a packed framework. |
 
-Or from inside the app directory:
+## License
 
-```
-cd fixtures/basic-app
-pnpm exec goribu dev
-```
-
-## Docs
-
-- [Getting started](docs/getting-started.md) — create and deploy a starter app.
-- [Installation reference](docs/installation.md) — requirements and project files.
-- [CLI reference](docs/cli.md) — every command in detail.
-- [Deploying](docs/deploy.md) — authentication and deploys.
-
-A complete example app lives in [`fixtures/basic-app`](fixtures/basic-app).
+[MIT](LICENSE), copyright © 2026 Aggelos Gesoulis.

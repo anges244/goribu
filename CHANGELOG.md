@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-25
+
 ### Fixed
 
 - Client render recovery forces a document GET for current-URL fragment targets
@@ -45,6 +47,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   restart. Ordinary component and CSS edits retain Vite's hot updates.
 
 ### Changed
+
+- Repository setup is documented for contributors, with self-contained agent
+  instructions, an updated README, a documentation index, and corrected local
+  archive instructions for the independent example. Historical block writeups
+  and review notes move to a local ignored archive; the legacy site remains an
+  integration test app, separate from the independently maintained public site.
 
 - Built-in 404 and 500 pages use neutral, responsive light/dark styling without
   application CSS or JavaScript. They show safe request diagnostics and provide

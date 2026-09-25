@@ -1,6 +1,6 @@
 {
   "name": "create-goribu",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Create a TypeScript or JavaScript Goribu app for Cloudflare Workers.",
   "type": "module",
   "license": "MIT",

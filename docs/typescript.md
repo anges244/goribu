@@ -1,6 +1,8 @@
 # TypeScript
 
-TypeScript support is prepared for the upcoming 0.8.0 release.
+TypeScript support was introduced in 0.8.0. Examples here follow the current
+source layout; see the [setup migration](./installation.md#migrating-existing-apps-to-srcsetup)
+when upgrading an older app.
 
 New apps use TypeScript by default. Add `--js` to generate JavaScript:
 

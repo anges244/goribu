@@ -2,30 +2,29 @@
 
 Read this file before changing the repository.
 
-This file covers how to work in this repo and what the framework guarantees. It
-is tracked and durable. `START.md` covers the current rebuild — where code comes
-from, how it arrives, and what to work on next — and is untracked and temporary.
-Where they overlap, `START.md` wins for anything about the rebuild itself.
+This file covers how to work in this repo and what the framework guarantees.
+It is self-contained; a fresh clone needs no private planning files. Read
+`CONTRIBUTING.md` for local setup and validation commands.
 
-If `START.md` is not present, stop and ask rather than proceeding.
+If the maintainer has supplied a local `START.md`, read it for the active task
+and handoff context. It is optional, untracked, and not required to contribute.
 
 ## Sources of truth
 
-1. `START.md` defines the rebuild process, the plan of record, and the current
-   position.
+1. The maintainer's current request defines the task and scope.
 2. `docs/decisions.md` records settled design choices. Follow them exactly unless
    concrete implementation evidence invalidates one; then stop and ask rather
    than silently diverging.
-3. `docs/block-N.md` writeups record what each completed block landed, what
-   emerged, and the rationale for non-obvious choices.
+3. `CHANGELOG.md` records release changes, and the current guides under `docs/`
+   describe the supported behavior.
 
-There is no separate progress file. Position lives in `START.md` during the
-rebuild and in the block writeups permanently. Nothing is recorded as complete
+Historical block writeups and review notes are kept in a local, ignored archive.
+They are not required to work on the repository. Nothing is recorded as complete
 that has no source in the tree.
 
 ## Working cadence
 
-- Build one block at a time and one substep at a time.
+- Work on one agreed task or block at a time and one substep at a time.
 - Before each substep, state which step is being implemented and why it exists.
 - Implement, explain, validate, then pause for maintainer review.
 - A block ends at a public URL that changed, not at a passing test run. Its
@@ -73,13 +72,14 @@ that has no source in the tree.
 - Framework source: `packages/goribu/src/`
 - CLI entrypoint: `packages/goribu/bin/goribu.js`
 - Behavioral integration fixture: `fixtures/basic-app/`
-- The site: `site/`
+- Legacy site and integration test app: `site/`
 - Product documentation: `docs/`
 
-Framework source is plain JavaScript ESM with no package build step. There is no
-TypeScript in the framework. Hand-written public type declarations are post-gate;
-when they land, they are kept synchronized with every public runtime change and
-protected by type fixtures.
+Framework runtime source is plain JavaScript ESM with no package build step.
+Hand-written public TypeScript declarations ship at all four public entries.
+Keep them synchronized with every public runtime change and protect them with
+type fixtures. The canonical application starter uses TypeScript; packaging
+derives the JavaScript variant from it.
 
 The `goribu` package has four deliberate public entries:
 
@@ -91,8 +91,8 @@ The `goribu` package has four deliberate public entries:
 Do not blur these boundaries or introduce imports that can leak server or build
 code into browser bundles.
 
-The fixture is the surface for seeing things work until the site exists. After
-that the site is the proving ground and the fixture is a test target.
+The fixture and the in-repository site exercise framework behavior. The public
+website is maintained independently in a separate private repository.
 
 ## Tests and validation
 
@@ -123,5 +123,6 @@ yet" stays visible instead of becoming invisible.
 Do not edit generated output or dependency state such as `node_modules/`,
 `dist/`, `.goribu/`, `.wrangler/`, coverage output, or package-manager caches.
 
-Do not read from or write to `workspace/` except as `START.md` directs, and never
-reference it from tracked files.
+Private maintainer planning files are outside the contributor workflow. Do not
+read or modify them unless the maintainer's task or local handoff directs it,
+and do not add dependencies on them to tracked files.

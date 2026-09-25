@@ -14,9 +14,10 @@ Follow [Getting started](./getting-started.md) for the canonical path from
 `pnpm create goribu@latest` to an independently generated, deployed app.
 
 The rest of this page is a reference for the minimal framework files, not a
-second setup procedure. The starter defaults to TypeScript (`--js` selects JavaScript) and adds Tailwind, a custom Document, and a
-request-time greeting to these fundamentals. `fixtures/basic-app` is a regression
-test target, not the starter to copy.
+second setup procedure. The starter defaults to TypeScript (`--js` selects
+JavaScript) and adds Tailwind, a custom Document, and one static welcome page
+to these fundamentals. `fixtures/basic-app` is a regression test target, not
+the starter to copy.
 
 ## Dependencies
 

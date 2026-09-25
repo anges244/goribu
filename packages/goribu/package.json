@@ -1,6 +1,6 @@
 {
   "name": "goribu",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A full-stack React framework for Cloudflare Workers.",
   "license": "MIT",
   "repository": {

@@ -2,10 +2,34 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare `0.8.0`, including TypeScript, expanded forms, and development,
-environment, and CSS fixes; substitute the next shared version for later releases.
+prepare `0.8.1`, including static navigation, app setup and multipart migrations,
+the redesigned starter and default error pages, and development/client fixes;
+substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.8.0 to 0.8.1
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.8.1` from its directory. Before rebuilding:
+
+- Move `src/client-entry.js` into `src/setup/`, and move any custom
+  `src/routes/_document.*` beside it. Update the Document's `<ClientEntry src>`
+  to `/src/setup/client-entry.js` and adjust relative imports. See the
+  [setup migration](installation.md#migrating-existing-apps-to-srcsetup).
+- Update scripts and CI that read root `dist/` to use `.goribu/dist/`. Builds
+  leave old root output untouched and reject `emptyOutDir: false`.
+- Multipart `req.body()` now returns field objects: replace `body.get("name")`
+  with `body.name`, remove `instanceof FormData` branches, and handle repeated
+  fields as arrays. Uploaded values remain `File` objects. See
+  [request bodies](handlers.md).
+- Prerendered pages now use their build-time props and metadata for client
+  navigation and prefetch as well as document loads, without invoking the
+  Worker. Set `prerender = false` for query-dependent server output. See
+  [navigation](navigation.md).
+
+Rebuild and deploy after migrating. The new single-page starter applies to newly
+generated apps; existing apps retain their own routes and styles.
 
 ## Upgrading apps from 0.7.2 to 0.8.0
 
@@ -36,6 +60,9 @@ without prerelease suffixes. During `0.x`, use patch increments for compatible
 fixes and minor increments for features or breaking changes, recording breaking
 changes explicitly in the changelog. Reaching `1.0.0` is a separate decision
 about API stability.
+
+At the maintainer's request, `0.8.1` is an exception to that increment policy:
+it includes the breaking changes documented in the upgrade notes and changelog.
 
 `0.7.0` advances beyond the existing package histories: at preparation time,
 `goribu` has reached `0.1.0-alpha.9` and `create-goribu` has reached `0.6.9`.
@@ -77,7 +104,7 @@ or deploys the site.
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.8.0
+pnpm release prepare 0.8.1
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -93,7 +120,7 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.8.0
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.8.1
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
@@ -112,8 +139,8 @@ framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.8.0.tgz`
-- `create-goribu-0.8.0.tgz`
+- `goribu-0.8.1.tgz`
+- `create-goribu-0.8.1.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -140,7 +167,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.8.0
+pnpm release publish ../goribu-release-0.8.1
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command
