@@ -556,7 +556,7 @@ describe("createApp().fetch — error boundaries", () => {
 
       expect(response.status).toBe(500);
       expect(body).toContain("Something went wrong.");
-      expect(body).toContain("Error ID:");
+      expect(body).toContain("<dt>Error ID</dt>");
       expect(consoleError.mock.calls[0][0]).toMatch(
         /^\[Goribu\] Unhandled error .+:$/,
       );

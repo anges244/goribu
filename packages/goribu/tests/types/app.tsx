@@ -2,7 +2,7 @@ import { createRef } from "react";
 import { ClientEntry, Form, Link, NavLink, Stylesheet, navigate } from "goribu";
 import type { DocumentProps, Meta } from "goribu";
 import { createApp, defineConfig } from "goribu/server";
-import type { Handler, Middleware } from "goribu/server";
+import type { Handler, Middleware, ServerErrorProps } from "goribu/server";
 import { goribu } from "goribu/vite";
 import "goribu/client";
 
@@ -142,3 +142,11 @@ const response: Promise<Response> = app.fetch(new Request("https://app.test"), {
 app.fetch(new Request("https://app.test"), {}, { waitUntil() {} });
 // @ts-expect-error Raw config is unbranded and rejected by createApp.
 createApp({ manifest: [], modules: new Map(), errorPages: { notFound: null }, applicationConfig: { name: "raw", compatibilityDate: "2026-08-31" } });
+
+// Request diagnostics remain optional and never expose the thrown error.
+function ErrorPage({ url, errorId, cfRay }: ServerErrorProps) {
+  const ray: string | undefined = cfRay;
+  return <main>{url} {errorId} {ray}</main>;
+}
+// @ts-expect-error The raw error is never a public page prop.
+const rawError: ServerErrorProps["error"] = new Error("private");

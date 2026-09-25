@@ -49,9 +49,9 @@ describe("renderServerError", () => {
     const html = await response.text();
 
     expect(response.status).toBe(500);
-    expect(html).toContain("<h1>500</h1>");
+    expect(html).toContain('class="ge-status">500</p>');
     expect(html).toContain("Something went wrong.");
-    expect(html).toContain("Error ID: <code>err-default</code>");
+    expect(html).toContain("<dt>Error ID</dt><dd><code>err-default</code>");
   });
 
   it("fails closed for missing safe fields and an invalid supplied page", async () => {

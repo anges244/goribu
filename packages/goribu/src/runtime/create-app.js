@@ -234,6 +234,8 @@ export function createApp(options) {
       } catch (error) {
         const metadataUrl = new URL(url.origin);
         metadataUrl.pathname = url.pathname;
+        const retryUrl = new URL(url);
+        retryUrl.hash = "";
         response =
           mode === "development"
             ? finalizeDevelopmentErrorResponse({
@@ -243,6 +245,8 @@ export function createApp(options) {
             : await finalizeErrorResponse({
                 error,
                 url: url.pathname,
+                retryUrl: retryUrl.href,
+                cfRay: readCfRay(request),
                 Page: ServerErrorPage,
                 meta: ServerErrorModule?.meta,
                 routeId: serverErrorId ?? "built-in _500",
@@ -324,8 +328,9 @@ export function createApp(options) {
           url,
           navigation,
           form,
-          renderNonce,
+          result?.kind === "not-found" ? nonce : renderNonce,
           formRenderContext?.displayedUrl ?? url.href,
+          readCfRay(request),
         );
       }
 
@@ -348,8 +353,9 @@ export function createApp(options) {
           url,
           navigation,
           form,
-          renderNonce,
+          result?.kind === "not-found" ? nonce : renderNonce,
           formRenderContext?.displayedUrl ?? url.href,
+          readCfRay(request),
         );
       }
 
@@ -388,8 +394,9 @@ export function createApp(options) {
           url,
           navigation,
           form,
-          renderNonce,
+          result?.kind === "not-found" ? nonce : renderNonce,
           formRenderContext?.displayedUrl ?? url.href,
+          readCfRay(request),
         );
       }
 
@@ -419,6 +426,7 @@ export function createApp(options) {
           NotFoundPage,
           Document,
           location: url.href,
+          cfRay: readCfRay(request),
           metadata: resolveRouteMeta({
             meta: NotFoundModule?.meta,
             props: {},
@@ -512,6 +520,7 @@ export function createApp(options) {
     form,
     nonce,
     metadataUrl,
+    cfRay,
   ) {
     const routeModule = requireModule(modules, match.route.id, "route");
     const metadata =
@@ -532,6 +541,7 @@ export function createApp(options) {
       NotFoundMeta: NotFoundModule?.meta,
       notFoundId: notFoundId ?? "built-in _404",
       location: url.href,
+      cfRay,
       navigation,
       form,
       metadata,
@@ -783,6 +793,7 @@ async function finalizeHandlerResult(result, options) {
       NotFoundPage: options.NotFoundPage,
       Document: options.Document,
       location: options.location,
+      cfRay: options.cfRay,
       props: result.props,
       headers: result.headers,
       metadata,
@@ -809,6 +820,15 @@ function normalizeHeadResponse(response, request) {
     status: response.status,
     headers: response.headers,
   });
+}
+
+// Cloudflare supplies this diagnostic header in production. Missing/local or
+// malformed values should not invent an ID or break an error response.
+function readCfRay(request) {
+  const value = request.headers.get("cf-ray");
+  return typeof value === "string" && /^[a-z0-9-]{1,128}$/i.test(value)
+    ? value
+    : undefined;
 }
 
 function addVaryAccept(response) {

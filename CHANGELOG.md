@@ -46,6 +46,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Built-in 404 and 500 pages use neutral, responsive light/dark styling without
+  application CSS or JavaScript. They show safe request diagnostics and provide
+  ordinary document links for recovery; production failures keep their logged
+  error IDs and plain-text fallback.
+
 - The starter now ships one static welcome page with a responsive Tailwind layout,
   light/dark colors, and native orange SVG motion that respects reduced motion.
   The counter and `/hello` demo are removed from both language variants.

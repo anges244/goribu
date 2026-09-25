@@ -123,7 +123,7 @@ export type Handler<Props extends object = Record<string, unknown>, Env extends 
 export type Middleware<Env extends object = Record<string, unknown>> =
   (req: GoribuRequest<Env>, res: GoribuResponse) => ResponseResult | void | Promise<ResponseResult | void>;
 
-export interface ServerErrorProps { errorId: string; url: string }
+export interface ServerErrorProps { errorId: string; url: string; cfRay?: string }
 export interface WorkerContext { waitUntil(promise: Promise<unknown>): void }
 export interface WorkerApp<Env extends object = Record<string, unknown>> {
   fetch(request: Request, env: Env, ctx: WorkerContext): Promise<Response>;

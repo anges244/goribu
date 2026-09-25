@@ -23,7 +23,11 @@ export function DefaultDocument({ children, head }) {
   return h(
     "html",
     null,
-    h("head", null, h("meta", { charSet: "utf-8" }), h(Stylesheet), head),
+    h("head", null,
+      h("meta", { charSet: "utf-8" }),
+      h("meta", { name: "viewport", content: "width=device-width, initial-scale=1" }),
+      h(Stylesheet), head,
+    ),
     h(
       "body",
       null,

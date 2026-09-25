@@ -31,7 +31,7 @@ Logs                            →  [Goribu] Unhandled error b3f1c2a0-…: <the
 ## The `_500` page
 
 Add an optional `src/routes/_500.jsx`, alongside `_404.jsx`, and it renders for
-unhandled production errors. It's a normal React component and receives two props:
+unhandled production errors. It's a normal React component with a safe pathname and logged error ID:
 
 ```jsx
 // src/routes/_500.jsx
@@ -46,12 +46,20 @@ export default function ServerError({ url, errorId }) {
 }
 ```
 
-- **`url`** is the request **pathname only** — never the query string, so secrets
-  in a URL can't leak into the error page.
+- **`url`** is the request **pathname only** — query values are not passed to
+  custom error pages or their metadata functions.
 - **`errorId`** is the correlation ID, matching the logged entry.
 
-Without an `_500.jsx`, Goribu renders a minimal built-in page that still shows the
-ID. If the `_500` page *itself* throws while rendering, Goribu falls back to a
+Without an `_500.jsx`, Goribu renders a neutral built-in page that shows the
+ID. Built-in 404 and 500 pages include their own nonce-aware styles, light/dark
+colors, and responsive layout; they do not depend on app CSS, fonts, or JavaScript.
+The 500 page’s “Try again” link makes a fresh document GET, never a mutation
+resubmission. Its absolute `href` preserves the failed request’s query and removes
+the fragment, even when the Document defines a `<base href>`. Query values appear
+only in this retry link, not in the displayed diagnostics or serialized props.
+Custom error pages continue to use the application’s Document.
+
+If the `_500` page *itself* throws while rendering, Goribu falls back to a
 plain-text `500` carrying the same ID — the error path can't itself fail to
 respond.
 

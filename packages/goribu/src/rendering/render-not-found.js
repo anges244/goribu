@@ -1,21 +1,22 @@
 import { createElement as h } from "react";
 import { renderPage } from "./render-page.js";
+import { DefaultErrorPage } from "./default-error-page.js";
 
 /**
  * Stream the not-found response for a request that matched no route.
  *
  * The application may supply a `_404` page at the top level of its routes
- * directory; when it does not, Goribu streams a plain built-in page. Either way
- * the page renders through the same document shell as any other page, and the
- * response carries a 404 status. A route miss renders with empty props; a handler
- * that returns res.notFound(props) supplies the props (and any extra headers) for
- * the same _404 page.
+ * directory; otherwise Goribu streams a self-styled built-in page. Both render
+ * through the application Document with status 404. A custom page receives empty
+ * props on a route miss, or the handler’s res.notFound(props). The built-in page
+ * uses only safe request diagnostics; handler headers are preserved.
  *
- * @param {{ NotFoundPage?: Function|null, Document: Function, location?: string, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * @param {{ NotFoundPage?: Function|null, Document: Function, location?: string, cfRay?: string, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function renderNotFound(options) {
   const NotFoundPage = options?.NotFoundPage ?? DefaultNotFoundPage;
+  const builtIn = options?.NotFoundPage == null;
 
   if (typeof NotFoundPage !== "function") {
     throw new TypeError(
@@ -29,11 +30,29 @@ export async function renderNotFound(options) {
     Document: options?.Document,
     location: options?.location,
     status: 404,
-    props: options?.props ?? {},
-    headers: options?.headers,
-    ...(Object.hasOwn(options ?? {}, "metadata")
-      ? { metadata: options.metadata }
-      : {}),
+    props: builtIn
+      ? {
+          url: options?.location
+            ? new URL(options.location, "https://goribu.invalid").pathname
+            : undefined,
+          cfRay: options?.cfRay,
+        }
+      : (options?.props ?? {}),
+    headers:
+      builtIn && options?.cfRay
+        ? { ...options?.headers, "cache-control": "no-store" }
+        : options?.headers,
+    ...(builtIn
+      ? {
+          metadata: {
+            title: "Page not found",
+            robots: "noindex",
+            ...options?.metadata,
+          },
+        }
+      : Object.hasOwn(options ?? {}, "metadata")
+        ? { metadata: options.metadata }
+        : {}),
     nonce: options?.nonce,
     mode: options?.mode,
     clientAssetManifest: options?.clientAssetManifest,
@@ -41,11 +60,6 @@ export async function renderNotFound(options) {
   });
 }
 
-function DefaultNotFoundPage() {
-  return h(
-    "main",
-    null,
-    h("h1", null, "404"),
-    h("p", null, "This page could not be found."),
-  );
+function DefaultNotFoundPage(props) {
+  return h(DefaultErrorPage, { ...props, status: 404 });
 }

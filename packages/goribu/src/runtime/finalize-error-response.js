@@ -9,7 +9,7 @@ import { isHttpError } from "./http-error.js";
  * loaded error-page values. Development disclosure, cookies, final HEAD
  * normalization, dispatch wiring, and global response policy remain outside.
  *
- * @param {{ error: unknown, url: string, Page?: Function|null, meta?: unknown, routeId?: string, metadataUrl?: URL|string, Document: Function, nonce?: string, clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * @param {{ error: unknown, url: string, retryUrl?: string, cfRay?: string, Page?: Function|null, meta?: unknown, routeId?: string, metadataUrl?: URL|string, Document: Function, nonce?: string, clientAssetManifest?: object|null, clientAssetBase?: string }} options
  * @returns {Promise<Response>}
  */
 export async function finalizeErrorResponse(options) {
@@ -23,10 +23,12 @@ export async function finalizeErrorResponse(options) {
   }
 
   const errorId = createErrorId();
-  logError(`[Goribu] Unhandled error ${errorId}:`, error);
+  const cfRay = options?.cfRay;
+  const reference = cfRay ? `${errorId} (CF-Ray: ${cfRay})` : errorId;
+  logError(`[Goribu] Unhandled error ${reference}:`, error);
 
   try {
-    const props = { url: options?.url, errorId };
+    const props = { url: options?.url, errorId, ...(cfRay ? { cfRay } : {}) };
     const metadataUrl =
       options?.metadataUrl ??
       new URL(options?.url ?? "/", "https://goribu.invalid");
@@ -38,7 +40,9 @@ export async function finalizeErrorResponse(options) {
     });
     return await renderServerError({
       url: options?.url,
+      retryUrl: options?.retryUrl,
       errorId,
+      cfRay,
       Page: options?.Page,
       Document: options?.Document,
       metadata,
@@ -48,10 +52,10 @@ export async function finalizeErrorResponse(options) {
       clientAssetBase: options?.clientAssetBase,
     });
   } catch (renderError) {
-    logError(`[Goribu] _500 rendering failed for error ${errorId}:`, renderError);
-    return new Response(`Internal Server Error\nError ID: ${errorId}`, {
+    logError(`[Goribu] _500 rendering failed for error ${reference}:`, renderError);
+    return new Response(`Internal Server Error\nError ID: ${errorId}${cfRay ? `\nCloudflare Ray ID: ${cfRay}` : ""}`, {
       status: 500,
-      headers: { "content-type": "text/plain; charset=utf-8" },
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
   }
 }
