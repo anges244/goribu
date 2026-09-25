@@ -24,7 +24,7 @@ it("runs login in the calling directory without requiring app config and preserv
       await expect(runCloudflareLogin({ projectRoot, spawn, resolveBin: () => bin })).resolves.toBe(code);
       expect(spawn).toHaveBeenCalledWith(process.execPath, [bin, "login"], {
         cwd: projectRoot,
-        stdio: "inherit",
+        stdio: ["inherit", "inherit", "pipe"],
       });
     }
   } finally {

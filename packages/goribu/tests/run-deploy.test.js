@@ -47,7 +47,7 @@ describe("runWranglerDeploy", () => {
     await runWranglerDeploy(options);
     expect(spawn.calls.map(({ args, options }) => ({ args, stdio: options.stdio }))).toEqual([
       { args: [FAKE_BIN, "deploy", "--dry-run", "--secrets-file=.env.production"], stdio: "ignore" },
-      { args: [FAKE_BIN, "deploy", "--secrets-file=.env.production"], stdio: "inherit" },
+      { args: [FAKE_BIN, "deploy", "--secrets-file=.env.production"], stdio: ["inherit", "inherit", "pipe"] },
     ]);
     await expect(validateProductionSecrets({
       ...options, spawn: fakeSpawn((child) => child.emit("close", 1, null)),
@@ -63,7 +63,7 @@ describe("runWranglerDeploy", () => {
     expect(spawn.calls[0]).toEqual({
       command: process.execPath,
       args: [FAKE_BIN, "deploy"],
-      options: { cwd: "/app", stdio: "inherit" },
+      options: { cwd: "/app", stdio: ["inherit", "inherit", "pipe"] },
     });
   });
 

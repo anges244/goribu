@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { resolve } from "node:path";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
+import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
 
 /** Pinned Wrangler emits JSON and follows every page of the namespace inventory. */
 export async function listRemoteKVNamespaces(options) {
@@ -14,8 +15,9 @@ export async function listRemoteKVNamespaces(options) {
     const bin = (options?.resolveBin ?? resolveWranglerBin)();
     const child = spawn(process.execPath, [bin, "kv", "namespace", "list"], {
       cwd: resolve(projectRoot),
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardWranglerDiagnostics(child.stderr);
     await new Promise((resolvePromise, rejectPromise) => {
       child.on("error", rejectPromise);
       child.on("close", (code, signal) => {
@@ -26,7 +28,8 @@ export async function listRemoteKVNamespaces(options) {
     });
   } catch (cause) {
     throw new Error(
-      "[Goribu] Could not inspect KV namespaces through Wrangler. Check the Wrangler error, installed dependencies, authentication, and account selection, then rerun `goribu check`. No resources were changed by this inspection.",
+      "[Goribu] Could not inspect KV namespaces through Wrangler. Check the Wrangler error, installed dependencies, and account selection. " +
+        CLOUDFLARE_AUTH_HELP + "Then rerun `goribu check`. No resources were changed by this inspection.",
       { cause },
     );
   }

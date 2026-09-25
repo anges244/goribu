@@ -72,7 +72,7 @@ describe("KV check and provisioning", () => {
     }
     const spawn = spawnWith();
     await expect(listRemoteKVNamespaces({ projectRoot: "/app", spawn, resolveBin: () => "/wrangler.js" })).resolves.toEqual([namespace]);
-    expect(spawn).toHaveBeenCalledWith(process.execPath, ["/wrangler.js", "kv", "namespace", "list"], { cwd: "/app", stdio: ["ignore", "pipe", "inherit"] });
+    expect(spawn).toHaveBeenCalledWith(process.execPath, ["/wrangler.js", "kv", "namespace", "list"], { cwd: "/app", stdio: ["ignore", "pipe", "pipe"] });
     for (const failure of [{ output: "not json" }, { output: "{}" }, { code: 1 }, { signal: "SIGTERM" }, { error: new Error("spawn failed") }]) {
       await expect(listRemoteKVNamespaces({ projectRoot: "/app", spawn: spawnWith(failure), resolveBin: () => "/wrangler.js" })).rejects.toThrow(/\[Goribu\]/);
     }

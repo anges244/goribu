@@ -146,7 +146,7 @@ describe("goribu check", () => {
         args: ["/framework/wrangler.js", "d1", "list", "--json"],
         options: {
           cwd: "/app",
-          stdio: ["ignore", "pipe", "inherit"],
+          stdio: ["ignore", "pipe", "pipe"],
         },
       },
     ]);

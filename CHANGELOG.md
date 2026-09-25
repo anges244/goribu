@@ -9,7 +9,16 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Both starter variants include a `public/` folder with an SVG favicon linked
+  from the Document. Scaffolder packaging preserves public asset bytes and names.
+
 ### Fixed
+
+- Cloudflare diagnostics direct ordinary login through `pnpm exec goribu
+  cloudflare-login`. Resource checks and remote migrations now include that
+  recovery instruction, preserving Wrangler's error details and failure status.
 
 - Development stylesheet discovery reuses parsed import lists from unchanged
   Vite transforms and the configured page inventory, avoiding repeated JavaScript

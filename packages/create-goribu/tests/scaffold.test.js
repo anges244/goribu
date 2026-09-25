@@ -40,7 +40,7 @@ function templateSourceFixture(name) {
     cpSync(join(packageDir, path), join(scaffolder, path));
   }
   cpSync(join(resolveRepositoryRoot(), "packages/goribu/package.json"), join(source, "packages/goribu/package.json"));
-  for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src"]) {
+  for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src", "public"]) {
     cpSync(join(templateDir, path), join(template, path), { recursive: true });
   }
   symlinkSync(join(packageDir, "node_modules"), join(scaffolder, "node_modules"), "dir");
@@ -85,7 +85,7 @@ it("generates from the packed canonical template without installing or leaking l
   expect(config).toContain('name: "my-app-kv"');
   expect(readFileSync(join(app, ".gitignore"), "utf8"))
     .toBe(readFileSync(join(templateDir, ".gitignore"), "utf8"));
-  for (const path of ["src/routes/index.tsx", "src/components/flow-background.tsx", "src/setup/_document.tsx", "src/setup/client-entry.js", "src/styles/global.css", "vite.config.js", "AGENTS.md", "tsconfig.json"]) {
+  for (const path of ["src/routes/index.tsx", "src/components/flow-background.tsx", "src/setup/_document.tsx", "src/setup/client-entry.js", "src/styles/global.css", "public/favicon.svg", "vite.config.js", "AGENTS.md", "tsconfig.json"]) {
     expect(readFileSync(join(app, path))).toEqual(readFileSync(join(templateDir, path)));
   }
   const readme = readFileSync(join(app, "README.md"), "utf8");
@@ -148,6 +148,10 @@ it("generates JavaScript with JSX, working file references, and no TypeScript se
   const result = generate("--js", "javascript-app");
   succeeds(result);
   const app = join(taskDir, "javascript-app");
+  expect(readFileSync(join(app, "public/favicon.svg")))
+    .toEqual(readFileSync(join(templateDir, "public/favicon.svg")));
+  expect(readFileSync(join(app, "src/setup/_document.jsx"), "utf8"))
+    .toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
   const pkg = JSON.parse(readFileSync(join(app, "package.json"), "utf8"));
   expect(pkg.dependencies.goribu).toBe(frameworkVersion);
   expect(pkg.scripts.typecheck).toBeUndefined();
@@ -166,6 +170,21 @@ it("generates JavaScript with JSX, working file references, and no TypeScript se
   for (const path of ["tsconfig.json", "src/routes/index.tsx", "node_modules", ".git"]) expect(existsSync(join(app, path))).toBe(false);
   expect(result.stdout).toContain("JavaScript + Tailwind");
   expect(result.stdout).not.toContain("pnpm typecheck");
+});
+
+it("preserves public asset bytes and filenames in both language variants", () => {
+  const fixture = templateSourceFixture("public-assets");
+  const bytes = Buffer.from([0, 255, 128, 10, 13]);
+  writeFileSync(join(fixture.template, "public/image.png"), bytes);
+  writeFileSync(join(fixture.template, "public/example.ts"), "served without compilation");
+  succeeds(command(process.execPath, [fixture.build]));
+  const { templates } = JSON.parse(readFileSync(fixture.payload, "utf8"));
+  for (const files of Object.values(templates)) {
+    expect(Buffer.from(files["public/image.png"], "base64")).toEqual(bytes);
+    expect(Buffer.from(files["public/example.ts"], "base64").toString())
+      .toBe("served without compilation");
+    expect(files["public/example.js"]).toBeUndefined();
+  }
 });
 
 it("preserves shared documentation while removing only marked TypeScript guidance from JavaScript output", () => {
@@ -199,6 +218,7 @@ it("ships readable JavaScript with the authored code groups and multiline JSX in
           <head>
             <meta charSet="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
             <Stylesheet />
             {head}

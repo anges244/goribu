@@ -51,6 +51,7 @@ JavaScript output is generated during scaffolder packaging.
 
 ## What to edit
 
+- `public/`: directly served assets; replace `favicon.svg` with your app's icon.
 - `goribu.config.js`: Worker name and optional resource declarations.
 - `src/routes/index.tsx`: welcome copy, links, and Tailwind layout.
 - `src/components/flow-background.tsx`: decorative SVG paths and native animation.

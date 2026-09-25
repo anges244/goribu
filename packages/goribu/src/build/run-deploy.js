@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { finalizeD1Binding } from "./finalize-d1-binding.js";
 import { loadApplicationConfig } from "./load-application-config.js";
@@ -144,8 +145,9 @@ export async function runWranglerDeploy(options) {
       cwd: projectRoot,
       // Parser diagnostics can include source text. The preflight reports a
       // teaching error itself so malformed secrets cannot reach terminal logs.
-      stdio: options.dryRun ? "ignore" : "inherit",
+      stdio: options.dryRun ? "ignore" : ["inherit", "inherit", "pipe"],
     });
+    forwardWranglerDiagnostics(child.stderr);
     child.on("error", rejectPromise);
     child.on("close", (exitCode, terminatingSignal) =>
       resolvePromise({ code: exitCode, signal: terminatingSignal }),

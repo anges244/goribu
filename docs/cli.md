@@ -117,6 +117,12 @@ credentials itself. For non-interactive authentication, configure
 Login is explicit: `goribu deploy` checks credentials before building and asks
 you to repair authentication if needed.
 
+When deploy, resource inspection in `goribu check`, or a remote migration needs
+authentication, use `pnpm exec goribu cloudflare-login` and retry the command.
+Goribu displays Wrangler's error details with ordinary login suggestions pointing
+to that command. Wrangler-specific login flags and other diagnostic commands stay
+as Wrangler commands; `goribu cloudflare-login` accepts no arguments.
+
 ## `goribu deploy`
 
 Check Wrangler credentials and account selection before building, provision

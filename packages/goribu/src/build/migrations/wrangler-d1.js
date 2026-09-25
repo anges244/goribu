@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { resolve } from "node:path";
 import { resolveWranglerBin } from "../resolve-wrangler-bin.js";
+import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "../wrangler-diagnostics.js";
 
 /**
  * Run one `wrangler d1 execute` against the declared database and return its result.
@@ -89,8 +90,9 @@ export async function executeD1(options) {
   try {
     child = spawn(process.execPath, args, {
       cwd: resolve(projectRoot),
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardWranglerDiagnostics(child.stderr);
   } catch (cause) {
     throw wranglerError(target, errorLabel, readOnly, cause);
   }
@@ -159,7 +161,9 @@ export function lastResultRows(result) {
 function wranglerError(target, errorLabel, readOnly, cause) {
   return new Error(
     `[Goribu] Wrangler could not run the ${target} D1 SQL for \`${errorLabel}\`. ` +
-      "Read the Wrangler error above, fix authentication or the SQL, then rerun the command. " +
+      "Read the Wrangler error above and check the SQL. " +
+      (target === "remote" ? CLOUDFLARE_AUTH_HELP : "") +
+      "Then rerun the command. " +
       (readOnly
         ? "No resources were changed."
         : "No migration was recorded for a statement that did not complete."),

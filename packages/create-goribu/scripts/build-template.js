@@ -29,7 +29,7 @@ async function collect(relativePath) {
 
 // Only app-owned source is distributable. Never copy installed dependencies,
 // generated output, local credentials, resource state, or a workspace lockfile.
-for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src"]) {
+for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src", "public"]) {
   await collect(path);
 }
 let javascriptPackage;
@@ -50,8 +50,13 @@ const { transform } = await import("sucrase");
 const { format } = await import("prettier");
 const javascript = {};
 const javascriptPath = (path) => path.replace(/\.tsx$/, ".jsx").replace(/\.ts$/, ".js");
-const renamed = Object.keys(files).filter((path) => javascriptPath(path) !== path);
+const renamed = Object.keys(files).filter((path) => !path.startsWith("public/") && javascriptPath(path) !== path);
 for (const [path, encoded] of Object.entries(files)) {
+  // Public assets keep their names and bytes in both language variants.
+  if (path.startsWith("public/")) {
+    javascript[path] = encoded;
+    continue;
+  }
   if (path === "tsconfig.json" || path.endsWith(".d.ts")) continue;
   let content = Buffer.from(encoded, "base64").toString("utf8");
   if (/\.tsx?$/.test(path)) {

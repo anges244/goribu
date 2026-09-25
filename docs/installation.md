@@ -17,7 +17,9 @@ The rest of this page is a reference for the minimal framework files, not a
 second setup procedure. The starter defaults to TypeScript (`--js` selects
 JavaScript) and adds Tailwind, a custom Document, and one static welcome page
 to these fundamentals. `fixtures/basic-app` is a regression test target, not
-the starter to copy.
+the starter to copy. The starter includes `public/favicon.svg`, linked from
+`src/setup/_document.tsx` (`.jsx` in JavaScript apps). Put directly served assets
+in `public/`; for example, `public/logo.svg` is available at `/logo.svg`.
 
 ## Dependencies
 

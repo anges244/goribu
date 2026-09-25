@@ -29,7 +29,7 @@ function copySource(destination) {
     for (const path of ["package.json", "README.md", "bin", "src"]) paths.push(`packages/${name}/${path}`);
   }
   paths.push("packages/create-goribu/scripts/build-template.js");
-  for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src"]) paths.push(`templates/basic-app/${path}`);
+  for (const path of [".gitignore", "AGENTS.md", "README.md", "package.json", "goribu.config.js", "vite.config.js", "tsconfig.json", "src", "public"]) paths.push(`templates/basic-app/${path}`);
   for (const path of paths) {
     mkdirSync(dirname(join(destination, path)), { recursive: true });
     cpSync(join(repository, path), join(destination, path), { recursive: true });

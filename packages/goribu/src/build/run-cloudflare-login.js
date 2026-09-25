@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
+import { forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
 
 /** Let Goribu's installed Wrangler own interactive login and credential storage. */
 export async function runCloudflareLogin({ projectRoot, spawn = nodeSpawn, resolveBin = resolveWranglerBin }) {
@@ -18,8 +19,9 @@ export async function runCloudflareLogin({ projectRoot, spawn = nodeSpawn, resol
     result = await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [wranglerBin, "login"], {
         cwd: projectRoot,
-        stdio: "inherit",
+        stdio: ["inherit", "inherit", "pipe"],
       });
+      forwardWranglerDiagnostics(child.stderr);
       child.on("error", reject);
       child.on("close", (code, signal) => resolve({ code, signal }));
     });

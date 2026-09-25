@@ -11,6 +11,7 @@ import { executeD1 } from "./migrations/wrangler-d1.js";
 import { findDeclaredKVNamespace, listRemoteKVNamespaces } from "./inspect-kv.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 import { BUILD_OUTPUT_DIRECTORY } from "./build-output.js";
+import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -121,9 +122,10 @@ export async function listRemoteD1Databases(options) {
       [wranglerBin, "d1", "list", "--json"],
       {
         cwd: resolve(projectRoot),
-        stdio: ["ignore", "pipe", "inherit"],
+        stdio: ["ignore", "pipe", "pipe"],
       },
     );
+    forwardWranglerDiagnostics(child.stderr);
   } catch (cause) {
     throw wranglerStartError(cause);
   }
@@ -149,7 +151,8 @@ export async function listRemoteD1Databases(options) {
     const outcome = signal !== null ? `signal ${signal}` : `exit code ${code ?? "unknown"}`;
     throw new Error(
       `[Goribu] Could not inspect D1 databases because Wrangler finished with ${outcome}. ` +
-        "Read the Wrangler error above, fix authentication or account selection, then rerun `goribu check`. No resources were changed.",
+        "Read the Wrangler error above and check account selection. " +
+        CLOUDFLARE_AUTH_HELP + "Then rerun `goribu check`. No resources were changed.",
     );
   }
 

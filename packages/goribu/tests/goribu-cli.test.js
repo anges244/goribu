@@ -78,7 +78,7 @@ describe("goribu CLI", () => {
           assert.equal(command, process.execPath);
           assert.match(args[0], /wrangler[.]js$/);
           assert.deepEqual(args.slice(1), ["login"]);
-          assert.deepEqual(options, { cwd: process.cwd(), stdio: "inherit" });
+          assert.deepEqual(options, { cwd: process.cwd(), stdio: ["inherit", "inherit", "pipe"] });
           const child = new EventEmitter();
           queueMicrotask(() => child.emit("close", ${code}, null));
           return child;
