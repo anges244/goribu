@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -21,6 +22,7 @@ import {
 } from "./form-protocol.js";
 import {
   buildFormPayload,
+  completeUploadPayload,
   createGetSubmissionUrl,
   hasEnabledNamedFileInput,
   hasNamedControl,
@@ -28,6 +30,8 @@ import {
   normalizeFormMethod,
   resolveEffectiveSubmission,
 } from "./form-submission.js";
+
+import { FormUploadContext } from "./upload-context.js";
 
 const DEVELOPMENT = import.meta.env?.DEV === true;
 
@@ -49,6 +53,18 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
   const requiresHydration = !isNativeFormMethod(method);
 
   const formRef = useRef(null);
+  const uploadFields = useRef(new Map());
+  const [, updateUploads] = useState(0);
+  const changedUploads = useCallback(() => updateUploads((value) => value + 1), []);
+  const registerUpload = useCallback((name, field) => {
+    if (uploadFields.current.has(name)) throw new Error(`[Goribu] <Form> has more than one <FileUpload name=${JSON.stringify(name)}>. Use different field names.`);
+    uploadFields.current.set(name, field);
+    return () => {
+      uploadFields.current.delete(name);
+      changedUploads();
+    };
+  }, [changedUploads]);
+  const uploadContext = useMemo(() => ({ action, register: registerUpload, changed: changedUploads }), [action, registerUpload, changedUploads]);
   const inFlightRef = useRef(false);
   const abortControllerRef = useRef(null);
   const mountedRef = useRef(false);
@@ -408,6 +424,7 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
           version: navigationVersion,
           recoveryUrl: actionUrl.href,
           replace,
+          uploads: envelope.uploads,
         },
       );
     } catch {
@@ -520,9 +537,9 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
       );
     }
 
-    let payload;
+    let capturedPayload;
     try {
-      payload = buildFormPayload(form, submitter);
+      capturedPayload = buildFormPayload(form, submitter, uploadFields.current);
     } catch (error) {
       inFlightRef.current = false;
       throw error;
@@ -549,23 +566,36 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
       );
     }
 
-    if (effective.method === "get") {
-      void submitGet(effective.actionUrl, payload.formData, abortController.signal);
-      return;
-    }
+    void submitAfterUploads();
 
-    void submitMutation({
-      actionUrl: effective.actionUrl,
-      body: payload.body,
-      effectiveMethod: effective.method,
-      currentUrl,
-      navigationVersion,
-      signal: abortController.signal,
-    });
+    async function submitAfterUploads() {
+      const signal = abortController.signal;
+      try {
+        // Re-read the registry after settlement: a new pick replaces the old
+        // attempt, and a removed field must not contribute its former ref.
+        while (true) {
+          const pending = [...uploadFields.current.values()].map((field) => field.pending).filter(Boolean);
+          if (!pending.length) break;
+          await Promise.allSettled(pending);
+          if (!mountedRef.current || signal.aborted) return;
+          if (abandonIfStale(navigationVersion, signal)) return;
+        }
+        const payload = completeUploadPayload(capturedPayload, uploadFields.current, effective.actionUrl);
+        if (effective.method === "get") {
+          await submitGet(effective.actionUrl, payload.formData, signal);
+        } else {
+          await submitMutation({ actionUrl: effective.actionUrl, body: payload.body,
+            effectiveMethod: effective.method, currentUrl, navigationVersion, signal });
+        }
+      } catch {
+        failWithoutResponse(signal, navigationVersion);
+      }
+    }
   }
 
   const visibleState = {
     pending: state.pending,
+    uploading: [...uploadFields.current.values()].some((field) => field.pending !== null),
     errors: state.errors,
     data: state.data,
   };
@@ -575,10 +605,10 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
     // No form owner exists yet, including for external controls using form=id.
     // An inert wrapper keeps the content visible without offering a submission
     // that the browser would silently turn into GET or POST.
-    return h("div", { ...formProps, inert: true }, content);
+    return h(FormUploadContext.Provider, { value: uploadContext }, h("div", { ...formProps, inert: true }, content));
   }
 
-  return h(
+  return h(FormUploadContext.Provider, { value: uploadContext }, h(
     "form",
     {
       ...formProps,
@@ -590,7 +620,7 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
       onSubmit: handleSubmit,
     },
     content,
-  );
+  ));
 });
 
 function reportProtocolError(error) {

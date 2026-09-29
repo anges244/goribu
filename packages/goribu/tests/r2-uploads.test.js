@@ -89,7 +89,7 @@ it("rejects unknown/prototype fields and invalid metadata before evaluating key"
   for (const [change, code] of [[{ type: "text/html" }, "type"], [{ type: "image/*" }, "type"], [{ type: "image/png; charset=utf-8" }, "type"], [{ size: 0 }, "size"], [{ size: 1.1 }, "size"], [{ size: 11 }, "size"], [{ size: "4" }, "size"], [{ name: null }, "name"]]) {
     const response = await app.start({ ...file, ...change });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ code });
+    expect(await response.json()).toEqual(code === "size" ? { code, maxBytes: policy.maxBytes } : { code });
   }
   expect((await app.start(null)).status).toBe(400);
   expect(key).not.toHaveBeenCalled();

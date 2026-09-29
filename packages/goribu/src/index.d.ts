@@ -1,4 +1,4 @@
-import type { ComponentPropsWithRef, ReactElement, ReactNode, RefAttributes } from "react";
+import type { DragEventHandler, ComponentPropsWithRef, ReactElement, ReactNode, RefAttributes } from "react";
 
 export interface LinkProps extends ComponentPropsWithRef<"a"> {
   replace?: boolean;
@@ -19,6 +19,7 @@ export type FormResult<Data = unknown> =
   | { ok: false; errors: FormErrors; data?: Data; response?: Response };
 export interface FormState<Data = unknown> {
   pending: boolean;
+  uploading: boolean;
   errors: FormErrors | null;
   data: Data | null;
 }
@@ -69,3 +70,23 @@ export interface RouteMetadata {
 }
 export type Meta<Props extends object = Record<string, unknown>> = RouteMetadata |
   ((context: { props: Props; url: URL }) => RouteMetadata | undefined);
+
+export type UploadErrorCode = "type" | "size" | "forbidden" | "network" | "expired" | "server";
+export class UploadError extends Error {
+  readonly code: UploadErrorCode;
+  constructor(code: UploadErrorCode, options?: { maxBytes?: number; cause?: unknown });
+}
+export function upload(file: File, options: { action: string; name: string; signal?: AbortSignal }): Promise<string>;
+export interface FileUploadState {
+  file: File | null;
+  status: "idle" | "uploading" | "done" | "error";
+  errorMessage: string | null;
+  previewUrl: string | null;
+  showPicker(): void;
+  dropProps: { onDragOver: DragEventHandler<HTMLElement>; onDrop: DragEventHandler<HTMLElement> };
+}
+export interface FileUploadProps {
+  name: string;
+  children?: (state: FileUploadState) => ReactNode;
+}
+export function FileUpload(props: FileUploadProps): ReactElement;

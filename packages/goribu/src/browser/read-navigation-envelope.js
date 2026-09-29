@@ -1,3 +1,4 @@
+import { readUploadHints } from "../forms/upload-context.js";
 import { normalizeRouteMeta } from "../metadata/route-meta.js";
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
@@ -48,6 +49,7 @@ export async function readNavigationEnvelope(response, options = {}) {
       kind: "render",
       routeId: payload.routeId,
       props: payload.props,
+      ...(payload.uploads === undefined ? {} : { uploads: readUploadHints(payload.uploads) }),
       meta: normalizeRouteMeta(payload.meta, {
         source: "Navigation render metadata",
       }),

@@ -138,7 +138,7 @@ describe("Form", () => {
     navigation.resolve();
     await flushReact();
 
-    expect(states.at(-1)).toEqual({ pending: false, errors: null, data: null });
+    expect(states.at(-1)).toEqual({ pending: false, uploading: false, errors: null, data: null });
     expect(onResult).toHaveBeenCalledWith({ ok: true });
   });
 
@@ -181,7 +181,7 @@ describe("Form", () => {
       await flushReact();
 
       expect(states.at(-1)).toEqual({
-        pending: false,
+        pending: false, uploading: false,
         errors: null,
         data: null,
       });
@@ -224,7 +224,7 @@ describe("Form", () => {
 
     await submit(form, button);
     expect(states.at(-1)).toMatchObject({
-      pending: false,
+      pending: false, uploading: false,
       data: { saved: true },
       errors: null,
     });
@@ -234,7 +234,7 @@ describe("Form", () => {
       await Promise.resolve();
     });
     expect(states.at(-1)).toMatchObject({
-      pending: true,
+      pending: true, uploading: false,
       data: { saved: true },
       errors: null,
     });
@@ -248,7 +248,7 @@ describe("Form", () => {
     await flushReact();
 
     expect(states.at(-1)).toEqual({
-      pending: false,
+      pending: false, uploading: false,
       data: null,
       errors: { second: "Second error", first: "First error" },
     });
@@ -334,7 +334,7 @@ describe("Form", () => {
     await submit(container.querySelector("form"), container.querySelector("button"));
 
     expect(states.at(-1)).toEqual({
-      pending: false,
+      pending: false, uploading: false,
       data: null,
       errors: { root: FORM_FAILURE_MESSAGE },
     });
@@ -483,13 +483,13 @@ describe("Form", () => {
       await Promise.resolve();
     });
     expect(fetch).toHaveBeenCalledOnce();
-    expect(states.at(-1)).toMatchObject({ pending: true, errors: null });
+    expect(states.at(-1)).toMatchObject({ pending: true, uploading: false, errors: null });
 
     pending.reject(new TypeError("network down"));
     await flushReact();
 
     expect(states.at(-1)).toEqual({
-      pending: false,
+      pending: false, uploading: false,
       data: null,
       errors: { root: FORM_FAILURE_MESSAGE },
     });
@@ -714,7 +714,7 @@ describe("Form", () => {
     );
     await submit(container.querySelector("form"), container.querySelector("button"));
 
-    expect(states.at(-1)).toEqual({ pending: false, errors: null, data: null });
+    expect(states.at(-1)).toEqual({ pending: false, uploading: false, errors: null, data: null });
     expect(onResult).not.toHaveBeenCalled();
   });
 
@@ -749,7 +749,7 @@ describe("Form", () => {
 
     await submit(form, button);
     expect(states.at(-1)).toEqual({
-      pending: false,
+      pending: false, uploading: false,
       errors: null,
       data: { saved: "prior" },
     });
@@ -758,7 +758,7 @@ describe("Form", () => {
     await submit(form, button);
 
     expect(states.at(-1)).toEqual({
-      pending: false,
+      pending: false, uploading: false,
       errors: null,
       data: { saved: "prior" },
     });
@@ -808,7 +808,7 @@ describe("Form", () => {
     envelopeRead.resolve(body);
     await flushReact();
 
-    expect(states.at(-1)).toEqual({ pending: false, errors: null, data: null });
+    expect(states.at(-1)).toEqual({ pending: false, uploading: false, errors: null, data: null });
     expect(form.elements.namedItem("title").hasAttribute("aria-invalid")).toBe(false);
     expect(onResult).not.toHaveBeenCalled();
     expect(runtime.navigate).not.toHaveBeenCalled();

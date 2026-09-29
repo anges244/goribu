@@ -56,7 +56,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Plans include the workers.dev origin that Wrangler enables on every deployment,
   including existing disabled Workers and secret-created drafts; origin discovery
   follows paginated domain, zone and route inventories.
-  Browser upload components/helpers and live verification remain in progress.
+  `FileUpload` and `upload()` now start and transfer files, with cancellation,
+  local picker hints, user-ready errors with server size limits, and image
+  preview cleanup. Form exposes
+  `uploading`, waits for current uploads before collecting refs, and keeps
+  managed fields URL-encoded. Hydration, navigation and form renders carry the
+  current route's hints. Live verification remains pending.
   R2 stays unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked

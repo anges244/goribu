@@ -176,7 +176,7 @@ export function createNavigationController(options) {
       signal,
     };
     try {
-      return await renderAndCommit(Page, props, location, context);
+      return await renderAndCommit(Page, props, location, context, undefined, { uploads: renderOptions?.uploads, action: renderOptions?.recoveryUrl ?? location });
     } catch (error) {
       if (disposed || context.version !== navigationVersion || context.signal?.aborted) return false;
       // The failed page may already have unmounted its submitting Form. Own
@@ -199,7 +199,7 @@ export function createNavigationController(options) {
     return navigationVersion;
   }
 
-  function renderAndCommit(Page, props, location, context, commit = () => {}) {
+  function renderAndCommit(Page, props, location, context, commit = () => {}, uploadHints) {
     cancelPendingCommit?.();
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -262,7 +262,7 @@ export function createNavigationController(options) {
       }
       try {
         pendingRender = render;
-        root.render(createLocatedPage(Page, props, location, onCommit, fail, onCommitStart));
+        root.render(createLocatedPage(Page, props, location, onCommit, fail, onCommitStart, uploadHints));
       } catch (error) {
         fail(error);
       }
@@ -356,7 +356,7 @@ export function createNavigationController(options) {
           scrollToDestination(destination);
         }
         saveCurrentScroll();
-      });
+      }, { uploads: target.envelope.uploads, action: destination.href });
     } catch (error) {
       if (
         disposed ||

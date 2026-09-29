@@ -1,3 +1,4 @@
+import { upload } from "../src/index.js";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,8 +36,12 @@ it("starts, uploads and verifies public/private files through dev and the built 
         return res.json(body);
       }
     `);
-    writeFileSync(join(root, "src/routes/upload-page.jsx"), `import { Form } from "goribu";
-      export default function Page() { return <Form method="patch" action="/upload-save"><button>Save</button></Form>; }`);
+    writeFileSync(join(root, "src/routes/upload-page.jsx"), `import { Form, FileUpload } from "goribu";
+      export default function Page() { return <Form method="post" action="/client-upload"><FileUpload name="avatar" /><button>Save</button></Form>; }`);
+    writeFileSync(join(root, "src/routes/client-upload.js"), `
+      export const uploads = { avatar: { accept: ["image/png"], maxBytes: 100 } };
+      export async function POST(req, res) { return res.json(await req.body()); }
+    `);
     // Test-only inspection stays in the fixture Worker, never in production source.
     writeFileSync(join(root, "src/routes/inspect-upload.js"), `export async function GET(req, res) {
       const bucket = req.query.has("private") ? req.r2.private : req.r2;
@@ -44,6 +49,21 @@ it("starts, uploads and verifies public/private files through dev and the built 
       return res.json(object ? { size: object.size, metadata: object.httpMetadata, customMetadata: object.customMetadata, bytes: await object.text(), link: await bucket.signedUrl(object.key) } : null);
     }`);
     async function exercise(base, development) {
+      // The real public helper crosses start/PUT/verification against both
+      // Vite's Worker proxy and the emitted production Worker.
+      const previousWindow = globalThis.window;
+      try {
+        globalThis.window = { location: { href: new URL("/upload-page", base).href } };
+        await expect(upload(new File(["x".repeat(101)], "large.png", { type: "image/png" }), { action: "/client-upload", name: "avatar" })).rejects.toMatchObject({
+          code: "size", message: "This file is too large. The limit is 0.1 KB.",
+        });
+        const ref = await upload(new File(["data"], "client.png", { type: "image/png" }), { action: "/client-upload", name: "avatar" });
+        const result = await fetch(new URL("/client-upload", base), { method: "POST", body: new URLSearchParams({ avatar: ref }) });
+        expect(await result.json()).toMatchObject({ avatar: { name: "client.png", size: 4, type: "image/png" } });
+      } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+      }
       const action = new URL("/upload-save", base);
       const startOptions = (field, authorized = true, size = 4) => ({ method: "POST", headers: { "content-type": "application/json", "x-goribu-upload": field, ...(authorized ? { "x-user": "test-user" } : {}) }, body: JSON.stringify({ name: "test.PNG", type: "image/png", size }) });
       const forbidden = await fetch(action, startOptions("avatar", false));

@@ -1,3 +1,4 @@
+import { readUploadHints } from "../forms/upload-context.js";
 import {
   PROPS_SCRIPT_ID,
   ROUTE_SCRIPT_ID,
@@ -53,6 +54,7 @@ export function readInitialRenderData(browserDocument = globalThis.document) {
   }
 
   return Object.freeze({ routeId: route.id, props,
+    ...(route.uploads === undefined ? {} : { uploads: readUploadHints(route.uploads) }),
     ...(route.buildId === undefined ? {} : { buildId: route.buildId }),
   });
 }

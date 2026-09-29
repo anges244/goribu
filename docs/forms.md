@@ -171,8 +171,15 @@ re-rendering the page.
 Render-prop children receive:
 
 ```js
-{ pending, errors, data }
+{ pending, uploading, errors, data }
 ```
+
+For managed R2 files, use [`<FileUpload name>`](r2.md#uploading-from-a-form)
+inside `<Form>` and export `uploads` from its action route. The render value
+`uploading` is true while a managed file is uploading. Submitting waits for those
+uploads before collecting refs; failed fields are absent for handler validation.
+An unnamed FileUpload picker keeps enhanced forms URL-encoded. Plain named file
+inputs retain the multipart behavior described above.
 
 `pending` becomes true synchronously when enhancement accepts a submission.
 Duplicate submissions from the same form are blocked until completion. Old

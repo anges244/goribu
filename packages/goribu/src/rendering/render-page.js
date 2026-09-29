@@ -79,7 +79,7 @@ export async function renderPage(options) {
     RenderDataContext.Provider,
     { value: renderData },
     h(Document, {
-      children: createLocatedPage(Page, props, options?.location),
+      children: createLocatedPage(Page, props, options?.location, undefined, undefined, undefined, { uploads: options?.uploads, action: options?.location }),
       head: hasMetadata ? createRouteHead(options.metadata) : null,
       nonce: options?.nonce,
     }),

@@ -45,7 +45,7 @@ export async function hydrateInitialPage(options) {
   try {
     return hydrate(
       rootElement,
-      createLocatedPage(Page, initialData.props, location),
+      createLocatedPage(Page, initialData.props, location, undefined, undefined, undefined, { uploads: initialData.uploads, action: location }),
     );
   } catch (cause) {
     throw new Error(

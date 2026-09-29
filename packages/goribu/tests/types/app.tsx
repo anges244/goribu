@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { ClientEntry, Form, Link, NavLink, Stylesheet, navigate } from "goribu";
+import { ClientEntry, Form, FileUpload, upload, UploadError, Link, NavLink, Stylesheet, navigate } from "goribu";
 import type { DocumentProps, Meta } from "goribu";
 import { createApp, defineConfig } from "goribu/server";
 import type { Handler, Middleware, ServerErrorProps } from "goribu/server";
@@ -218,3 +218,18 @@ const invalidUploadKey: import("goribu/server").UploadPolicy = {
   key: async () => "key",
 };
 void [uploadPolicies, invalidUploadKey];
+
+const uploadUI = <Form method="patch" action="/avatar">{({ pending, uploading }) => <>
+  <FileUpload name="avatar">{({ file, status, errorMessage, previewUrl, showPicker, dropProps }) =>
+    <div {...dropProps}><button type="button" onClick={showPicker}>{file?.name}</button>
+      {previewUrl && <img src={previewUrl} alt="" />}{status}{errorMessage}</div>}
+  </FileUpload><button disabled={pending || uploading}>Save</button>
+</>}</Form>;
+const refPromise: Promise<string> = upload(new File(["x"], "photo.png"), { action: "/avatar", name: "avatar", signal: new AbortController().signal });
+const uploadErrorCode: import("goribu").UploadErrorCode = new UploadError("network").code;
+// @ts-expect-error A managed field has only a name and optional render function.
+const multipleUpload = <FileUpload name="avatar" multiple />;
+// @ts-expect-error A file is required; callers cannot forge metadata for the helper.
+upload({ name: "photo.png", size: 1, type: "image/png" }, { action: "/avatar", name: "avatar" });
+// @ts-expect-error An action route is required outside Form.
+upload(new File([], "a"), { name: "avatar" });

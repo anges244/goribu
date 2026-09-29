@@ -58,7 +58,7 @@ export function resolveEffectiveSubmission(options) {
 }
 
 /** Build standard successful controls and choose Form's deterministic encoding. */
-export function buildFormPayload(form, submitter) {
+export function buildFormPayload(form, submitter, uploads = []) {
   const formData =
     submitter === null || submitter === undefined
       ? new FormData(form)
@@ -67,9 +67,24 @@ export function buildFormPayload(form, submitter) {
 
   return Object.freeze({
     formData,
+    uploadFields: new Map([...uploads].map(([name, field]) => [name, { field, enabled: !isControlDisabled(field.input) }])),
     multipart,
     body: multipart ? formData : toSearchParams(formData, false),
   });
+}
+
+/** Complete the accepted submission without rereading controls disabled by pending. */
+export function completeUploadPayload(payload, uploads, actionUrl) {
+  const { formData, multipart, uploadFields } = payload;
+  for (const [name, captured] of uploadFields) {
+    formData.delete(name);
+    const field = uploads.get(name);
+    // New picks reuse the field; removal/replacement of the component does not.
+    // Read the final ref without depending on a React commit.
+    if (field === captured.field && captured.enabled && field.ref &&
+        new URL(field.action).pathname === actionUrl.pathname) formData.set(name, field.ref);
+  }
+  return { formData, body: multipart ? formData : toSearchParams(formData, false) };
 }
 
 /** Replace the action query with successful non-file controls and preserve its hash. */

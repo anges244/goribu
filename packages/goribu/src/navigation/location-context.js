@@ -1,12 +1,14 @@
 import { Component, createContext, createElement as h, useLayoutEffect } from "react";
 
+import { UploadHintsContext } from "../forms/upload-context.js";
+
 /** Internal request/browser location shared by SSR, hydration, and route swaps. */
 export const LocationContext = createContext(null);
 
 /** Render one route page under the location value observed by NavLink. */
-export function createLocatedPage(Page, props, location, onCommit, onError, onCommitStart) {
+export function createLocatedPage(Page, props, location, onCommit, onError, onCommitStart, uploadHints) {
   return h(PageErrorBoundary, { onError, onCommitStart },
-    h(LocatedPage, { Page, pageProps: props, location, onCommit }),
+    h(LocatedPage, { Page, pageProps: props, location, onCommit, uploadHints }),
   );
 }
 
@@ -44,7 +46,7 @@ class PageErrorBoundary extends Component {
   }
 }
 
-function LocatedPage({ Page, pageProps, location, onCommit }) {
+function LocatedPage({ Page, pageProps, location, onCommit, uploadHints }) {
   // Keep the same component tree for SSR, hydration and subsequent renders.
   // Let descendants finish synchronous layout-effect updates, then use the
   // committed destination DOM before the browser gets a chance to paint.
@@ -54,6 +56,6 @@ function LocatedPage({ Page, pageProps, location, onCommit }) {
   return h(
     LocationContext.Provider,
     { value: typeof location === "string" ? location : null },
-    h(Page, pageProps),
+    h(UploadHintsContext.Provider, { value: uploadHints ?? null }, h(Page, pageProps)),
   );
 }

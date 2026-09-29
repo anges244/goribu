@@ -15,7 +15,7 @@ export async function startUpload({ req, res, route, policies, config, mode }) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return res.status(400).json({ code: "type" });
   const type = input.type === "" ? "application/octet-stream" : input.type;
   if (!acceptsUploadType(type, policy.accept)) return res.status(400).json({ code: "type" });
-  if (!Number.isSafeInteger(input.size) || input.size <= 0 || input.size > policy.maxBytes) return res.status(400).json({ code: "size" });
+  if (!Number.isSafeInteger(input.size) || input.size <= 0 || input.size > policy.maxBytes) return res.status(400).json({ code: "size", maxBytes: policy.maxBytes });
   if (typeof input.name !== "string") return res.status(400).json({ code: "name" });
   const file = Object.freeze({ name: sanitizeUploadName(input.name), type, size: input.size });
   const ext = /\.[a-z0-9]{1,9}$/i.exec(file.name)?.[0].toLowerCase() ?? "";

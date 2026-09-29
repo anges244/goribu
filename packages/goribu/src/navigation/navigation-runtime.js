@@ -73,6 +73,7 @@ export function renderFormPage(routeId, props, metadata, options) {
     signal,
     version: options?.version,
     recoveryUrl: options?.recoveryUrl,
+    uploads: options?.uploads,
     replace: options?.replace,
   });
 }

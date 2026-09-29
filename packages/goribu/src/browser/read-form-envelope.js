@@ -1,3 +1,4 @@
+import { readUploadHints } from "../forms/upload-context.js";
 import { hasFormMediaType } from "../forms/form-protocol.js";
 import { normalizeRouteMeta } from "../metadata/route-meta.js";
 
@@ -77,6 +78,7 @@ export async function readFormEnvelope(response) {
       type: "render",
       routeId: payload.route,
       props: Object.freeze({ ...payload.props }),
+      ...(payload.uploads === undefined ? {} : { uploads: readUploadHints(payload.uploads) }),
       meta: normalizeRouteMeta(payload.meta, {
         source: "Form render metadata",
       }),
