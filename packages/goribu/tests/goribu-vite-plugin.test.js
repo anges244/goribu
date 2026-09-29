@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -55,6 +56,27 @@ afterEach(() => {
 });
 
 describe("goribu()", () => {
+  it("generates a dev secret only for serve with R2, never in Wrangler's config file", async () => {
+    const root = makeProject();
+    writeMinimalProject(root);
+    const plugin = goribuPlugin();
+    const secretFile = join(root, ".goribu/dev-secret");
+    await plugin.config({ root }, { command: "serve" });
+    expect(existsSync(secretFile)).toBe(false);
+    writeFileSync(join(root, "goribu.config.js"),
+      `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
+      'export default defineConfig({ name: "test-app", compatibilityDate: "2026-09-01", r2: { name: "test-files" } });\n');
+    await plugin.config({ root }, { command: "build" });
+    expect(existsSync(secretFile)).toBe(false);
+    await plugin.config({ root }, { command: "serve" });
+    expect(existsSync(secretFile)).toBe(true);
+    expect(readFileSync(join(root, "goribu.wrangler.jsonc"), "utf8")).not.toContain("GORIBU_SECRET");
+    // Build must not read dev state, even in a reused plugin instance.
+    writeFileSync(secretFile, "corrupt-dev-state");
+    await plugin.config({ root }, { command: "build" });
+    expect(readFileSync(secretFile, "utf8")).toBe("corrupt-dev-state");
+  });
+
   it("requires the setup entry and rejects legacy entries in development and production", async () => {
     for (const command of ["serve", "build"]) {
       const root = makeProject();

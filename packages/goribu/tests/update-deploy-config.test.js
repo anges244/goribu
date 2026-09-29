@@ -6,6 +6,7 @@ import { defineConfig } from "../src/runtime/application-config.js";
 import { writeWranglerConfig } from "../src/build/generate-wrangler-config.js";
 import { finalizeD1Binding } from "../src/build/finalize-d1-binding.js";
 import { finalizeKVBinding } from "../src/build/finalize-kv-binding.js";
+import { finalizeR2Account } from "../src/build/finalize-r2-account.js";
 
 const roots = [];
 function project() {
@@ -21,6 +22,21 @@ const database = { name: "app-db", uuid: "db-id" };
 const namespace = { title: "app-kv", id: "a".repeat(32) };
 
 describe("shared deploy artifact boundary", () => {
+  it("attaches the signer account without losing app vars or bindings", () => {
+    const projectRoot = project();
+    const r2Config = defineConfig({ ...appConfig, r2: { name: "app-files" } });
+    const { config } = writeWranglerConfig({ projectRoot, appConfig: r2Config });
+    const output = join(projectRoot, "output.json");
+    writeFileSync(output, JSON.stringify({ ...config, vars: { APP_LABEL: "example", CLOUDFLARE_ACCOUNT_ID: "app-owned", GORIBU_R2_ACCOUNT_ID: "stale" } }));
+    const accountId = "a".repeat(32);
+    finalizeR2Account({ projectRoot, appConfig: r2Config, accountId });
+    const result = JSON.parse(readFileSync(output, "utf8"));
+    expect(result).toEqual({ ...config, vars: { APP_LABEL: "example", CLOUDFLARE_ACCOUNT_ID: "app-owned", GORIBU_R2_ACCOUNT_ID: accountId } });
+    expect(() => finalizeR2Account({ projectRoot, appConfig: r2Config, accountId: "invalid" })).toThrow(/\[Goribu\].*account ID/);
+    writeFileSync(output, JSON.stringify({ ...config, vars: [] }));
+    expect(() => finalizeR2Account({ projectRoot, appConfig: r2Config, accountId })).toThrow(/vars are not an object/);
+  });
+
   it("attaches both resource ids without discarding either binding or local storage identity", () => {
     const projectRoot = project();
     const { config } = writeWranglerConfig({ projectRoot, appConfig });

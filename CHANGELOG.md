@@ -23,7 +23,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   URLs with production R2 credentials, including EU endpoints. Worker downloads
   support ranges, conditional requests, and attachment filenames; prerendering
   rejects expiring links. Files served on the app origin use fixed sandbox and
-  nosniff headers, including dev public files. Provisioning and browser uploads remain in progress. R2 stays
+  nosniff headers, including dev public files. R2 deploy setup supplies the
+  authenticated account as `GORIBU_R2_ACCOUNT_ID` to the Worker signer before
+  provisioning, keeping the app's `CLOUDFLARE_ACCOUNT_ID` binding separate.
+  R2 development generates a persistent local signing secret, with root env
+  values taking precedence and the fallback excluded from production output.
+  Provisioning and browser uploads remain in progress. R2 stays
   unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked

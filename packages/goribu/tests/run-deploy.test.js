@@ -354,6 +354,32 @@ describe("runDeploy", () => {
   });
 });
 
+it("finalizes the R2 account after build and before validation or remote mutation", async () => {
+  const projectRoot = makeProject();
+  writeFileSync(join(projectRoot, ".env.production"), "EXAMPLE=test-only\n");
+  const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-09-01", r2: { name: "app-files" } });
+  const events = [];
+  const accountId = "b".repeat(32);
+  const finalizeR2Account = vi.fn(() => events.push("account"));
+  const options = {
+    projectRoot, loadConfig: async () => appConfig,
+    getAccess: async () => ({ accountId, headers: {} }),
+    build: async () => { events.push("build"); }, finalizeR2Account,
+    validateSecrets: async () => { events.push("validate"); },
+    provision: async () => { events.push("provision"); return null; },
+    provisionKV: async () => null,
+    deploy: async () => { events.push("deploy"); return 0; },
+    stdout: { write() {} },
+  };
+  await runDeploy(options);
+  expect(events).toEqual(["build", "account", "validate", "provision", "deploy"]);
+  expect(finalizeR2Account).toHaveBeenCalledWith({ projectRoot, appConfig, accountId });
+  events.length = 0;
+  finalizeR2Account.mockImplementation(() => { throw new Error("invalid artifact"); });
+  await expect(runDeploy(options)).rejects.toThrow("invalid artifact");
+  expect(events).toEqual(["build"]);
+});
+
 it("validates production secrets before provisioning, and never uploads the local .env as fallback", async () => {
   const projectRoot = makeProject();
   writeFileSync(join(projectRoot, ".env"), "LOCAL_ONLY=never-upload\n");

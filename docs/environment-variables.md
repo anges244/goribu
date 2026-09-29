@@ -34,6 +34,12 @@ find those files beside its configuration. This file and `.goribu/` are generate
 and should be ignored by Git. Configure `goribu.config.js`; do not edit the
 generated Wrangler file.
 
+When R2 is configured, Goribu creates and reuses its own `.goribu/dev-secret`
+for local signing. It supplies this as a serve-only `GORIBU_SECRET` fallback
+in memory; a value in the root env files takes precedence. Goribu reads only
+its generated secret file, never parses app-authored env files, and does not
+write that fallback into generated Wrangler files or production output.
+
 Goribu does not select a named Cloudflare environment automatically.
 `.dev.vars.local` is not a local override: `.dev.vars.<name>` refers to a
 Cloudflare environment with that name. Advanced Cloudflare environment selection
@@ -104,7 +110,8 @@ in the browser bundle. Never give a private API key a `PUBLIC_` prefix.
 Cloudflare may also write local values into
 `.goribu/dist/<worker>/.dev.vars` for local preview. Wrangler does not deploy
 that preview file. Build output can therefore contain local secrets. Cloudflare
-owns this preview copy; Goribu adds no separate secrets file.
+owns this preview copy. Goribu's generated `.goribu/dev-secret` is used only
+during serve and is excluded from build output.
 
 ## Migrating from the older env loader
 

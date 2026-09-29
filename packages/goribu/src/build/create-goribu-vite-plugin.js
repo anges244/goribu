@@ -20,6 +20,7 @@ import { createDevelopmentStylesPlugin } from "./create-development-styles-plugi
 import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
 import { createDevelopmentImportRecoveryPlugin } from "./development-import-recovery.js";
 import { createDevelopmentRouteInventoryPlugin } from "./development-route-inventory.js";
+import { getDevelopmentSecret } from "./development-secret.js";
 import { BUILD_OUTPUT_DIRECTORY, assertBuildOutputs, createBuildOutputGuardPlugin } from "./build-output.js";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
@@ -61,21 +62,29 @@ export function goribu(options) {
 
   const navigationBuildId = randomBytes(16).toString("hex");
   const developmentPageIds = new Set();
+  const development = { secret: undefined };
   return [
     createDevelopmentRouteInventoryPlugin(),
-    createGoribuPlugin(navigationBuildId),
+    createGoribuPlugin(navigationBuildId, development),
     createConfiguredClientBoundaryPlugin(),
     createConfiguredClientPageManifestPlugin(navigationBuildId, developmentPageIds),
     createConfiguredClientAssetsPlugin(navigationBuildId),
     createDevelopmentImportRecoveryPlugin(),
     createDevelopmentStylesPlugin(developmentPageIds),
     createDevelopmentLifecyclePlugin(),
-    ...cloudflare({ configPath: GENERATED_WRANGLER_CONFIG }),
+    ...cloudflare({
+      configPath: GENERATED_WRANGLER_CONFIG,
+      // The pre hook sets this only for serve. Wrangler overlays root env files
+      // on vars, so an app-authored GORIBU_SECRET still takes precedence.
+      config: () => development.secret === undefined
+        ? undefined
+        : { vars: { GORIBU_SECRET: development.secret } },
+    }),
     createBuildOutputGuardPlugin(),
   ];
 }
 
-function createGoribuPlugin(navigationBuildId) {
+function createGoribuPlugin(navigationBuildId, development) {
   const fingerprints = createClientAssetFingerprints();
   const assetNameTracker = {
     name: "goribu:asset-fingerprints",
@@ -110,6 +119,7 @@ function createGoribuPlugin(navigationBuildId) {
     // enforce: "pre"), so the generated Worker entry and Wrangler config are on
     // disk by the time it reads them.
     async config(config, environment = {}) {
+      development.secret = undefined;
       assertCanonicalEnvPrefix(config?.envPrefix, true);
       const root = config.root ? resolve(config.root) : process.cwd();
       if (config.build?.outDir !== undefined && resolve(root, config.build.outDir) !== resolve(root, BUILD_OUTPUT_DIRECTORY)) {
@@ -125,6 +135,9 @@ function createGoribuPlugin(navigationBuildId) {
       await assertNoDuplicateKVDeclaration({ projectRoot: root, appConfig });
       await assertNoDuplicateR2Declaration({ projectRoot: root, appConfig });
       writeWranglerConfig({ projectRoot: root, appConfig });
+      if (environment.command === "serve" && appConfig.r2 !== undefined) {
+        development.secret = getDevelopmentSecret(root);
+      }
       return {
         envPrefix: PUBLIC_ENV_PREFIX,
         // Use the same command-derived mode as the generated Worker, rather

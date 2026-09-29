@@ -35,8 +35,8 @@ export async function signedDownloadUrl({ env, config, bucket, mode, requestUrl,
       if (typeof accessKeyId !== "string" || !accessKeyId || typeof secretAccessKey !== "string" || !secretAccessKey) {
         throw new Error("[Goribu] R2 presigned downloads need both R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. Configure both Worker secrets, or remove both to use Worker-served links.");
       }
-      const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-      if (typeof accountId !== "string" || !/^[a-f0-9]{32}$/i.test(accountId)) throw new Error("[Goribu] R2 presigned downloads need CLOUDFLARE_ACCOUNT_ID as a Worker variable. Set it to the 32-character Cloudflare account ID.");
+      const accountId = env.GORIBU_R2_ACCOUNT_ID;
+      if (typeof accountId !== "string" || !/^[a-f0-9]{32}$/i.test(accountId)) throw new Error("[Goribu] R2 presigned downloads need the generated GORIBU_R2_ACCOUNT_ID Worker variable. Run `goribu deploy` to attach the authenticated account ID.");
       return presignS3Url({ method: "GET", accountId, bucket: bucket === "private" ? config.private.name : config.name,
         key, accessKeyId, secretAccessKey, expiresIn, jurisdiction: config.jurisdiction,
         queryParams: download === undefined ? [] : [["response-content-disposition", contentDisposition(download)]] });

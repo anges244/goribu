@@ -33,7 +33,7 @@ export async function verifyToken(token, secret, purpose, now = Math.floor(Date.
 
 async function importKey(secret, operation) {
   if (typeof secret !== "string" || !secret.length) {
-    throw new Error("[Goribu] GORIBU_SECRET is required for signed R2 links and upload refs. Configure the Worker secret with wrangler secret put GORIBU_SECRET; local development needs it in dev vars until automatic provisioning is available.");
+    throw new Error("[Goribu] GORIBU_SECRET is required for signed R2 links and upload refs. For production, configure the Worker secret with wrangler secret put GORIBU_SECRET. For development, remove any empty GORIBU_SECRET override from the app's env files and restart `goribu dev` to use the generated local secret.");
   }
   return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [operation]);
 }

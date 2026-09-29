@@ -10,6 +10,7 @@ import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { provisionKV } from "./provision-kv.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
+import { finalizeR2Account } from "./finalize-r2-account.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 
@@ -51,6 +52,12 @@ export async function runDeploy(options) {
   const access = await (options?.getAccess ?? getCloudflareAccess)({ projectRoot });
   const getAccess = async () => access;
   await build();
+
+  // This is public build configuration, never a secret. Finalize it before
+  // Wrangler validates the artifact and before any production resources change.
+  if (appConfig.r2 !== undefined) {
+    (options?.finalizeR2Account ?? finalizeR2Account)({ projectRoot, appConfig, accountId: access.accountId });
+  }
 
   if (secretsFile) {
     await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile, accountId: access.accountId });

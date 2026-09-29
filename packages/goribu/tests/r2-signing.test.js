@@ -56,7 +56,7 @@ describe("R2 signing", () => {
   });
 
   it("uses presigned URLs with complete production credentials, including EU and attachment query", async () => {
-    const env = { R2_ACCESS_KEY_ID: "test-id", R2_SECRET_ACCESS_KEY: "test-secret", CLOUDFLARE_ACCOUNT_ID: "a".repeat(32), get GORIBU_SECRET() { throw new Error("S3 does not need app secret"); } };
+    const env = { R2_ACCESS_KEY_ID: "test-id", R2_SECRET_ACCESS_KEY: "test-secret", GORIBU_R2_ACCOUNT_ID: "a".repeat(32), get CLOUDFLARE_ACCOUNT_ID() { throw new Error("signer must not use the app-owned account variable"); }, get GORIBU_SECRET() { throw new Error("S3 does not need app secret"); } };
     const r2 = createR2(env, config, "production", context);
     const url = new URL(await r2.private.signedUrl("é a.pdf", { expiresIn: 604800, download: "résumé.pdf" }));
     expect(url.hostname).toBe(`${"a".repeat(32)}.eu.r2.cloudflarestorage.com`);
@@ -76,7 +76,7 @@ describe("R2 signing", () => {
     await expect(createR2({}, undefined, "production", context).signedUrl("key")).rejects.toThrow(/no R2 bucket/);
     await expect(createR2({ R2_ACCESS_KEY_ID: "never-echo-this" }, config, "production", context).signedUrl("key")).rejects.toThrow(/Configure both Worker secrets/);
     const credentials = { R2_ACCESS_KEY_ID: "fake", R2_SECRET_ACCESS_KEY: "fake" };
-    await expect(createR2(credentials, config, "production", context).signedUrl("key")).rejects.toThrow(/CLOUDFLARE_ACCOUNT_ID/);
+    await expect(createR2(credentials, config, "production", context).signedUrl("key")).rejects.toThrow(/GORIBU_R2_ACCOUNT_ID.*goribu deploy/);
     const read = vi.fn(() => { throw new Error("must reject before credentials"); });
     const prerender = createR2({ get R2_ACCESS_KEY_ID() { return read(); } }, config, "production", { ...context, prerender: true });
     await expect(prerender.signedUrl("key")).rejects.toThrow(/cannot run during prerendering.*prerender = false/);

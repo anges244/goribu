@@ -1,10 +1,53 @@
 import { spawn as nodeSpawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import { runDeploy, validateProductionSecrets } from "../src/build/run-deploy.js";
+
+it("keeps an app's CLOUDFLARE_ACCOUNT_ID secret separate from the generated R2 signer variable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "goribu-r2-account-secrets-"));
+  const accountId = "a".repeat(32);
+  const secretsFile = ".env.production";
+  const appConfig = defineConfig({ name: "goribu-r2-account", compatibilityDate: "2026-09-11", r2: { name: "test-files" } });
+  const output = join(root, ".goribu/dist/worker/wrangler.json");
+  const env = { ...process.env, CI: "true", WRANGLER_SEND_METRICS: "false", WRANGLER_LOG_PATH: join(root, "wrangler.log") };
+  for (const name of Object.keys(env)) if (/^(CLOUDFLARE_|CF_)/.test(name)) delete env[name];
+  const spawn = (command, args, options) => {
+    expect(args).toContain("--dry-run");
+    expect(args).toContain(`--secrets-file=${secretsFile}`);
+    expect(options.env.CLOUDFLARE_ACCOUNT_ID).toBe(accountId);
+    return nodeSpawn(command, args, { ...options, env: { ...env, CLOUDFLARE_ACCOUNT_ID: options.env.CLOUDFLARE_ACCOUNT_ID } });
+  };
+  try {
+    writeFileSync(join(root, secretsFile), `CLOUDFLARE_ACCOUNT_ID=${"b".repeat(32)}\n`);
+    const deploy = vi.fn(async () => 0);
+    await expect(runDeploy({
+      projectRoot: root, stdout: { write() {} },
+      loadConfig: async () => appConfig,
+      getAccess: async () => ({ accountId, headers: {} }),
+      build: async () => {
+        mkdirSync(join(root, ".goribu/dist/worker"), { recursive: true });
+        mkdirSync(join(root, ".wrangler/deploy"), { recursive: true });
+        writeFileSync(join(root, ".wrangler/deploy/config.json"), JSON.stringify({ configPath: "../../.goribu/dist/worker/wrangler.json" }));
+        writeFileSync(join(root, ".goribu/dist/worker/worker.js"), 'export default { fetch() { return new Response("test"); } };');
+        writeFileSync(output, JSON.stringify({ name: appConfig.name, main: "worker.js", compatibility_date: appConfig.compatibilityDate,
+          r2_buckets: [{ binding: "R2", bucket_name: appConfig.r2.name }] }));
+      },
+      validateSecrets: async (input) => {
+        const config = JSON.parse(readFileSync(output, "utf8"));
+        expect(config).not.toHaveProperty("account_id");
+        expect(config.vars).toEqual({ GORIBU_R2_ACCOUNT_ID: accountId });
+        await validateProductionSecrets({ ...input, spawn });
+      },
+      provision: async () => null, provisionKV: async () => null, deploy,
+    })).resolves.toBe(0);
+    expect(deploy).toHaveBeenCalledWith({ projectRoot: root, secretsFile, accountId });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 60000);
 
 it("uses real Wrangler to reject invalid secrets before any deployment mutation, without credentials or secret output", async () => {
   const root = mkdtempSync(join(tmpdir(), "goribu-production-secrets-"));
