@@ -81,7 +81,14 @@ export async function prerenderStaticRoutes(options) {
   const allDowngraded = [...downgraded];
   for (const route of downgraded) announceDowngrade(log, route);
 
-  if (staticRoutes.length === 0) {
+  const inspectUploads = manifest.some((route) => route.hasUploads !== false);
+  const uploadManifestPath = join(dirname(configPath), "r2-uploads.json");
+  if (!inspectUploads) {
+    // A fresh empty inventory is useful to deploy too, without executing app
+    // code merely to prove what route analysis already knows.
+    writeFileSync(uploadManifestPath, JSON.stringify({ version: 1, routes: [] }, null, 2) + "\n");
+  }
+  if (staticRoutes.length === 0 && !inspectUploads) {
     navigationOutput.finish();
     log.log("[Goribu] No routes were statically output; every route renders on the Worker.");
     return { prerendered: [], downgraded: allDowngraded, outputs };
@@ -90,6 +97,27 @@ export async function prerenderStaticRoutes(options) {
   const prerendered = [];
   const worker = await startWorker({ configPath });
   try {
+    if (inspectUploads) {
+      // Evaluate every route's policy in the emitted Worker, including action-only
+      // apps with no prerender candidates. Never import app server code into Node.
+      const response = await worker.fetch("/_goribu/build/uploads");
+      if (![200, 400].includes(response.status) || !response.headers.get("content-type")?.startsWith("application/json")) {
+        throw new Error("[Goribu] Could not inspect upload policies in the built Worker. Rebuild with matching Goribu build and runtime versions.");
+      }
+      let uploads;
+      try {
+        uploads = await response.json();
+      } catch (cause) {
+        throw new Error("[Goribu] The built Worker returned malformed upload metadata. Rebuild with matching Goribu build and runtime versions.", { cause });
+      }
+      if (response.status === 400 && uploads?.version === 1 && typeof uploads.error === "string" && uploads.error.startsWith("[Goribu]")) {
+        throw new Error(uploads.error);
+      }
+      if (response.status !== 200 || uploads?.version !== 1 || !Array.isArray(uploads.routes)) {
+        throw new Error("[Goribu] The built Worker returned an invalid upload manifest. Rebuild with matching Goribu build and runtime versions.");
+      }
+      writeFileSync(uploadManifestPath, JSON.stringify(uploads, null, 2) + "\n");
+    }
     for (const route of staticRoutes) {
       const result = await renderThroughWorker(worker, route);
 

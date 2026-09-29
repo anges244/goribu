@@ -59,6 +59,7 @@ export function finalizeNavigationResult(result, options) {
         kind: "render",
         routeId,
         props: result.props,
+        ...(options?.uploads === undefined ? {} : { uploads: options.uploads }),
         meta: options?.metadata,
         status: result.status,
       },

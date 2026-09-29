@@ -196,3 +196,17 @@ function ErrorPage({ url, errorId, cfRay }: ServerErrorProps) {
 }
 // @ts-expect-error The raw error is never a public page prop.
 const rawError: ServerErrorProps["error"] = new Error("private");
+
+// Upload policy functions are server-only and receive the normal typed request.
+const uploadPolicies = {
+  avatar: {
+    accept: ["image/png", "image/*"], maxBytes: 5_000_000,
+    key: ({ req, file, ext }) => `${req.params.id}/${file.size}${ext}`,
+  },
+} satisfies Record<string, import("goribu/server").UploadPolicy>;
+const invalidUploadKey: import("goribu/server").UploadPolicy = {
+  accept: ["image/png"], maxBytes: 10,
+  // @ts-expect-error Upload keys are synchronous strings.
+  key: async () => "key",
+};
+void [uploadPolicies, invalidUploadKey];

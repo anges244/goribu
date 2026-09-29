@@ -57,6 +57,7 @@ describe("generateManifest", () => {
         { type: "dynamic", name: "id" },
       ],
       hasDefaultExport: true,
+      hasUploads: false,
       methods: ["POST"],
       prerenderOverride: null,
       prerenderEligible: false,
@@ -111,6 +112,15 @@ describe("generateManifest", () => {
     expect(() => generateManifest({ routesDir, projectRoot })).toThrow(
       `Static Assets would shadow these handlers. Remove the prerender export`,
     );
+  });
+
+  it("keeps upload routes on the Worker and rejects forced prerendering", () => {
+    const source = `export const uploads = { avatar: { accept: ["image/png"], maxBytes: 100 } };
+      export function POST() {} export default function Page() { return null; }`;
+    const { projectRoot, routesDir } = createRoutes({ "upload.jsx": source });
+    expect(generateManifest({ routesDir, projectRoot })[0].prerenderEligible).toBe(false);
+    writeFileSync(join(routesDir, "upload.jsx"), `${source} export const prerender = true;`);
+    expect(() => generateManifest({ routesDir, projectRoot })).toThrow(/upload.jsx.*Static Assets would shadow/s);
   });
 
   it("rejects both duplicate paths and parameter-name-only distinctions", () => {

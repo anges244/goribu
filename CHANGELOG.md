@@ -38,7 +38,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   missing connections. It creates a missing production signing secret through
   Wrangler stdin after migrations, using names-only inspection and suppressing
   secret-command output and disk logs. Check reports these actions read-only.
-  Browser uploads and their CORS/key checks remain in progress.
+  Builds now validate route upload policies, require a POST/PUT/PATCH receiver,
+  and save server-only field metadata. Current-route page payloads include only
+  accept/size hints; static pages use separate Worker action routes.
+  Browser upload transports/components and their CORS/key checks remain in progress.
   R2 stays unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked

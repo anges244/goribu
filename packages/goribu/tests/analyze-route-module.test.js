@@ -45,7 +45,7 @@ describe("analyzeRouteModule", () => {
       import type { Remote } from "./types.js";
       export { DeleteHandler as Delete, Remote as Get };
     `, "src/routes/items.tsx")).toEqual({
-      hasDefaultExport: true, methods: ["POST", "PUT"], prerender: null,
+      hasDefaultExport: true, methods: ["POST", "PUT"], prerender: null, hasUploads: false,
     });
   });
 
@@ -60,7 +60,7 @@ describe("analyzeRouteModule", () => {
       namespace Types { export interface Payload { title: string } }
       export { Types as Delete, Types as POST, Types as prerender, Types as default };
     `, "src/routes/types.ts")).toEqual({
-      hasDefaultExport: false, methods: [], prerender: null,
+      hasDefaultExport: false, methods: [], prerender: null, hasUploads: false,
     });
   });
 
@@ -101,7 +101,7 @@ describe("analyzeRouteModule", () => {
     expect(analysis).toEqual({
       hasDefaultExport: true,
       methods: ["GET", "POST"],
-      prerender: false,
+      prerender: false, hasUploads: false,
     });
   });
 
@@ -114,7 +114,7 @@ describe("analyzeRouteModule", () => {
     ).toEqual({
       hasDefaultExport: false,
       methods: ["GET"],
-      prerender: null,
+      prerender: null, hasUploads: false,
     });
   });
 
@@ -127,7 +127,7 @@ describe("analyzeRouteModule", () => {
     ).toEqual({
       hasDefaultExport: true,
       methods: [],
-      prerender: null,
+      prerender: null, hasUploads: false,
     });
   });
 
@@ -148,7 +148,7 @@ describe("analyzeRouteModule", () => {
     ).toEqual({
       hasDefaultExport: false,
       methods: [],
-      prerender: null,
+      prerender: null, hasUploads: false,
     });
 
     expect(
@@ -165,7 +165,7 @@ describe("analyzeRouteModule", () => {
     ).toEqual({
       hasDefaultExport: false,
       methods: [],
-      prerender: null,
+      prerender: null, hasUploads: false,
     });
 
     expect(

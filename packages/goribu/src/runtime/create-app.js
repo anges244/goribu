@@ -35,6 +35,7 @@ import { createKV } from "./create-kv.js";
 import { createR2 } from "./create-r2.js";
 import { serveR2Public } from "./serve-r2-public.js";
 import { serveR2Download } from "../r2/serve-download.js";
+import { collectUploadPolicies, UploadPolicyError } from "../r2/upload-policies.js";
 import { isSignedUrlPrerenderError } from "../r2/prerender-error.js";
 
 const CALLER =
@@ -125,6 +126,10 @@ export function createApp(options) {
       `[Goribu] ${CALLER} requires applicationConfig to be the unchanged result of defineConfig(). Import and pass the application's goribu.config.js default export from the generated Worker.`,
     );
   }
+  let uploadPolicies;
+  function getUploadPolicies() {
+    return uploadPolicies ??= collectUploadPolicies(manifest, modules, applicationConfig?.r2);
+  }
   const responseHeaders = applicationConfig?.responseHeaders;
   const Document =
     documentId === null
@@ -153,6 +158,19 @@ export function createApp(options) {
       assertWorkerFetchInputs(request, env, ctx);
 
       const outerUrl = new URL(request.url);
+      // Only the local build harness sets this binding. Public requests cannot
+      // select it with headers, queries or a matching application route.
+      if (outerUrl.pathname === "/_goribu/build/uploads") {
+        if (env.__GORIBU_PRERENDER !== true || request.method !== "GET") return new Response(null, { status: 404 });
+        try {
+          return Response.json({ version: 1, routes: getUploadPolicies().summary });
+        } catch (error) {
+          // Only our own validation diagnostics cross this build-only boundary.
+          // Unexpected application failures remain runtime failures.
+          if (!(error instanceof UploadPolicyError)) throw error;
+          return Response.json({ version: 1, error: error.message }, { status: 400 });
+        }
+      }
       const nonce = createResponseNonce();
       const cookieJar = createCookieJar(request);
       const d1Controller = createD1RequestController({
@@ -174,6 +192,7 @@ export function createApp(options) {
       let globalHeaders = new Headers();
       let response;
       try {
+        getUploadPolicies();
         globalHeaders = resolveGlobalResponseHeaders({
           responseHeaders,
           request,
@@ -570,6 +589,7 @@ export function createApp(options) {
       navigation,
       form,
       metadata,
+      uploads: getUploadPolicies().client.get(match.route.id),
       nonce,
       mode,
       clientAssetManifest,
@@ -739,6 +759,7 @@ async function finalizeHandlerResult(result, options) {
     return finalizeNavigationResult(result, {
       routeId: options.routeId,
       metadata: options.metadata,
+      uploads: options.uploads,
     });
   }
 
@@ -751,6 +772,7 @@ async function finalizeHandlerResult(result, options) {
     return finalizeFormResult(result, {
       routeId: options.routeId,
       metadata: options.metadata,
+      uploads: options.uploads,
     });
   }
 
@@ -798,6 +820,7 @@ async function finalizeHandlerResult(result, options) {
       status: result.status,
       headers: result.headers,
       metadata: options.metadata,
+      uploads: options.uploads,
       nonce: options.nonce,
       mode: options.mode,
       clientAssetManifest: options.clientAssetManifest,

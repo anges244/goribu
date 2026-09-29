@@ -64,6 +64,7 @@ export function finalizeFormResult(result, options) {
       type: "render",
       route: routeId,
       props: result.props,
+      ...(options?.uploads === undefined ? {} : { uploads: options.uploads }),
       meta: options?.metadata,
     };
   }

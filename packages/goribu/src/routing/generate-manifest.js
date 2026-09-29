@@ -31,6 +31,7 @@ const DYNAMIC_SEGMENT = /^\[([A-Za-z0-9_]+)\]$/;
  *   hasDefaultExport: boolean,
  *   methods: string[],
  *   prerenderOverride: boolean | null,
+ *   hasUploads: boolean | null,
  *   prerenderEligible: boolean
  * }>}
  */
@@ -114,6 +115,8 @@ function createManifestEntry(discoveredRoute, projectRoot) {
     pattern: routePattern(segments),
     segments,
     hasDefaultExport: analysis.hasDefaultExport,
+    // null means an unresolved export needs inspection in the Worker.
+    hasUploads: analysis.hasUploads,
     methods: analysis.methods,
     prerenderOverride: analysis.prerender,
     prerenderEligible,

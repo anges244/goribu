@@ -83,6 +83,7 @@ function fakeStartWorker(handler) {
     state.started = true;
     return {
       fetch: async (pathname) => {
+        if (pathname === "/_goribu/build/uploads") return Response.json({ version: 1, routes: [] });
         const response = handler(pathname);
         if (response.status !== 200) return response;
         const id = matchRoute({ manifest, pathname, method: "GET" }).route.id;
@@ -402,9 +403,32 @@ describe("prerenderStaticRoutes", () => {
     expect(state.started).toBe(false);
   });
 
-  it("reports when nothing is statically output and never starts the Worker", async () => {
+  it("fails closed and stops the Worker when policy inspection fails", async () => {
     const root = makeProject();
-    writeRoute(root, "posts/[id].jsx");
+    writeRoute(root, "action.js", "export const uploads = {}; export function POST() {}");
+    writeBuildOutputs(root);
+    for (const response of [
+      new Response("missing", { status: 404 }),
+      new Response("broken", { headers: { "content-type": "application/json" } }),
+      Response.json({ version: 2, routes: [] }),
+      Response.json({ version: 1, error: "[Goribu] Route action.js uploads.video: add direct: true." }, { status: 400 }),
+    ]) {
+      const stop = vi.fn();
+      await expect(prerenderStaticRoutes({
+        projectRoot: root, log: makeLog(),
+        startWorker: async () => ({ fetch: async () => response, stop }),
+      })).rejects.toThrow(/\[Goribu\]/);
+      expect(stop).toHaveBeenCalledOnce();
+      expect(existsSync(join(root, ".goribu/dist/app/r2-uploads.json"))).toBe(false);
+    }
+  });
+
+  it.each([
+    "export const uploads = {}; export function POST() {}",
+    'export * from "../policies.js"; export function POST() {}',
+  ])("inspects action-only and wildcard policies: %s", async (source) => {
+    const root = makeProject();
+    writeRoute(root, "action.js", source);
     writeBuildOutputs(root);
     const { startWorker, state } = fakeStartWorker(() => htmlResponse("ok"));
     const log = makeLog();
@@ -412,8 +436,19 @@ describe("prerenderStaticRoutes", () => {
     const { prerendered } = await prerenderStaticRoutes({ projectRoot: root, log, startWorker });
 
     expect(prerendered).toEqual([]);
-    expect(state.started).toBe(false);
+    expect(state.started).toBe(true);
+    expect(state.stopped).toBe(true);
     expect(log.log).toHaveBeenCalledWith(expect.stringContaining("No routes were statically output"));
+  });
+
+  it("skips inspection and the harness when there are no static pages or upload exports", async () => {
+    const root = makeProject();
+    writeRoute(root, "posts/[id].jsx");
+    writeBuildOutputs(root);
+    const startWorker = vi.fn(() => { throw new Error("must not start"); });
+    await prerenderStaticRoutes({ projectRoot: root, log: makeLog(), startWorker });
+    expect(startWorker).not.toHaveBeenCalled();
+    expect(JSON.parse(readFileSync(join(root, ".goribu/dist/app/r2-uploads.json"), "utf8"))).toEqual({ version: 1, routes: [] });
   });
 
   it("teaches when the build output is missing", async () => {

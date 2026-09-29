@@ -128,6 +128,42 @@ afterEach(async () => {
   sessions.clear();
 });
 
+it("refreshes upload policies after ordinary route edits without a dev restart", async () => {
+  const policySource = (accept, maxBytes) => `
+export const uploads = { avatar: { accept: [${JSON.stringify(accept)}], maxBytes: ${maxBytes} } };
+export function POST(req, res) { return res.json({}); }
+export default function Page() { return <h1>Policy refresh</h1>; }
+`;
+  const session = startDevSession({ prepare(root) {
+    writeFileSync(join(root, "goribu.config.js"), 'import { defineConfig } from "goribu/server"; export default defineConfig({ name: "policy-refresh", compatibilityDate: "2026-09-01", r2: { name: "fixture-files" } });');
+    writeFileSync(join(root, "src/routes/policy-refresh.jsx"), policySource("image/png", 1000));
+  } });
+  const { port } = await session.awaitGeneration(1);
+  const path = join(session.root, "src/routes/policy-refresh.jsx");
+  const readHints = async () => {
+    const response = await session.get("/_goribu/worker-nav?to=/policy-refresh", port);
+    expect(response.status).toBe(200);
+    return (await response.json()).uploads;
+  };
+  expect(await readHints()).toEqual({ avatar: { accept: ["image/png"], maxBytes: 1000 } });
+  writeFileSync(path, policySource("application/pdf", 2000));
+  await session.waitFor(async () => {
+    expect(await readHints()).toEqual({ avatar: { accept: ["application/pdf"], maxBytes: 2000 } });
+  });
+  writeFileSync(path, policySource("application/pdf", 100_000_001));
+  await session.waitFor(async () => {
+    const response = await session.get("/policy-refresh", port);
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain("Add direct: true");
+  });
+  writeFileSync(path, policySource("image/jpeg", 3000));
+  await session.waitFor(async () => {
+    expect(await readHints()).toEqual({ avatar: { accept: ["image/jpeg"], maxBytes: 3000 } });
+  });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(session.events).toHaveLength(1);
+}, 60000);
+
 it("refreshes Worker dispatch and browser loaders for route changes without restarting ordinary edits", async () => {
   const session = startDevSession();
   const { port } = await session.awaitGeneration(1);

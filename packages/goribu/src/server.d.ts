@@ -119,6 +119,19 @@ export interface GoribuR2 extends GoribuR2Bucket {
   readonly private: GoribuR2Bucket;
 }
 
+/** Server-only policy exported from an upload action route. */
+export interface UploadPolicy<Env extends object = Record<string, unknown>, Params extends Record<keyof Params, string> = Record<string, string>> {
+  accept: readonly string[];
+  maxBytes: number;
+  private?: boolean;
+  direct?: boolean;
+  key?: (context: {
+    req: GoribuRequest<Env, Params>;
+    file: Readonly<{ name: string; type: string; size: number }>;
+    ext: string;
+  }) => string;
+}
+
 export interface GoribuRequest<Env extends object = Record<string, unknown>, Params extends Record<keyof Params, string> = Record<string, string>> {
   method: string;
   path: string;

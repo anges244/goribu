@@ -23,7 +23,7 @@ import {
  *
  * @param {string} source The complete text of one route file.
  * @param {string} filePath The route's path, used to select syntax and report errors.
- * @returns {{ hasDefaultExport: boolean, methods: string[], prerender: boolean | null }}
+ * @returns {{ hasDefaultExport: boolean, methods: string[], prerender: boolean | null, hasUploads: boolean | null }}
  */
 export function analyzeRouteModule(source, filePath) {
   // This helper is called by Goribu itself. If either input is missing, report
@@ -61,6 +61,8 @@ export function analyzeRouteModule(source, filePath) {
   const found = {
     hasDefaultExport: false,
     methods: new Set(),
+    hasUploads: false,
+    hasUnresolvedExports: false,
     prerender: null,
   };
 
@@ -80,6 +82,16 @@ export function analyzeRouteModule(source, filePath) {
         found.hasDefaultExport = true;
       }
       continue;
+    }
+
+    // Wildcards and TypeScript import aliases can expose uploads without a
+    // named export declaration. Inspect uncertain exports in the Worker.
+    if (
+      (statement.type === "ExportAllDeclaration" && statement.exportKind !== "type") ||
+      (statement.type === "TSImportEqualsDeclaration" && statement.isExport &&
+        statement.importKind !== "type" && statement.id?.name === "uploads")
+    ) {
+      found.hasUnresolvedExports = true;
     }
 
     // Ignore imports and ordinary declarations. Only named exports can define
@@ -114,10 +126,15 @@ export function analyzeRouteModule(source, filePath) {
 
       const name = exportedName(specifier.exported);
       assertHandlerCasing(name, filePath);
+      if (name === "uploads") found.hasUploads = true;
       if (name === "default") found.hasDefaultExport = true;
       if (isHandlerMethod(name)) found.methods.add(name);
       if (name === "prerender") throw invalidPrerenderError(filePath);
     }
+  }
+
+  if (found.hasUploads && !["POST", "PUT", "PATCH"].some((method) => found.methods.has(method))) {
+    throw new Error(`[Goribu] Route "${filePath}" exports uploads but has no POST, PUT or PATCH handler to receive the ref. Export one from this route; static pages can submit to a separate upload action route.`);
   }
 
   // Always return handlers in the framework's official order. Reordering
@@ -126,6 +143,7 @@ export function analyzeRouteModule(source, filePath) {
     hasDefaultExport: found.hasDefaultExport,
     methods: HANDLER_METHODS.filter((method) => found.methods.has(method)),
     prerender: found.prerender,
+    hasUploads: found.hasUploads ? true : found.hasUnresolvedExports ? null : false,
   };
 }
 
@@ -259,6 +277,7 @@ function inspectDeclaration(declaration, filePath, found) {
   if (isTypeOnlyDeclaration(declaration)) return;
 
   assertHandlerCasing(declaration.id?.name, filePath);
+  if (declaration.id?.name === "uploads") found.hasUploads = true;
 
   if (
     declaration.type === "FunctionDeclaration" ||
@@ -280,6 +299,7 @@ function inspectDeclaration(declaration, filePath, found) {
     // Destructuring can export several handlers. Use binding names, not keys.
     collectPatternBindings(declarator.id, (name) => {
       assertHandlerCasing(name, filePath);
+      if (name === "uploads") found.hasUploads = true;
       if (isHandlerMethod(name)) found.methods.add(name);
     });
     // The prerender override still requires a direct boolean declaration.
