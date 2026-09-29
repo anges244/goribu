@@ -41,7 +41,14 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Builds now validate route upload policies, require a POST/PUT/PATCH receiver,
   and save server-only field metadata. Current-route page payloads include only
   accept/size hints; static pages use separate Worker action routes.
-  Browser upload transports/components and their CORS/key checks remain in progress.
+  Upload starts run after route middleware and issue short-lived Worker or
+  presigned PUT targets. Worker uploads refuse existing keys atomically and
+  stream production bodies; dev buffers local uploads. Declared fields in
+  `req.body()` become verified `R2Upload` values or are absent. Signed refs bind
+  the route, field, bucket and a random upload ID stored with the object. A
+  skipped or conflicting PUT cannot claim or delete an older object; cleanup
+  requires a matching upload ID and failed size/type verification.
+  Browser upload components/helpers and deployment CORS/key checks remain in progress.
   R2 stays unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked

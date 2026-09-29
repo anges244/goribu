@@ -35,6 +35,9 @@ import { createKV } from "./create-kv.js";
 import { createR2 } from "./create-r2.js";
 import { serveR2Public } from "./serve-r2-public.js";
 import { serveR2Download } from "../r2/serve-download.js";
+import { serveR2Upload } from "../r2/serve-upload.js";
+import { startUpload } from "../r2/start-upload.js";
+import { verifyUploads } from "../r2/verify-upload.js";
 import { collectUploadPolicies, UploadPolicyError } from "../r2/upload-policies.js";
 import { isSignedUrlPrerenderError } from "../r2/prerender-error.js";
 
@@ -209,6 +212,8 @@ export function createApp(options) {
           response = new Response(null, { status: 404 });
           if (outerUrl.pathname === "/_goribu/r2/file") {
             response = await serveR2Download(request, env, runtime.r2, applicationConfig?.r2);
+          } else if (outerUrl.pathname === "/_goribu/r2/upload") {
+            response = await serveR2Upload(request, env, runtime.r2, applicationConfig?.r2, mode);
           } else if (import.meta.goribuDevelopment !== false && mode === "development" && outerUrl.pathname.startsWith("/_goribu/r2/public/")) {
             response = await serveR2Public(request, runtime.r2, applicationConfig?.r2);
           }
@@ -336,6 +341,18 @@ export function createApp(options) {
   ) {
     const navigation = requestKind === "navigation";
     const form = formRenderContext !== null;
+    const policies = match.route && getUploadPolicies().policies.get(match.route.id);
+    if (policies && request.method === "POST" && request.headers.has("x-goribu-upload")) {
+      // Start uses POST even if the ref receiver only exports PUT or PATCH.
+      // It shares the route's middleware and request, but never calls its handler.
+      const req = createRequest(request, match.params, runtime);
+      const res = createResponse({ canRender: match.route.hasDefaultExport, mode });
+      const middlewareResult = await middlewareRunners.get(match.route.id)?.(req, res);
+      const result = isResponseResult(middlewareResult) ? middlewareResult : await startUpload({
+        req, res, route: match.route, policies, config: applicationConfig.r2, mode,
+      });
+      return finalizeMatchedResult(result, match, "POST", url, false, false, nonce, url.href, readCfRay(request));
+    }
     const renderNonce =
       (match.kind === "page" ||
         (match.kind === "automatic-head" && match.target?.kind === "page")) &&
@@ -502,7 +519,7 @@ export function createApp(options) {
     runMiddleware,
     formRenderContext,
   ) {
-    const req = createRequest(request, match.params, runtime);
+    const req = createRouteRequest(request, match, runtime);
     const res = createResponse({
       canRender: match.route.hasDefaultExport,
       formRenderContext,
@@ -544,7 +561,7 @@ export function createApp(options) {
       );
     }
 
-    const req = prepared?.req ?? createRequest(request, match.params, runtime);
+    const req = prepared?.req ?? createRouteRequest(request, match, runtime);
     const res =
       prepared?.res ??
       createResponse({
@@ -553,6 +570,15 @@ export function createApp(options) {
         mode,
       });
     return handler(req, res);
+  }
+
+  function createRouteRequest(request, match, runtime) {
+    const policies = getUploadPolicies().policies.get(match.route.id);
+    return createRequest(request, match.params, policies ? {
+      ...runtime,
+      verifyBody: (body) => verifyUploads(body, { policies, route: match.route,
+        env: runtime.env, r2: runtime.r2, config: applicationConfig.r2, mode }),
+    } : runtime);
   }
 
   function finalizeMatchedResult(

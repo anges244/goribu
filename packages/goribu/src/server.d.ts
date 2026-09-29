@@ -119,6 +119,16 @@ export interface GoribuR2 extends GoribuR2Bucket {
   readonly private: GoribuR2Bucket;
 }
 
+/** A declared upload field after signed-ref and stored-object verification. */
+export interface R2Upload {
+  key: string;
+  name: string;
+  type: string;
+  size: number;
+  /** Present only for a public default bucket. */
+  url?: string;
+}
+
 /** Server-only policy exported from an upload action route. */
 export interface UploadPolicy<Env extends object = Record<string, unknown>, Params extends Record<keyof Params, string> = Record<string, string>> {
   accept: readonly string[];
@@ -145,8 +155,9 @@ export interface GoribuRequest<Env extends object = Record<string, unknown>, Par
   r2: GoribuR2;
   waitUntil(promise: Promise<unknown>): void;
   /**
-   * JSON and forms return objects; repeated form fields are arrays and uploads
-   * are Files. Text returns a string. Narrow and validate values before use.
+   * JSON and forms return objects. Declared upload fields become verified
+   * R2Upload values or are absent. Other file inputs remain Files and repeated
+   * form fields remain arrays. Text returns a string. Narrow values before use.
    */
   body(): Promise<Record<string, unknown> | string>;
   rawBody(): Promise<Uint8Array>;

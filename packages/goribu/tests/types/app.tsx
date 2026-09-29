@@ -204,6 +204,14 @@ const uploadPolicies = {
     key: ({ req, file, ext }) => `${req.params.id}/${file.size}${ext}`,
   },
 } satisfies Record<string, import("goribu/server").UploadPolicy>;
+const verifiedUpload: import("goribu/server").R2Upload = {
+  key: "avatars/photo.png", name: "photo.png", type: "image/png", size: 123,
+};
+const publicUploadUrl: string | undefined = verifiedUpload.url;
+void publicUploadUrl;
+// @ts-expect-error A verified upload needs its stored byte size.
+const incompleteUpload: import("goribu/server").R2Upload = { key: "key", name: "photo.png", type: "image/png" };
+void incompleteUpload;
 const invalidUploadKey: import("goribu/server").UploadPolicy = {
   accept: ["image/png"], maxBytes: 10,
   // @ts-expect-error Upload keys are synchronous strings.

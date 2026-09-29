@@ -1,6 +1,7 @@
 import { DOWNLOAD_PURPOSE, signToken } from "./token.js";
 import { presignS3Url } from "./sigv4.js";
 import { signedUrlPrerenderError } from "./prerender-error.js";
+import { requireR2SigningCredentials } from "./signing-credentials.js";
 
 export function validDownloadKey(key) {
   return typeof key === "string" && key.length > 0 && new TextEncoder().encode(key).length <= 1024 &&
@@ -29,14 +30,8 @@ export async function signedDownloadUrl({ env, config, bucket, mode, requestUrl,
   if (download !== undefined && !validDownloadName(download)) throw new TypeError("[Goribu] req.r2.signedUrl download must be a filename of 1 to 255 characters without slashes or control characters. Pass just the download filename.");
 
   if (mode === "production") {
-    const accessKeyId = env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = env.R2_SECRET_ACCESS_KEY;
-    if (accessKeyId !== undefined || secretAccessKey !== undefined) {
-      if (typeof accessKeyId !== "string" || !accessKeyId || typeof secretAccessKey !== "string" || !secretAccessKey) {
-        throw new Error("[Goribu] R2 presigned downloads need both R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. Configure both Worker secrets, or remove both to use Worker-served links.");
-      }
-      const accountId = env.GORIBU_R2_ACCOUNT_ID;
-      if (typeof accountId !== "string" || !/^[a-f0-9]{32}$/i.test(accountId)) throw new Error("[Goribu] R2 presigned downloads need the generated GORIBU_R2_ACCOUNT_ID Worker variable. Run `goribu deploy` to attach the authenticated account ID.");
+    if (env.R2_ACCESS_KEY_ID !== undefined || env.R2_SECRET_ACCESS_KEY !== undefined) {
+      const { accountId, accessKeyId, secretAccessKey } = requireR2SigningCredentials(env, "presigned downloads");
       return presignS3Url({ method: "GET", accountId, bucket: bucket === "private" ? config.private.name : config.name,
         key, accessKeyId, secretAccessKey, expiresIn, jurisdiction: config.jurisdiction,
         queryParams: download === undefined ? [] : [["response-content-disposition", contentDisposition(download)]] });

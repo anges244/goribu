@@ -35,7 +35,10 @@ it("isolates policies, emits safe hints, and routes a static page's upload POST 
 import { serverKey } from "../../upload-key.server.js";
 export const uploads = {
   avatar: { accept: ["image/png"], maxBytes: 5_000_000, private: true, direct: true,
-    key: () => { throw new Error(${JSON.stringify(marker)} + serverKey()); } }
+    key: ({ req }) => {
+      if (req.env.__GORIBU_PRERENDER) throw new Error(${JSON.stringify(marker)} + serverKey());
+      return "avatars/" + crypto.randomUUID();
+    } }
 };
 export function POST(req, res) { if (req.query.has("render")) return res.render({}); return res.json({ field: req.headers.get("x-goribu-upload"), reached: "Worker action" }); }
 export default function Page() { return <h1>Upload action page</h1>; }
@@ -68,7 +71,10 @@ export default function Page() { return <Form method="post" action="/upload-acti
       expect(text).not.toContain(closureMarker);
     }
     expect(sourceMaps).toBeGreaterThan(0);
-    harness = createTestHarness({ workers: [{ configPath: join(worker, "wrangler.json") }] });
+    harness = createTestHarness({ workers: [{ configPath: join(worker, "wrangler.json"), secrets: {
+      GORIBU_SECRET: "test-only-upload-secret", R2_ACCESS_KEY_ID: "test-only-access-key",
+      R2_SECRET_ACCESS_KEY: "test-only-secret-key", GORIBU_R2_ACCOUNT_ID: "a".repeat(32),
+    } }] });
     const { url } = await harness.listen();
     const staticPage = await fetch(new URL("/upload-page", url));
     expect(staticPage.status).toBe(200);
@@ -79,8 +85,7 @@ export default function Page() { return <Form method="post" action="/upload-acti
     expect(html).not.toContain('"uploads"');
     // Use the public HTTP listener: getWorker().fetch() bypasses Static Assets
     // and cannot prove that action requests survive production asset routing.
-    // Target issuance is the next substep; this proves delivery to middleware
-    // and the receiving action without pretending to implement that protocol.
+    // The framework mints the target after middleware instead of invoking POST.
     const started = await fetch(new URL("/upload-action", url), {
       method: "POST", headers: { "x-goribu-upload": "avatar", "content-type": "application/json" },
       body: JSON.stringify({ name: "avatar.png", type: "image/png", size: 100 }),
@@ -88,7 +93,11 @@ export default function Page() { return <Form method="post" action="/upload-acti
     expect(started.status).toBe(200);
     expect(started.headers.get("x-upload-worker")).toBe("ran");
     expect(started.headers.get("x-upload-middleware")).toBe("ran");
-    expect(await started.json()).toEqual({ field: "avatar", reached: "Worker action" });
+    const startResult = await started.json();
+    expect(Object.keys(startResult).sort()).toEqual(["ref", "target"]);
+    expect(startResult.ref).toEqual(expect.any(String));
+    expect(new URL(startResult.target.url).hostname).toBe(`${"a".repeat(32)}.r2.cloudflarestorage.com`);
+    expect(startResult.target.method).toBe("PUT");
     const action = await fetch(new URL("/upload-action", url));
     const actionHtml = await action.text();
     const identity = JSON.parse(actionHtml.match(/<script id="__GORIBU_ROUTE__" type="application\/json"[^>]*>([^<]*)<\/script>/)[1]);

@@ -58,7 +58,7 @@ export function createRequest(request, params, runtime) {
       if (!bodyPromise) {
         bodyPromise = readRawBodyOnce().then((bytes) =>
           parseBody(bytes, request.headers.get("content-type")),
-        );
+        ).then((body) => worker.verifyBody ? worker.verifyBody(body) : body);
       }
       return bodyPromise;
     },
