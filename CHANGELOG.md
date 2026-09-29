@@ -46,6 +46,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Client source maps exclude embedded original source text, preventing published
+  maps from exposing server handlers colocated with page components when
+  build.sourcemap is enabled. Mappings remain available; Worker maps are unchanged.
+
 - Deploy passes the authenticated account explicitly to Wrangler for both secret
   validation and Worker upload, keeping every app's deployment aligned with
   provisioning even when the project's `.env` selects another account.

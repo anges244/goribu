@@ -106,6 +106,14 @@ export function createClientBoundaryPlugin(options) {
       return `export { default } from ${JSON.stringify(routeFilePath)};\n`;
     },
 
+    outputOptions(options) {
+      if (this.environment?.name !== "client") return null;
+      // Tree-shaking removes handlers and upload key functions from executable
+      // chunks, but source maps otherwise republish the original route module.
+      // Keep mappings for local debugging without embedding server source text.
+      return { ...options, sourcemapExcludeSources: true };
+    },
+
     generateBundle(_outputOptions, bundle) {
       if (this.environment?.name !== "client") return;
 

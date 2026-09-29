@@ -323,6 +323,10 @@ function createConfiguredClientBoundaryPlugin() {
       return requireClientBoundary(boundary).load.call(this, id);
     },
 
+    outputOptions(options) {
+      return requireClientBoundary(boundary).outputOptions.call(this, options);
+    },
+
     generateBundle(options, bundle, isWrite) {
       return requireClientBoundary(boundary).generateBundle.call(
         this,
