@@ -1,4 +1,5 @@
 import { assertOptionalResponseHeaders } from "./response-headers.js";
+import { assertR2Config } from "./r2-config.js";
 
 const CONFIG_BRAND = new WeakSet();
 const CONFIG_FIELDS = new Set([
@@ -8,6 +9,7 @@ const CONFIG_FIELDS = new Set([
   "responseHeaders",
   "database",
   "kv",
+  "r2",
 ]);
 const D1_DATABASE_FIELDS = new Set(["type", "name", "replication"]);
 
@@ -22,7 +24,7 @@ const DATABASE_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]{0,62}$/;
  *
  * The returned value is a frozen snapshot. The config carries only Node-loadable
  * data: the deploy fields Wrangler synthesis needs today, and runtime data fields
- * (responseHeaders, database, kv) added to this same validator as later blocks land
+ * (responseHeaders, database, kv, r2) added to this same validator as later blocks land
  * their consumers. Render modules never live here — a `Document` field is rejected
  * with a pointer to `src/setup/_document.jsx` (see docs/decisions.md).
  */
@@ -42,7 +44,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, responseHeaders, database, and kv fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2 fields.",
     );
   }
 
@@ -59,7 +61,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, responseHeaders, database, and kv.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -95,6 +97,9 @@ export function defineConfig(config) {
   }
   if (normalized.kv !== undefined) {
     normalized.kv = assertKVConfig(normalized.kv);
+  }
+  if (normalized.r2 !== undefined) {
+    normalized.r2 = assertR2Config(normalized.r2);
   }
 
   const result = Object.freeze(normalized);

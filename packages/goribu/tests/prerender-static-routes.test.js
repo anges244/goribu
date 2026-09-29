@@ -312,6 +312,26 @@ describe("prerenderStaticRoutes", () => {
     expect(state.stopped).toBe(true);
   });
 
+  it("explains an automatic signed-link downgrade without runtime prefixes or unnecessary repair advice", async () => {
+    const root = makeProject();
+    writeRoute(root, "index.jsx");
+    writeBuildOutputs(root);
+    const { startWorker, state } = fakeStartWorker(() => new Response(null, {
+      status: 500, headers: { "x-goribu-prerender-error": "r2-signed-url" },
+    }));
+    const log = makeLog();
+
+    const result = await prerenderStaticRoutes({ projectRoot: root, log, startWorker });
+
+    expect(result.prerendered).toEqual([]);
+    expect(log.warn).toHaveBeenCalledExactlyOnceWith(
+      '[Goribu] Route "src/routes/index.jsx" (/) is a prerender candidate but was not ' +
+      'statically output: the Worker called req.r2.signedUrl(), whose link would expire inside static HTML ' +
+      'when it was rendered at build time. It will render on the Worker at request time.',
+    );
+    expect(state.stopped).toBe(true);
+  });
+
   it("downgrades an automatic candidate whose body stream fails after a 200", async () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");

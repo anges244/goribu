@@ -92,6 +92,18 @@ describe("goribu()", () => {
     expect(() => goribu({})).toThrow(/does not accept options/);
   });
 
+  it("rejects duplicate R2 ownership during development and production setup", async () => {
+    for (const command of ["serve", "build"]) {
+      const root = makeProject();
+      writeMinimalProject(root);
+      writeFileSync(join(root, "goribu.config.js"),
+        `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
+        'export default defineConfig({ name: "test-app", compatibilityDate: "2026-09-01", r2: { name: "test-files" } });\n');
+      writeFileSync(join(root, "wrangler.json"), '{"r2_buckets":[]}');
+      await expect(goribuPlugin().config({ root }, { command })).rejects.toThrow(/Remove the r2_buckets declaration/);
+    }
+  });
+
   it("returns build, client-boundary, page-manifest, and client-assets plugins", () => {
     const plugins = goribu();
     expect(Array.isArray(plugins)).toBe(true);
@@ -202,7 +214,8 @@ describe("goribu()", () => {
     const root = makeProject();
     writeMinimalProject(root);
 
-    await goribuPlugin().config({ root }, { command });
+    const config = await goribuPlugin().config({ root }, { command });
+    expect(config.define["import.meta.goribuDevelopment"]).toBe(mode === "development");
 
     expect(readFileSync(join(root, ".goribu", "worker.js"), "utf8")).toContain(
       `const mode = ${JSON.stringify(mode)};`,

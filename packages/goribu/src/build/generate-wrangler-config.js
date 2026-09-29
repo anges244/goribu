@@ -82,5 +82,14 @@ function synthesizeWranglerConfig(appConfig) {
     }];
   }
 
+  if (appConfig.r2 !== undefined) {
+    const r2 = appConfig.r2;
+    const jurisdiction = r2.jurisdiction === undefined ? {} : { jurisdiction: r2.jurisdiction };
+    config.r2_buckets = [{ binding: "R2", bucket_name: r2.name, ...jurisdiction }];
+    if (r2.private !== undefined) {
+      config.r2_buckets.push({ binding: "R2_PRIVATE", bucket_name: r2.private.name, ...jurisdiction });
+    }
+  }
+
   return config;
 }

@@ -12,6 +12,7 @@ import {
 import { createClientPageManifestPlugin } from "./create-client-page-manifest-plugin.js";
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
+import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { GENERATED_WRANGLER_CONFIG, writeWranglerConfig } from "./generate-wrangler-config.js";
 import { APPLICATION_CONFIG_FILENAME, loadApplicationConfig } from "./load-application-config.js";
@@ -122,9 +123,13 @@ function createGoribuPlugin(navigationBuildId) {
       const appConfig = await loadApplicationConfig({ projectRoot: root });
       await assertNoDuplicateD1Declaration({ projectRoot: root, appConfig });
       await assertNoDuplicateKVDeclaration({ projectRoot: root, appConfig });
+      await assertNoDuplicateR2Declaration({ projectRoot: root, appConfig });
       writeWranglerConfig({ projectRoot: root, appConfig });
       return {
         envPrefix: PUBLIC_ENV_PREFIX,
+        // Use the same command-derived mode as the generated Worker, rather
+        // than NODE_ENV, to erase development-only R2 serving from builds.
+        define: { "import.meta.goribuDevelopment": mode === "development" },
         build: { outDir: BUILD_OUTPUT_DIRECTORY },
         builder: {
           buildApp: (builder) => buildClientBeforeWorkers(builder, assetNameTracker),

@@ -49,6 +49,7 @@ describe("createRequest", () => {
       "params",
       "path",
       "query",
+      "r2",
       "rawBody",
       "waitUntil",
     ]);

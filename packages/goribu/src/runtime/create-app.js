@@ -32,6 +32,10 @@ import { copyProtocolResponseMark } from "./protocol-response.js";
 import { createD1BindingResolver } from "../db/create-d1-binding-resolver.js";
 import { createD1RequestController } from "../db/create-d1-request-controller.js";
 import { createKV } from "./create-kv.js";
+import { createR2 } from "./create-r2.js";
+import { serveR2Public } from "./serve-r2-public.js";
+import { serveR2Download } from "../r2/serve-download.js";
+import { isSignedUrlPrerenderError } from "../r2/prerender-error.js";
 
 const CALLER =
   "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig })";
@@ -49,7 +53,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, body helpers, cookies, D1, KV, Worker bindings, and a bound
+ * params, query, headers, body helpers, cookies, D1, KV, R2, Worker bindings, and a bound
  * waitUntil capability) and returns any res.* intent: res.text(), res.json(),
  * res.redirect(), res.render(props) to stream the route's own page with data, or
  * res.notFound(props) for the _404 page.
@@ -162,6 +166,7 @@ export function createApp(options) {
         cookies: cookieJar,
         d1: d1Controller.d1,
         kv: createKV(env),
+        r2: createR2(env, applicationConfig?.r2, mode, { requestUrl: request.url, prerender: env.__GORIBU_PRERENDER === true }),
       };
       let applicationRequest = request;
       let requestKind = "document";
@@ -177,9 +182,18 @@ export function createApp(options) {
           nonce,
         });
 
-        // Canonicalize the document URL before protocol classification.
+        // Object keys can end in slashes, so framework file URLs must be handled
+        // before document canonicalization. The Vite command removes the dev
+        // implementation from builds; direct createApp tests use the mode guard.
         const outerCanonical = canonicalPathname(outerUrl.pathname);
-        if (outerCanonical !== null) {
+        if (outerUrl.pathname === "/_goribu/r2" || outerUrl.pathname.startsWith("/_goribu/r2/")) {
+          response = new Response(null, { status: 404 });
+          if (outerUrl.pathname === "/_goribu/r2/file") {
+            response = await serveR2Download(request, env, runtime.r2, applicationConfig?.r2);
+          } else if (import.meta.goribuDevelopment !== false && mode === "development" && outerUrl.pathname.startsWith("/_goribu/r2/public/")) {
+            response = await serveR2Public(request, runtime.r2, applicationConfig?.r2);
+          }
+        } else if (outerCanonical !== null) {
           const target = new URL(outerUrl);
           target.pathname = outerCanonical;
           response = Response.redirect(target.toString(), 308);
@@ -256,6 +270,11 @@ export function createApp(options) {
                 clientAssetManifest,
                 clientAssetBase,
               });
+        if (env.__GORIBU_PRERENDER === true && isSignedUrlPrerenderError(error)) {
+          // Fixed framework diagnostic for the local build harness only. Never
+          // transport the thrown value or a request-controlled error message.
+          response.headers.set("x-goribu-prerender-error", "r2-signed-url");
+        }
       }
       // Every document mutation can vary between its ordinary representation and a
       // negotiated Form envelope. Mark even errors, fallbacks, and non-form
@@ -268,6 +287,12 @@ export function createApp(options) {
         representation,
         globalHeaders,
       );
+      if (outerUrl.pathname === "/_goribu/r2/file" || outerUrl.pathname.startsWith("/_goribu/r2/public/")) {
+        // User files share the app origin here. Enforce isolation after both
+        // stored metadata and app defaults, including partial and error responses.
+        withGlobalHeaders.headers.set("content-security-policy", "sandbox");
+        withGlobalHeaders.headers.set("x-content-type-options", "nosniff");
+      }
       d1Controller.commit();
       const flushed = appendSetCookies(withGlobalHeaders, cookieJar.pending);
       if (requestKind === "navigation" && clientAssetManifest?.navigationBuildId) {
@@ -475,7 +500,7 @@ export function createApp(options) {
 
   // Run one named method handler and preserve its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, body helpers, cookies, D1, KV, Worker bindings, and waitUntil) and the
+  // headers, body helpers, cookies, D1, KV, R2, Worker bindings, and waitUntil) and the
   // response builder.
   async function dispatchHandler(
     match,

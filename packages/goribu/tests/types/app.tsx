@@ -14,6 +14,7 @@ const config = defineConfig<Env>({
   compatibilityDate: "2026-08-31",
   database: { type: "d1", name: "typed-app-db" },
   kv: { name: "typed-app-kv" },
+  r2: { name: "typed-app-media", domain: "media.example.com", private: { name: "typed-app-files" }, jurisdiction: "eu" },
   responseHeaders: ({ request, env, nonce }) => ({
     "x-greeting": env.GREETING,
     "x-method": request.method,
@@ -21,6 +22,23 @@ const config = defineConfig<Env>({
   }),
 });
 defineConfig(config);
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-files" } });
+// @ts-expect-error R2 names are required.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { domain: "media.example.com" } });
+// @ts-expect-error Only EU or the omitted default jurisdiction is supported.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-files", jurisdiction: "us" } });
+// @ts-expect-error Goribu owns binding names.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-files", binding: "OTHER" } });
+// @ts-expect-error The second bucket has only a name.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-media", domain: "media.example.com", private: { name: "typed-app-files", domain: "files.example.com" } } });
+if (config.r2?.private) {
+  const name: string = config.r2.private.name;
+  const jurisdiction: "eu" | undefined = config.r2.jurisdiction;
+  // @ts-expect-error Defined R2 configuration is immutable.
+  config.r2.domain = "changed.example.com";
+  // @ts-expect-error The nested private bucket is also immutable.
+  config.r2.private.name = "changed";
+}
 const middleware: Middleware<Env> = (req, res) => {
   if (!req.cookies.get("session")) return res.redirect("/login");
   req.cookies.set("visited", "yes", { httpOnly: true, sameSite: "Lax", maxAge: 60 });
@@ -46,6 +64,34 @@ const GET: Handler<Props, Env, { id: string }> = async (req, res) => {
   if (!page.list_complete) { const cursor: string = page.cursor; }
   req.waitUntil(req.kv.put(id, JSON.stringify(row), { expirationTtl: 300 }));
   await req.kv.delete("old");
+  const publicUrl: string = req.r2.url("avatars/a b.png");
+  const signedUrl: string = await req.r2.signedUrl(id);
+  const downloadUrl: string = await req.r2.private.signedUrl(id, { expiresIn: 600, download: "invoice.pdf" });
+  // @ts-expect-error Signed link expiry is expressed in seconds as a number.
+  req.r2.signedUrl(id, { expiresIn: "600" });
+  const object = await req.r2.get(id);
+  if (object) { const bytes: ArrayBuffer = await object.arrayBuffer(); }
+  const conditional = await req.r2.get(id, { onlyIf: { etagDoesNotMatch: "etag" }, range: { offset: 0, length: 4 } });
+  if (conditional && "body" in conditional) await conditional.text();
+  const stored = await req.r2.put(id, new File(["csv"], "a.csv", { type: "text/csv" }), { httpMetadata: new Headers({ "cache-control": "no-store" }) });
+  const storedKey: string = stored.key;
+  const maybeStored = await req.r2.private.put(id, "text", { onlyIf: { etagDoesNotMatch: "*" } });
+  if (maybeStored) { const etag: string = maybeStored.httpEtag; }
+  const r2Page = await req.r2.list({ prefix: "avatars/", include: ["httpMetadata"] });
+  if (r2Page.truncated) { const cursor: string = r2Page.cursor; }
+  await req.r2.head(id);
+  await req.r2.private.delete([id, "old"]);
+  await req.r2.get(id, { onlyIf: new Headers({ "if-none-match": "etag" }) });
+  const multipart = await req.r2.createMultipartUpload(id, { httpMetadata: new Headers({ "content-type": "text/plain" }) });
+  const resumed = req.r2.private.resumeMultipartUpload(id, multipart.uploadId);
+  await resumed.uploadPart(1, new Blob(["part"]));
+  await resumed.abort();
+  // @ts-expect-error Private buckets have no public URL helper.
+  req.r2.private.url(id);
+  // @ts-expect-error The private facade cannot be replaced.
+  req.r2.private = req.r2;
+  // @ts-expect-error Native R2 keys are strings.
+  req.r2.get([id]);
   const body = await req.body();
   const parsedBody: Record<string, unknown> | string = body;
   if (typeof body === "string") body.trim();

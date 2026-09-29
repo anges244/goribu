@@ -1,0 +1,66 @@
+{
+  "source": "botocore 1.34.66 S3SigV4QueryAuth, explicit test credentials, frozen UTC timestamp",
+  "vectors": [
+    {
+      "method": "GET",
+      "key": "private/a b.png",
+      "expiresIn": 60,
+      "accountId": "abc123",
+      "bucket": "app-assets",
+      "accessKeyId": "AKIA_TEST",
+      "secretAccessKey": "secret-test-key",
+      "now": "2026-06-11T12:34:56Z",
+      "signature": "2364fa4b25d792c03afa65297f2602152ea2e7b2439fe51ca01675b853541576"
+    },
+    {
+      "method": "PUT",
+      "key": "uploads/photo.png",
+      "expiresIn": 300,
+      "accountId": "abc123",
+      "bucket": "app-assets",
+      "accessKeyId": "AKIA_TEST",
+      "secretAccessKey": "secret-test-key",
+      "now": "2026-06-11T12:34:56Z",
+      "signature": "1086d7d4a81ebdbac3d23a14972b9b6ec145f64dcd2a7ed2e9375f9cdc1a2212"
+    },
+    {
+      "method": "PUT",
+      "key": "uploads/é !'()*.png",
+      "expiresIn": 60,
+      "headers": {
+        "Content-Type": "image/png",
+        "Content-Length": "482113",
+        "Cache-Control": "public,  max-age=31536000, immutable",
+        "If-None-Match": "*"
+      },
+      "accountId": "abc123",
+      "bucket": "app-assets",
+      "accessKeyId": "AKIA_TEST",
+      "secretAccessKey": "secret-test-key",
+      "now": "2026-06-11T12:34:56Z",
+      "signature": "592b10653aa8f6cc423843c1a6970a4b0e19868526c49ff00d70f89f33a3e24d"
+    },
+    {
+      "method": "GET",
+      "key": "private/é +%.pdf",
+      "expiresIn": 600,
+      "jurisdiction": "eu",
+      "queryParams": [
+        [
+          "response-content-disposition",
+          "attachment; filename=\"invoice.pdf\"; filename*=UTF-8''invoice.pdf"
+        ],
+        [
+          "response-content-type",
+          "application/pdf"
+        ]
+      ],
+      "accountId": "abc123",
+      "bucket": "app-assets",
+      "accessKeyId": "AKIA_TEST",
+      "secretAccessKey": "secret-test-key",
+      "now": "2026-06-11T12:34:56Z",
+      "signature": "7ac5c9b24812d5c19d932b64b0529c15f2d00ff264f72c2e4b6df2bd9ea4fe17"
+    }
+  ]
+}

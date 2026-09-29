@@ -7,6 +7,7 @@ import { runMigrate } from "./migrations/run-migrate.js";
 import { provisionD1 } from "./provision-d1.js";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
+import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { provisionKV } from "./provision-kv.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
@@ -42,6 +43,7 @@ export async function runDeploy(options) {
   // `goribu build` has the same protection.
   await guard({ projectRoot, appConfig });
   await (options?.guardKV ?? assertNoDuplicateKVDeclaration)({ projectRoot, appConfig });
+  await (options?.guardR2 ?? assertNoDuplicateR2Declaration)({ projectRoot, appConfig });
   const secretsFile = findProductionSecretsFile(projectRoot);
   (options?.stdout ?? process.stdout).write(`${formatSecretsPlan(secretsFile)}\n`);
   // Authentication is read-only remote work, not provisioning. Fail before an

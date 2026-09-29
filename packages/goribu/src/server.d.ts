@@ -1,4 +1,4 @@
-import type { D1Database, D1DatabaseSession, KVNamespace, KVNamespaceListResult } from "@cloudflare/workers-types";
+import type { D1Database, D1DatabaseSession, KVNamespace, KVNamespaceListResult, R2Bucket, R2Object, R2ObjectBody, R2GetOptions, R2PutOptions, R2MultipartOptions, R2MultipartUpload } from "@cloudflare/workers-types";
 import type { FormErrors } from "./index.js";
 
 export type ResponseHeaders = Record<string, string | string[]>;
@@ -8,6 +8,12 @@ export interface ApplicationConfig<Env extends object = Record<string, unknown>>
   compatibilityFlags?: string[];
   database?: { type: "d1"; name: string; replication?: boolean };
   kv?: { name: string };
+  r2?: {
+    name: string;
+    domain?: string;
+    private?: { name: string };
+    jurisdiction?: "eu";
+  };
   responseHeaders?: (context: Readonly<{
     request: Request;
     env: Env;
@@ -17,10 +23,13 @@ export interface ApplicationConfig<Env extends object = Record<string, unknown>>
 }
 declare const configBrand: unique symbol;
 export type DefinedConfig<Env extends object = Record<string, unknown>> =
-  Readonly<Omit<ApplicationConfig<Env>, "compatibilityFlags" | "database" | "kv">> & {
+  Readonly<Omit<ApplicationConfig<Env>, "compatibilityFlags" | "database" | "kv" | "r2">> & {
     readonly compatibilityFlags: readonly string[];
     readonly database?: Readonly<NonNullable<ApplicationConfig<Env>["database"]>>;
     readonly kv?: Readonly<NonNullable<ApplicationConfig<Env>["kv"]>>;
+    readonly r2?: Readonly<Omit<NonNullable<ApplicationConfig<Env>["r2"]>, "private">> & {
+      readonly private?: Readonly<{ name: string }>;
+    };
     readonly [configBrand]: true;
   };
 export function defineConfig<Env extends object = Record<string, unknown>>(
@@ -88,6 +97,28 @@ export interface KV {
   delete(key: string): Promise<void>;
 }
 
+// Workers and DOM Web types differ structurally. Accept both for application
+// File/Blob/Headers values while retaining native options and return types.
+type R2PutValue = Parameters<R2Bucket["put"]>[1] | Blob | ReadableStream;
+type R2WebOptions<T> = { [K in keyof T]: K extends "httpMetadata" | "onlyIf" ? T[K] | Headers : T[K] };
+interface R2WebMultipartUpload extends R2MultipartUpload {
+  uploadPart(partNumber: number, value: Parameters<R2MultipartUpload["uploadPart"]>[1] | Blob | ReadableStream, options?: Parameters<R2MultipartUpload["uploadPart"]>[2]): ReturnType<R2MultipartUpload["uploadPart"]>;
+}
+export interface GoribuR2Bucket extends R2Bucket {
+  signedUrl(key: string, options?: { expiresIn?: number; download?: string }): Promise<string>;
+  get(key: string, options: R2WebOptions<R2GetOptions> & { onlyIf: NonNullable<R2WebOptions<R2GetOptions>["onlyIf"]> }): Promise<R2ObjectBody | R2Object | null>;
+  get(key: string, options?: R2WebOptions<R2GetOptions>): Promise<R2ObjectBody | null>;
+  put(key: string, value: R2PutValue, options?: R2WebOptions<R2PutOptions> & { onlyIf: NonNullable<R2WebOptions<R2PutOptions>["onlyIf"]> }): Promise<R2Object | null>;
+  put(key: string, value: R2PutValue, options?: R2WebOptions<R2PutOptions>): Promise<R2Object>;
+  createMultipartUpload(key: string, options?: R2WebOptions<R2MultipartOptions>): Promise<R2WebMultipartUpload>;
+  resumeMultipartUpload(key: string, uploadId: string): R2WebMultipartUpload;
+}
+
+export interface GoribuR2 extends GoribuR2Bucket {
+  url(key: string): string;
+  readonly private: GoribuR2Bucket;
+}
+
 export interface GoribuRequest<Env extends object = Record<string, unknown>, Params extends Record<keyof Params, string> = Record<string, string>> {
   method: string;
   path: string;
@@ -98,6 +129,7 @@ export interface GoribuRequest<Env extends object = Record<string, unknown>, Par
   cookies: Cookies;
   d1: D1;
   kv: KV;
+  r2: GoribuR2;
   waitUntil(promise: Promise<unknown>): void;
   /**
    * JSON and forms return objects; repeated form fields are arrays and uploads

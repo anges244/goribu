@@ -11,6 +11,21 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- R2 configuration accepts one default bucket and an optional private bucket,
+  validates names and custom hostnames, and carries optional EU jurisdiction
+  into generated `R2`/`R2_PRIVATE` bindings. Configuration types and binding
+  ownership guards cover development, builds, and deployment setup.
+- Request-scoped `req.r2` forwards native R2 operations, infers content type for
+  File/Blob writes, exposes the optional private bucket, and derives public URLs
+  during requests or prerendering. Development streams public local files with
+  ETag revalidation; that endpoint is excluded from production builds.
+  Signed downloads use purpose-separated HMAC tokens on the Worker or SigV4
+  URLs with production R2 credentials, including EU endpoints. Worker downloads
+  support ranges, conditional requests, and attachment filenames; prerendering
+  rejects expiring links. Files served on the app origin use fixed sandbox and
+  nosniff headers, including dev public files. Provisioning and browser uploads remain in progress. R2 stays
+  unreleased until the remaining batches are complete.
+
 - Both starter variants include a `public/` folder with an SVG favicon linked
   from the Document. Scaffolder packaging preserves public asset bytes and names.
 

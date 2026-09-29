@@ -13,7 +13,7 @@ private repository. The legacy `site/` app remains here for integration tests.
 - [Handlers](handlers.md), [middleware](middleware.md), and [errors](errors.md).
 - [Navigation](navigation.md), [forms](forms.md), and [metadata](metadata.md).
 - [TypeScript](typescript.md) and [environment variables](environment-variables.md).
-- [D1](d1.md), [migrations](migrations.md), and [KV](kv.md).
+- [D1](d1.md), [migrations](migrations.md), [KV](kv.md), and [R2](r2.md) (in progress).
 - [CLI](cli.md) and [deployment](deploy.md).
 
 ## Contributor references

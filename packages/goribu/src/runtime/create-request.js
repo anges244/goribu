@@ -15,7 +15,7 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object }} [runtime]
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
@@ -43,6 +43,7 @@ export function createRequest(request, params, runtime) {
     cookies: worker.cookies,
     d1: worker.d1,
     kv: worker.kv,
+    r2: worker.r2,
     waitUntil(promise) {
       assertWaitUntilPromise(promise);
       if (typeof worker.waitUntil !== "function") {
@@ -93,7 +94,7 @@ function assertRuntime(runtime) {
   if (runtime === undefined) return {};
   if (runtime === null || typeof runtime !== "object" || Array.isArray(runtime)) {
     throw new TypeError(
-      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV facades.",
+      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV/R2 facades.",
     );
   }
   if (

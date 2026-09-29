@@ -170,6 +170,9 @@ async function renderThroughWorker(worker, route) {
   }
 
   if (response.status !== 200) {
+    if (response.headers.get("x-goribu-prerender-error") === "r2-signed-url") {
+      return { ok: false, reason: "called req.r2.signedUrl(), whose link would expire inside static HTML" };
+    }
     return { ok: false, reason: `responded ${response.status}` };
   }
   if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/html")) {
@@ -214,7 +217,7 @@ async function startPrerenderWorker({ configPath }) {
 
   let harness;
   try {
-    harness = createTestHarness({ workers: [{ configPath }] });
+    harness = createTestHarness({ workers: [{ configPath, vars: { __GORIBU_PRERENDER: true } }] });
     await harness.listen();
   } catch (error) {
     restoreLogLevel();

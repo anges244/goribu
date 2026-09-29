@@ -125,6 +125,20 @@ describe("runWranglerDeploy", () => {
 });
 
 describe("runDeploy", () => {
+  it("rejects duplicate R2 ownership before authentication, build, or deployment", async () => {
+    const projectRoot = makeProject();
+    const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-09-01", r2: { name: "app-files" } });
+    writeFileSync(join(projectRoot, "wrangler.jsonc"), '{"r2_buckets":[]}');
+    const build = vi.fn();
+    const getAccess = vi.fn();
+    const deploy = vi.fn();
+    await expect(runDeploy({ projectRoot, loadConfig: async () => appConfig, build, getAccess, deploy }))
+      .rejects.toThrow(/Remove the r2_buckets declaration/);
+    expect(build).not.toHaveBeenCalled();
+    expect(getAccess).not.toHaveBeenCalled();
+    expect(deploy).not.toHaveBeenCalled();
+  });
+
   it("guards and authenticates before building, then provisions, finalizes, migrates, and deploys", async () => {
     const events = [];
     const appConfig = defineConfig({
