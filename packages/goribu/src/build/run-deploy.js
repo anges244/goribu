@@ -53,7 +53,7 @@ export async function runDeploy(options) {
   await build();
 
   if (secretsFile) {
-    await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile });
+    await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile, accountId: access.accountId });
   }
 
   const database = await provision({
@@ -90,7 +90,7 @@ export async function runDeploy(options) {
       stdout: options?.stdout ?? process.stdout,
     });
   }
-  return deploy({ projectRoot, secretsFile });
+  return deploy({ projectRoot, secretsFile, accountId: access.accountId });
 }
 
 /** Let pinned Wrangler validate the file and built Worker before remote mutation. */
@@ -114,7 +114,7 @@ export async function validateProductionSecrets(options) {
  * Wrangler and reports how it finished. `spawn` and `resolveBin` are injectable
  * so the launching contract can be tested without a network or a real deploy.
  *
- * @param {{ projectRoot: string, secretsFile?: string, dryRun?: boolean, spawn?: Function, resolveBin?: Function }} options
+ * @param {{ projectRoot: string, accountId?: string, secretsFile?: string, dryRun?: boolean, spawn?: Function, resolveBin?: Function }} options
  * @returns {Promise<number>} Wrangler's exit code (0 on success)
  */
 export async function runWranglerDeploy(options) {
@@ -145,6 +145,11 @@ export async function runWranglerDeploy(options) {
     if (options.secretsFile) args.push(`--secrets-file=${options.secretsFile}`);
     const child = spawn(process.execPath, args, {
       cwd: projectRoot,
+      // The parent selected this account before provisioning. An explicit child
+      // env value also wins over Wrangler's project .env loading, in both modes.
+      ...(options.accountId === undefined ? {} : {
+        env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: options.accountId },
+      }),
       // Parser diagnostics can include source text. The preflight reports a
       // teaching error itself so malformed secrets cannot reach terminal logs.
       stdio: options.dryRun ? "ignore" : ["inherit", "inherit", "pipe"],

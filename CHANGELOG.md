@@ -31,6 +31,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Deploy passes the authenticated account explicitly to Wrangler for both secret
+  validation and Worker upload, keeping every app's deployment aligned with
+  provisioning even when the project's `.env` selects another account.
+
 - Route analysis rejects lowercase or mixed-case HTTP handler exports with a
   filename and uppercase repair instruction, instead of silently omitting the
   handler or incorrectly classifying its page as static. Destructured handler

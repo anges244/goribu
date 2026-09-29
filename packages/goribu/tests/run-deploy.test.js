@@ -330,7 +330,7 @@ describe("runDeploy", () => {
     expect(migrate).not.toHaveBeenCalled();
     expect(finalize).not.toHaveBeenCalled();
     expect(getAccess).toHaveBeenCalledWith({ projectRoot: "/app" });
-    expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app", secretsFile: undefined });
+    expect(deploy).toHaveBeenCalledWith({ projectRoot: "/app", secretsFile: undefined, accountId: "account" });
   });
 
   it("stops before building or remote mutations when authentication fails, even without resources", async () => {
@@ -370,13 +370,13 @@ it("validates production secrets before provisioning, and never uploads the loca
   };
   await runDeploy(options);
   expect(validateSecrets).not.toHaveBeenCalled();
-  expect(deploy).toHaveBeenLastCalledWith({ projectRoot, secretsFile: undefined });
+  expect(deploy).toHaveBeenLastCalledWith({ projectRoot, secretsFile: undefined, accountId: "account" });
   expect(stdout.write).toHaveBeenCalledWith(expect.stringContaining("use existing platform secrets"));
 
   writeFileSync(join(projectRoot, ".env.production"), "PROD_ONLY=upload\nPUBLIC_NAME=public-too\n");
   await runDeploy(options);
-  expect(validateSecrets).toHaveBeenCalledWith({ projectRoot, secretsFile: ".env.production" });
-  expect(deploy).toHaveBeenLastCalledWith({ projectRoot, secretsFile: ".env.production" });
+  expect(validateSecrets).toHaveBeenCalledWith({ projectRoot, secretsFile: ".env.production", accountId: "account" });
+  expect(deploy).toHaveBeenLastCalledWith({ projectRoot, secretsFile: ".env.production", accountId: "account" });
   expect(stdout.write.mock.calls.flat().join("")).not.toMatch(/PROD_ONLY|PUBLIC_NAME|never-upload/);
 
   for (const stage of [provision, provisionKV, migrate, deploy]) stage.mockClear();
