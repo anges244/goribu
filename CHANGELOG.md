@@ -28,8 +28,15 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   provisioning, keeping the app's `CLOUDFLARE_ACCOUNT_ID` binding separate.
   R2 development generates a persistent local signing secret, with root env
   values taking precedence and the fallback excluded from production output.
-  Provisioning and browser uploads remain in progress. R2 stays
-  unreleased until the remaining batches are complete.
+  Check now reports a read-only bucket plan; deploy creates missing buckets in
+  the selected account, carrying EU jurisdiction through every request. Both
+  warn about changed bindings and extra domains on public buckets, and reject
+  public r2.dev access or enabled custom domains on private buckets before
+  resource mutations. Existing secrets using the managed names block with a
+  manual deletion command; other binding types warn about replacement.
+  Domain connection,
+  production signing-secret setup, and browser uploads remain in progress.
+  R2 stays unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked
   from the Document. Scaffolder packaging preserves public asset bytes and names.

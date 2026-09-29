@@ -366,13 +366,14 @@ it("finalizes the R2 account after build and before validation or remote mutatio
     getAccess: async () => ({ accountId, headers: {} }),
     build: async () => { events.push("build"); }, finalizeR2Account,
     validateSecrets: async () => { events.push("validate"); },
+    provisionR2: async () => { events.push("r2"); return null; },
     provision: async () => { events.push("provision"); return null; },
     provisionKV: async () => null,
     deploy: async () => { events.push("deploy"); return 0; },
     stdout: { write() {} },
   };
   await runDeploy(options);
-  expect(events).toEqual(["build", "account", "validate", "provision", "deploy"]);
+  expect(events).toEqual(["build", "account", "validate", "r2", "provision", "deploy"]);
   expect(finalizeR2Account).toHaveBeenCalledWith({ projectRoot, appConfig, accountId });
   events.length = 0;
   finalizeR2Account.mockImplementation(() => { throw new Error("invalid artifact"); });

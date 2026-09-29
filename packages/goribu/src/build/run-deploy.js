@@ -9,6 +9,7 @@ import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { provisionKV } from "./provision-kv.js";
+import { provisionR2 } from "./provision-r2.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
 import { finalizeR2Account } from "./finalize-r2-account.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
@@ -62,6 +63,15 @@ export async function runDeploy(options) {
   if (secretsFile) {
     await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile, accountId: access.accountId });
   }
+
+  // Inspect both R2 buckets and reject unsafe public access before D1/KV writes
+  // or migrations. R2 itself only creates buckets after its full inspection.
+  await (options?.provisionR2 ?? provisionR2)({
+    projectRoot,
+    appConfig,
+    getAccess,
+    stdout: options?.stdout ?? process.stdout,
+  });
 
   const database = await provision({
     projectRoot,

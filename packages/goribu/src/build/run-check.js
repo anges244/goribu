@@ -9,6 +9,7 @@ import { readAppliedMigrations } from "./migrations/inspect-applied.js";
 import { planMigrations } from "./migrations/plan-migrations.js";
 import { executeD1 } from "./migrations/wrangler-d1.js";
 import { findDeclaredKVNamespace, listRemoteKVNamespaces } from "./inspect-kv.js";
+import { assertR2PlanSafe, formatR2Plan, inspectR2 } from "./inspect-r2.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 import { BUILD_OUTPUT_DIRECTORY } from "./build-output.js";
 import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
@@ -45,6 +46,7 @@ export async function runCheck(options) {
   const remoteDatabases = hasDatabase ? await inspectD1({ projectRoot }) : [];
   const inspectKV = options?.inspectKV ?? listRemoteKVNamespaces;
   const remoteNamespaces = appConfig.kv === undefined ? [] : await inspectKV({ projectRoot });
+  const r2 = appConfig.r2 === undefined ? null : await (options?.inspectR2 ?? inspectR2)({ projectRoot, appConfig });
 
   // Read the local migration files whenever a database is declared, so the plan can
   // report pending work even before the database exists. A malformed file fails closed
@@ -63,9 +65,10 @@ export async function runCheck(options) {
     existing === undefined ? [] : await inspectMigrations({ projectRoot, appConfig });
 
   const secretsFile = findProductionSecretsFile(projectRoot);
-  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations, appliedRows, secretsFile });
+  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2, migrations, appliedRows, secretsFile });
 
   stdout.write(formatCheckPlan(plan));
+  assertR2PlanSafe(plan.r2);
   return plan;
 }
 
@@ -198,7 +201,7 @@ export function findDeclaredDatabase({ appConfig, remoteDatabases } = {}) {
 }
 
 /** Compare declared resources with the read-only remote inventories. */
-export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, migrations = [], appliedRows = [], secretsFile } = {}) {
+export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2 = null, migrations = [], appliedRows = [], secretsFile } = {}) {
   if (!isApplicationConfig(appConfig)) {
     throw new TypeError(
       "[Goribu] createCheckPlan({ appConfig }) requires the defineConfig() result loaded from goribu.config.js.",
@@ -260,8 +263,23 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
     );
   }
 
+  if (appConfig.r2 !== undefined) {
+    if (r2 === null) throw new Error("[Goribu] The R2 deployment plan is missing. Rerun `goribu check` with bucket inspection enabled; R2 state must be verified before planning deployment.");
+    for (const bucket of r2.buckets) {
+      resources.push(Object.freeze({
+        kind: "R2 bucket", name: bucket.name, jurisdiction: bucket.jurisdiction,
+        state: bucket.state, action: bucket.state === "missing" ? "create" : "none",
+      }));
+      bindings.push(Object.freeze({
+        name: bucket.binding, resource: `R2 bucket ${JSON.stringify(bucket.name)} (${bucket.jurisdiction})`,
+      }));
+    }
+    costWarnings.push("R2 storage and operations can incur usage charges. Review current pricing before deploy: https://developers.cloudflare.com/r2/pricing/");
+  }
+
   return Object.freeze({
     readOnly: true,
+    r2,
     secretsFile,
     deployTarget: Object.freeze({
       worker: appConfig.name,
@@ -304,6 +322,7 @@ export function formatCheckPlan(plan) {
       ? ["  none"]
       : plan.bindings.map((binding) => `  ${binding.name} -> ${binding.resource}`)),
     "",
+    ...(plan.r2 ? [formatR2Plan(plan.r2)] : []),
     "Migrations (production)",
     ...formatMigrations(plan.migrations),
     "",

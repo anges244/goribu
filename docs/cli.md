@@ -142,12 +142,21 @@ When `.env.production` exists, a Wrangler dry run validates it before
 provisioning or migrations, then deployment uploads it as secrets. Otherwise,
 existing platform secrets are used. Local `.env` is never uploaded as fallback.
 
+The unreleased [R2 feature](./r2.md) also inspects both declared buckets and
+creates missing ones before D1/KV provisioning. Domain connection and production
+signing-secret setup remain pending.
+
 ## `goribu check`
 
 Inspect the production deployment plan without changing resources. Check reports
 the Worker target, declared D1/KV resources and bindings, cost warnings, and real
 production applied, pending, and drifted migration state. It also reports the
 production secrets file and intended action, without values or key counts.
+
+For the unreleased [R2 feature](./r2.md), check also reports bucket creation,
+bindings, jurisdiction changes, and continued public access. Public `r2.dev`
+access or an enabled custom domain on a private bucket makes the check fail
+without changing anything.
 
 ```sh
 goribu check
