@@ -3,17 +3,17 @@ import { CLOUDFLARE_AUTH_HELP } from "./wrangler-diagnostics.js";
 const BUCKET_NAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const JURISDICTIONS = new Set(["default", "eu", "us", "fedramp", "fedramp-high"]);
 
-/** Metadata reads and bucket creation only. No object or deletion API is exposed. */
+/** Metadata reads, bucket creation, and domain attachment. No object/deletion API. */
 export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis.fetch }) {
   if (!/^[a-f0-9]{32}$/i.test(access?.accountId ?? "") || !access?.headers) {
     throw new Error("[Goribu] R2 management needs the authenticated Cloudflare account. Run `goribu check` again after selecting an account with CLOUDFLARE_ACCOUNT_ID.");
   }
-  const base = `https://api.cloudflare.com/client/v4/accounts/${access.accountId}`;
+  const base = "https://api.cloudflare.com/client/v4";
 
-  async function request(path, { method = "GET", jurisdiction, body, missingCode } = {}) {
+  async function request(path, { method = "GET", jurisdiction, body, missingCode, accountScoped = true, envelope = false } = {}) {
     let response, payload;
     try {
-      response = await fetchImpl(base + path, {
+      response = await fetchImpl(base + (accountScoped ? `/accounts/${access.accountId}` : "") + path, {
         method, redirect: "error",
         headers: { ...access.headers, ...(jurisdiction === undefined ? {} : { "cf-r2-jurisdiction": jurisdiction }),
           ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
@@ -28,20 +28,24 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
     if (response.status === 404 && payload?.success === false && missingCode !== undefined &&
         Array.isArray(payload.errors) && payload.errors.length === 1 && payload.errors[0]?.code === missingCode) return null;
     if (!response.ok || payload?.success !== true || !Object.hasOwn(payload, "result")) {
-      throw new Error(`[Goribu] Cloudflare rejected R2 management (${method}, HTTP ${response.status}). Confirm account access, R2 permissions, and Workers Scripts Read permission. ${CLOUDFLARE_AUTH_HELP}Then rerun \`goribu check\` before deploying. Existing buckets and objects are preserved.`);
+      const domainHelp = method === "POST" && path.endsWith("/domains/custom") ? "Check whether the hostname already belongs to another bucket or DNS record; Goribu does not reassign it. " : "";
+      throw new Error(`[Goribu] Cloudflare rejected R2 management (${method}, HTTP ${response.status}). Confirm account access, R2 permissions, Workers Scripts Read, and Zone Read when a domain is configured. ${domainHelp}${CLOUDFLARE_AUTH_HELP}Then rerun \`goribu check\` before deploying. Existing buckets and objects are preserved.`);
     }
-    return payload.result;
+    return envelope ? payload : payload.result;
   }
 
   return Object.freeze({
-    async deployedBindings(workerName) {
+    async worker(workerName) {
       const settings = await request(`/workers/scripts/${encodeURIComponent(workerName)}/settings`, { missingCode: 10007 });
-      if (settings === null) return [];
+      if (settings === null) return Object.freeze({ exists: false, bindings: Object.freeze([]) });
       if (!Array.isArray(settings?.bindings)) throw invalidMetadata("Worker bindings");
       const bindings = [];
       const seen = new Set();
       for (const binding of settings.bindings) {
         // Read only managed R2 metadata. Never inspect secret/variable values.
+        if (binding?.name === "GORIBU_SECRET" && binding.type !== "secret_text") {
+          throw new Error("[Goribu] The deployed GORIBU_SECRET binding is not a text secret. Remove or rename it in Cloudflare Worker Settings > Variables and Secrets and in the app configuration, then retry `goribu deploy`. Goribu requires a text secret and never reads its value.");
+        }
         if (binding?.name !== "R2" && binding?.name !== "R2_PRIVATE") continue;
         if (typeof binding.type !== "string" || !/^[a-z][a-z0-9_]*$/.test(binding.type)) throw invalidMetadata("managed Worker binding type");
         if (seen.has(binding.name)) throw invalidMetadata("managed Worker R2 bindings");
@@ -59,7 +63,23 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
         const jurisdiction = normalizeJurisdiction(binding.jurisdiction);
         bindings.push(Object.freeze({ binding: binding.name, type: binding.type, name: binding.bucket_name, jurisdiction }));
       }
-      return Object.freeze(bindings);
+      return Object.freeze({ exists: true, bindings: Object.freeze(bindings) });
+    },
+    async zone(domain) {
+      const labels = domain.split(".");
+      for (let index = 0; index < labels.length - 1; index++) {
+        const name = labels.slice(index).join(".");
+        const query = new URLSearchParams({ name, "account.id": access.accountId, per_page: "50" });
+        const page = await request(`/zones?${query}`, { accountScoped: false, envelope: true });
+        if (!Array.isArray(page.result) || page.result.length > 1 ||
+            (page.result_info?.total_pages ?? 1) > 1 || (page.result_info?.total_count ?? page.result.length) !== page.result.length) throw invalidMetadata("zone lookup");
+        if (page.result.length === 0) continue;
+        const zone = page.result[0];
+        if (!/^[a-f0-9]{32}$/i.test(zone?.id ?? "") || zone.name !== name || zone.account?.id !== access.accountId) throw invalidMetadata("zone identity or account");
+        if (zone.status !== "active") throw new Error(`[Goribu] The Cloudflare zone ${name} is not active. Activate it in the selected account before connecting ${domain}, then rerun \`goribu check\`.`);
+        return Object.freeze({ id: zone.id, name });
+      }
+      throw new Error(`[Goribu] No accessible zone for ${domain} exists in the selected R2 account. Add or move the zone to this account and grant Zone Read permission, or choose a domain in this account, then rerun \`goribu check\`.`);
     },
     async bucket(name, jurisdiction) {
       const path = `/r2/buckets/${encodeURIComponent(name)}`;
@@ -69,16 +89,26 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
       const managed = await request(`${path}/domains/managed`, { jurisdiction });
       const custom = await request(`${path}/domains/custom`, { jurisdiction });
       if (typeof managed?.enabled !== "boolean" || !Array.isArray(custom?.domains)) throw invalidMetadata("bucket public access");
+      const seenDomains = new Set();
       const domains = custom.domains.map((domain) => {
         if (typeof domain?.enabled !== "boolean" || typeof domain.domain !== "string" ||
             !/^[a-z0-9.-]+$/i.test(domain.domain) || !domain.domain.includes(".")) throw invalidMetadata("bucket custom domains");
-        return Object.freeze({ domain: domain.domain.toLowerCase(), enabled: domain.enabled });
+        const hostname = domain.domain.toLowerCase();
+        if (seenDomains.has(hostname)) throw invalidMetadata("duplicate bucket custom domains");
+        seenDomains.add(hostname);
+        return Object.freeze({ domain: hostname, enabled: domain.enabled });
       });
       return Object.freeze({ name, jurisdiction, devUrlEnabled: managed.enabled, domains: Object.freeze(domains) });
     },
     async createBucket(name, jurisdiction) {
       const result = await request("/r2/buckets", { method: "POST", jurisdiction, body: { name } });
       validateBucket(result, name, jurisdiction);
+    },
+    async attachDomain(name, jurisdiction, domain, zoneId) {
+      const result = await request(`/r2/buckets/${encodeURIComponent(name)}/domains/custom`, {
+        method: "POST", jurisdiction, body: { domain, zoneId, enabled: true, minTLS: "1.2" },
+      });
+      if (result?.domain !== domain || result.enabled !== true || result.zoneId !== zoneId) throw invalidMetadata("attached custom domain");
     },
   });
 }

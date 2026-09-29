@@ -367,18 +367,46 @@ it("finalizes the R2 account after build and before validation or remote mutatio
     build: async () => { events.push("build"); }, finalizeR2Account,
     validateSecrets: async () => { events.push("validate"); },
     provisionR2: async () => { events.push("r2"); return null; },
+    ensureR2SigningSecret: async () => { events.push("secret"); },
     provision: async () => { events.push("provision"); return null; },
     provisionKV: async () => null,
     deploy: async () => { events.push("deploy"); return 0; },
     stdout: { write() {} },
   };
   await runDeploy(options);
-  expect(events).toEqual(["build", "account", "validate", "r2", "provision", "deploy"]);
+  expect(events).toEqual(["build", "account", "validate", "r2", "provision", "secret", "deploy"]);
   expect(finalizeR2Account).toHaveBeenCalledWith({ projectRoot, appConfig, accountId });
   events.length = 0;
   finalizeR2Account.mockImplementation(() => { throw new Error("invalid artifact"); });
   await expect(runDeploy(options)).rejects.toThrow("invalid artifact");
   expect(events).toEqual(["build"]);
+});
+
+it("creates the R2 secret after migrations and stops the upload if secret setup fails", async () => {
+  const projectRoot = makeProject();
+  const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-09-01", r2: { name: "app-files" }, database: { type: "d1", name: "app-db" } });
+  const events = [];
+  const access = { accountId: "a".repeat(32), headers: {} };
+  const ensureR2SigningSecret = vi.fn(async () => { events.push("secret"); });
+  const options = {
+    projectRoot, loadConfig: async () => appConfig, getAccess: async () => access,
+    stdout: { write() {} }, build: async () => {}, finalizeR2Account() {},
+    provisionR2: async () => { events.push("r2"); },
+    provision: async () => ({ uuid: "db-id" }), finalize() {},
+    migrate: async () => { events.push("migrate"); }, ensureR2SigningSecret,
+    deploy: vi.fn(async () => { events.push("deploy"); return 0; }),
+  };
+  await runDeploy(options);
+  expect(events).toEqual(["r2", "migrate", "secret", "deploy"]);
+  expect(ensureR2SigningSecret.mock.calls[0][0].access).toBe(access);
+  options.deploy.mockClear();
+  ensureR2SigningSecret.mockImplementation(async () => { throw new Error("secret setup failed"); });
+  await expect(runDeploy(options)).rejects.toThrow("secret setup failed");
+  expect(options.deploy).not.toHaveBeenCalled();
+  ensureR2SigningSecret.mockClear();
+  options.migrate = async () => { throw new Error("migration failed"); };
+  await expect(runDeploy(options)).rejects.toThrow("migration failed");
+  expect(ensureR2SigningSecret).not.toHaveBeenCalled();
 });
 
 it("validates production secrets before provisioning, and never uploads the local .env as fallback", async () => {

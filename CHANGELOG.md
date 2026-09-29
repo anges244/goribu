@@ -34,8 +34,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   public r2.dev access or enabled custom domains on private buckets before
   resource mutations. Existing secrets using the managed names block with a
   manual deletion command; other binding types warn about replacement.
-  Domain connection,
-  production signing-secret setup, and browser uploads remain in progress.
+  Deploy resolves the public domain's zone in the selected account and attaches
+  missing connections. It creates a missing production signing secret through
+  Wrangler stdin after migrations, using names-only inspection and suppressing
+  secret-command output and disk logs. Check reports these actions read-only.
+  Browser uploads and their CORS/key checks remain in progress.
   R2 stays unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked

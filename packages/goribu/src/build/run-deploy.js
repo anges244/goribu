@@ -10,6 +10,7 @@ import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { provisionKV } from "./provision-kv.js";
 import { provisionR2 } from "./provision-r2.js";
+import { ensureR2SigningSecret } from "./r2-secrets.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
 import { finalizeR2Account } from "./finalize-r2-account.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
@@ -106,6 +107,11 @@ export async function runDeploy(options) {
       errorLabel: "goribu deploy",
       stdout: options?.stdout ?? process.stdout,
     });
+  }
+  // On first deploy Wrangler may create a draft Worker to hold the secret.
+  // Finish provisioning and migrations before that first Worker mutation.
+  if (appConfig.r2 !== undefined) {
+    await (options?.ensureR2SigningSecret ?? ensureR2SigningSecret)({ projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout });
   }
   return deploy({ projectRoot, secretsFile, accountId: access.accountId });
 }

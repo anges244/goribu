@@ -16,21 +16,28 @@ const config = (r2, extra = {}) => defineConfig({ name: "test-app", compatibilit
 const success = (result) => Response.json({ success: true, result });
 const failure = (status, code) => Response.json({ success: false, errors: [{ code, message: "untrusted-response-marker" }] }, { status });
 
-// A metadata-only Cloudflare fixture. Unexpected paths/methods fail, including
-// object access, deletion, public-access changes, and secret inspection.
+// A Cloudflare management fixture. Unexpected paths/methods fail, including
+// object access, deletion, and secret inspection.
 function cloudflare({ bindings = null, buckets = [], override = () => undefined } = {}) {
   const state = new Map(buckets.map((bucket) => [`${bucket.jurisdiction ?? "default"}/${bucket.name}`, bucket]));
   const calls = [];
   const fetch = async (url, init) => {
-    expect(url).toMatch(new RegExp(`^https://api.cloudflare.com/client/v4/accounts/${access.accountId}/`));
     expect(init.headers.Authorization).toBe(access.headers.Authorization);
     expect(init.redirect).toBe("error");
-    const path = new URL(url).pathname.split(`/accounts/${access.accountId}`)[1];
+    const parsed = new URL(url);
+    expect(parsed.origin).toBe("https://api.cloudflare.com");
+    const path = parsed.pathname.startsWith("/client/v4/zones") ? "/zones" : parsed.pathname.split(`/accounts/${access.accountId}`)[1];
     const jurisdiction = init.headers["cf-r2-jurisdiction"];
-    const call = { path, method: init.method, jurisdiction, body: init.body && JSON.parse(init.body) };
+    const call = { path, method: init.method, jurisdiction, body: init.body && JSON.parse(init.body), ...(path === "/zones" ? { query: Object.fromEntries(parsed.searchParams) } : {}) };
     calls.push(call);
     const replaced = override(call);
     if (replaced !== undefined) return replaced;
+    if (path === "/zones") {
+      expect(init.method).toBe("GET");
+      expect(jurisdiction).toBeUndefined();
+      expect(call.query["account.id"]).toBe(access.accountId);
+      return success(call.query.name === "example.com" ? [{ id: "b".repeat(32), name: "example.com", account: { id: access.accountId }, status: "active" }] : []);
+    }
     if (path === "/workers/scripts/test-app/settings" && init.method === "GET") {
       expect(jurisdiction).toBeUndefined();
       return bindings === null ? failure(404, 10007) : success({ bindings });
@@ -41,6 +48,11 @@ function cloudflare({ bindings = null, buckets = [], override = () => undefined 
       return success(bucket);
     }
     const match = /^\/r2\/buckets\/([^/]+)(\/domains\/(managed|custom))?$/.exec(path);
+    if (match?.[3] === "custom" && init.method === "POST") {
+      state.get(`${jurisdiction}/${match[1]}`).domains ??= [];
+      state.get(`${jurisdiction}/${match[1]}`).domains.push(call.body);
+      return success(call.body);
+    }
     if (match && init.method === "GET") {
       const bucket = state.get(`${jurisdiction}/${match[1]}`);
       if (!bucket) return failure(404, 10006);
@@ -57,7 +69,7 @@ function setup(appConfig, remote) {
   const projectRoot = mkdtempSync(join(tmpdir(), "goribu-r2-plan-"));
   roots.push(projectRoot);
   let output = "";
-  const options = { projectRoot, appConfig, getAccess: async () => access, fetch: remote.fetch,
+  const options = { projectRoot, appConfig, getAccess: async () => access, fetch: remote.fetch, listSecrets: async () => [],
     stdout: { write(text) { output += text; } } };
   return { options, output: () => output,
     check: () => runCheck({ ...options, loadConfig: async () => appConfig,
@@ -83,9 +95,10 @@ describe("R2 bucket planning and provisioning", () => {
     const provisionPlan = await provisionR2(options);
     expect(provisionPlan).toEqual(plan.r2);
     const writes = remote.calls.filter((call) => call.method !== "GET");
-    expect(writes).toEqual(["app-media", "app-files"].map((name) => ({
+    expect(writes.filter((call) => call.path === "/r2/buckets")).toEqual(["app-media", "app-files"].map((name) => ({
       path: "/r2/buckets", method: "POST", jurisdiction: jurisdiction ?? "default", body: { name },
     })));
+    expect(writes.at(-1)).toMatchObject({ path: "/r2/buckets/app-media/domains/custom", method: "POST", body: { domain: "media.example.com", enabled: true, zoneId: "b".repeat(32), minTLS: "1.2" } });
     expect(remote.calls.filter((call) => call.path.startsWith("/r2/")).every((call) => call.jurisdiction === (jurisdiction ?? "default"))).toBe(true);
     const beforeRepeat = remote.calls.length;
     const reused = await provisionR2(options);
@@ -118,7 +131,7 @@ describe("R2 bucket planning and provisioning", () => {
     expect(output()).toContain("wrangler r2 bucket domain remove app-files --domain media.example.com -J eu");
     expect(output()).toContain("R2_PRIVATE is removed from the Worker; bucket old-private (eu) and all its objects remain unchanged.");
     expect(output()).not.toContain("off.example.com");
-    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+    expect(remote.calls.filter((call) => call.method !== "GET")).toMatchObject([{ method: "POST", path: "/r2/buckets/app-files/domains/custom", body: { domain: "new.example.com" } }]);
   });
 
   it.each([
@@ -244,7 +257,7 @@ describe("R2 bucket planning and provisioning", () => {
       { name: "APP_VARIABLE", type: "plain_text", get text() { return forbidden(); } },
       { name: "R2", type: "r2_bucket", bucket_name: "app-files" },
     ] } }) }) });
-    await expect(client.deployedBindings("test-app")).resolves.toEqual([{ binding: "R2", type: "r2_bucket", name: "app-files", jurisdiction: "default" }]);
+    await expect(client.worker("test-app")).resolves.toEqual({ exists: true, bindings: [{ binding: "R2", type: "r2_bucket", name: "app-files", jurisdiction: "default" }] });
   });
 
   it("rejects ambiguous managed binding metadata", async () => {
@@ -262,5 +275,61 @@ describe("R2 bucket planning and provisioning", () => {
     await expect(provisionR2(options)).resolves.toBeNull();
     expect(getAccess).not.toHaveBeenCalled();
     expect(() => createCheckPlan({ appConfig: config({ name: "app-files" }) })).toThrow(/R2 deployment plan is missing/);
+  });
+
+  it("selects the most specific zone in the authenticated account", async () => {
+    const remote = cloudflare({ override: (call) => call.path === "/zones" ? success([
+      { name: "media.example.com", id: "c".repeat(32), account: { id: access.accountId }, status: "active" },
+    ]) : undefined });
+    const { options, check, output } = setup(config({ name: "app-media", domain: "media.example.com", jurisdiction: "eu" }), remote);
+    const plan = await check();
+    expect(plan.r2.domain).toMatchObject({ action: "connect", zoneId: "c".repeat(32), jurisdiction: "eu" });
+    expect(output()).toContain("connect domain  media.example.com -> app-media (eu)");
+    expect(remote.calls.filter((call) => call.path === "/zones")).toHaveLength(1);
+    await provisionR2(options);
+    expect(remote.calls.find((call) => call.method === "POST" && call.path.endsWith("/domains/custom"))).toMatchObject({ jurisdiction: "eu", body: { zoneId: "c".repeat(32) } });
+  });
+
+  it.each(["missing", "other account", "inactive", "incomplete", "permission denied"])("rejects %s zone lookup before resource writes", async (problem) => {
+    const zone = { name: "media.example.com", id: "b".repeat(32), account: { id: problem === "other account" ? "c".repeat(32) : access.accountId }, status: problem === "inactive" ? "pending" : "active" };
+    const remote = cloudflare({ override: (call) => {
+      if (call.path !== "/zones") return;
+      if (problem === "missing") return success([]);
+      if (problem === "permission denied") return failure(403, 10000);
+      if (problem === "incomplete") return Response.json({ success: true, result: [zone], result_info: { total_pages: 2, total_count: 2 } });
+      return success([zone]);
+    } });
+    const { options, check } = setup(config({ name: "app-media", domain: "media.example.com" }), remote);
+    await expect(check()).rejects.toThrow(/\[Goribu\].*zone|\[Goribu\].*Cloudflare rejected/);
+    await expect(provisionR2(options)).rejects.toThrow(/\[Goribu\]/);
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+  });
+
+  it("refuses a disabled configured domain without overwriting its settings", async () => {
+    const remote = cloudflare({ buckets: [{ name: "app-media", domains: [{ domain: "media.example.com", enabled: false }] }] });
+    const { options } = setup(config({ name: "app-media", domain: "media.example.com" }), remote);
+    await expect(provisionR2(options)).rejects.toThrow(/connected but disabled.*Enable it in Cloudflare/);
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+  });
+
+  it("preserves created buckets when domain attachment conflicts", async () => {
+    const remote = cloudflare({ override: (call) => call.method === "POST" && call.path.endsWith("/domains/custom") ? failure(409, 10000) : undefined });
+    const { options } = setup(config({ name: "app-media", domain: "media.example.com" }), remote);
+    await expect(provisionR2(options)).rejects.toThrow(/HTTP 409/);
+    expect(remote.state.size).toBe(1);
+    expect(remote.calls.every((call) => ["GET", "POST"].includes(call.method))).toBe(true);
+  });
+
+  it("plans secrets by platform names, skips list for a missing Worker, and fails closed on list errors", async () => {
+    const remote = cloudflare({ bindings: [] });
+    const { options } = setup(config({ name: "app-files" }), remote);
+    const listSecrets = vi.fn(async () => ["GORIBU_SECRET", "R2_ACCESS_KEY_ID"]);
+    expect((await inspectR2({ ...options, listSecrets })).signingSecret).toBe("existing");
+    expect(listSecrets.mock.calls[0][0].access).toBe(access);
+    await expect(provisionR2({ ...options, listSecrets: async () => { throw new Error("list failed"); } })).rejects.toThrow("list failed");
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+    listSecrets.mockClear();
+    expect((await inspectR2({ ...options, fetch: cloudflare().fetch, listSecrets })).signingSecret).toBe("missing");
+    expect(listSecrets).not.toHaveBeenCalled();
   });
 });

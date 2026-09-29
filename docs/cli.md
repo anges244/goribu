@@ -143,8 +143,10 @@ provisioning or migrations, then deployment uploads it as secrets. Otherwise,
 existing platform secrets are used. Local `.env` is never uploaded as fallback.
 
 The unreleased [R2 feature](./r2.md) also inspects both declared buckets and
-creates missing ones before D1/KV provisioning. Domain connection and production
-signing-secret setup remain pending.
+creates missing ones and connects the declared public domain before D1/KV
+provisioning. After migrations, it creates `GORIBU_SECRET` through Wrangler if
+missing, then uploads the Worker. On first deployment, secret setup creates a
+draft Worker before the final upload.
 
 ## `goribu check`
 
@@ -154,7 +156,8 @@ production applied, pending, and drifted migration state. It also reports the
 production secrets file and intended action, without values or key counts.
 
 For the unreleased [R2 feature](./r2.md), check also reports bucket creation,
-bindings, jurisdiction changes, and continued public access. Public `r2.dev`
+bindings, domain connection, signing-secret existence, jurisdiction changes,
+and continued public access. Public `r2.dev`
 access or an enabled custom domain on a private bucket makes the check fail
 without changing anything.
 

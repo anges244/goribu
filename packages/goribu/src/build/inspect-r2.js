@@ -1,5 +1,6 @@
 import { getCloudflareAccess } from "./cloudflare-access.js";
 import { createR2ManagementClient } from "./cloudflare-r2.js";
+import { listR2SecretNames } from "./r2-secrets.js";
 
 export function declaredR2Buckets(appConfig) {
   if (appConfig.r2 === undefined) return [];
@@ -14,16 +15,25 @@ export function declaredR2Buckets(appConfig) {
 export async function inspectR2(options) {
   const { projectRoot, appConfig } = options;
   if (appConfig.r2 === undefined) return null;
-  const client = options.client ?? createR2ManagementClient({
-    access: await (options.getAccess ?? getCloudflareAccess)({ projectRoot }), fetch: options.fetch,
-  });
-  const previous = await client.deployedBindings(appConfig.name);
+  const access = options.access ?? await (options.getAccess ?? getCloudflareAccess)({ projectRoot });
+  const client = options.client ?? createR2ManagementClient({ access, fetch: options.fetch });
+  const worker = await client.worker(appConfig.name);
   const buckets = [];
   for (const declaration of declaredR2Buckets(appConfig)) {
     const remote = await client.bucket(declaration.name, declaration.jurisdiction);
     buckets.push(Object.freeze({ ...declaration, state: remote === null ? "missing" : "existing", remote }));
   }
-  return createR2Plan(buckets, previous);
+  const plan = createR2Plan(buckets, worker.bindings);
+  const first = buckets[0];
+  let domain = null;
+  if (first.domain !== undefined) {
+    const connected = first.remote?.domains.find((entry) => entry.domain === first.domain);
+    if (connected && !connected.enabled) throw new Error(`[Goribu] Configured R2 domain ${first.domain} is connected but disabled. Enable it in Cloudflare R2 bucket settings, or change r2.domain, then rerun \`goribu check\`. Goribu does not overwrite existing domain settings.`);
+    const zone = await client.zone(first.domain);
+    domain = Object.freeze({ name: first.domain, bucket: first.name, jurisdiction: first.jurisdiction, zoneId: zone.id, action: connected ? "none" : "connect" });
+  }
+  const names = worker.exists ? await (options.listSecrets ?? listR2SecretNames)({ projectRoot, appConfig, access }) : [];
+  return Object.freeze({ ...plan, domain, signingSecret: names.includes("GORIBU_SECRET") ? "existing" : "missing", workerExists: worker.exists });
 }
 
 export function createR2Plan(buckets, previous = []) {
@@ -69,6 +79,9 @@ export function formatR2Plan(plan) {
     `  ${bucket.state === "missing" ? "create bucket" : "existing bucket"}  ${bucket.name} (${bucket.jurisdiction}) -> ${bucket.binding}`),
   ...plan.warnings.map((warning) => `  Warning: ${warning}`),
   ...plan.errors.map((error) => `  Blocked: ${error}`),
+  ...(plan.domain ? [`  ${plan.domain.action === "connect" ? "connect domain" : "existing domain"}  ${plan.domain.name} -> ${plan.domain.bucket} (${plan.domain.jurisdiction})`] : []),
+  ...(plan.signingSecret ? [plan.signingSecret === "missing" ? "  create secret    GORIBU_SECRET (generated; an app-provided .env.production value takes precedence on upload)" : "  existing secret  GORIBU_SECRET",
+    ...(plan.workerExists === false ? ["  First deploy: Wrangler creates a draft Worker to hold the secret before the final upload."] : [])] : []),
   ""].join("\n");
 }
 

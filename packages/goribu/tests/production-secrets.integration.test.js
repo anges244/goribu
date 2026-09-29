@@ -41,7 +41,7 @@ it("keeps an app's CLOUDFLARE_ACCOUNT_ID secret separate from the generated R2 s
         expect(config.vars).toEqual({ GORIBU_R2_ACCOUNT_ID: accountId });
         await validateProductionSecrets({ ...input, spawn });
       },
-      provision: async () => null, provisionKV: async () => null, provisionR2: async () => null, deploy,
+      provision: async () => null, provisionKV: async () => null, provisionR2: async () => null, ensureR2SigningSecret: async () => {}, deploy,
     })).resolves.toBe(0);
     expect(deploy).toHaveBeenCalledWith({ projectRoot: root, secretsFile, accountId });
   } finally {
