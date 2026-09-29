@@ -21,13 +21,11 @@ export async function inspectR2Uploads({ metadata, buckets, client, names, acces
   if (missing.length) errors.push(missingKeys(missing, targets, appConfig, access));
   const discovery = await client.origins(appConfig.name, workerExists);
   warnings.push(...discovery.warnings);
-  if (discovery.origins.length === 0) {
-    errors.push("Direct uploads have no discoverable application origin. Register an account workers.dev subdomain in Cloudflare Workers & Pages if needed. For an existing Worker (including a secret-created draft), enable workers.dev or attach a Worker custom domain or exact-host route under Settings > Domains & Routes, then retry `goribu deploy`. Wildcard hostnames are skipped; Goribu does not create application domains or routes.");
-  }
   for (const bucket of targets) {
     const rules = bucket.state === "missing" ? [] : await client.cors(bucket.name, bucket.jurisdiction);
-    const action = discovery.origins.length === 0 ? "blocked" : mergeR2UploadCors(rules, discovery.origins).changed ? "upsert" : "none";
+    const action = mergeR2UploadCors(rules, discovery.origins).changed ? "upsert" : "none";
     cors.push({ bucket: bucket.name, jurisdiction: bucket.jurisdiction, origins: discovery.origins, action,
+      ...(discovery.enabledByDeploy ? { enabledByDeploy: discovery.enabledByDeploy } : {}),
       ...(discovery.expectedAfterFirstDeploy ? { expectedAfterFirstDeploy: true } : {}) });
   }
   return { builtAt: metadata.builtAt, cors, warnings, errors, keys: missing.length ? "missing" : "existing" };
@@ -42,7 +40,7 @@ export function formatR2Uploads(uploads) {
     `  Upload policies from build ${uploads.builtAt}; source edits since that build are not inspected. Deploy always builds fresh.`,
     `  R2 upload keys: ${keys}`,
     ...(uploads.cors.length ? uploads.cors.map((entry) =>
-      `  ${entry.action === "none" ? "existing" : entry.action} CORS  goribu-uploads -> ${entry.bucket} (${entry.jurisdiction}); origins: ${entry.origins.join(", ") || "none"}${entry.expectedAfterFirstDeploy ? " (expected after first deploy)" : ""}`)
+      `  ${entry.action === "none" ? "existing" : entry.action} CORS  goribu-uploads -> ${entry.bucket} (${entry.jurisdiction}); origins: ${entry.origins.map((origin) => origin + (origin === entry.enabledByDeploy ? " (enabled by this deploy)" : "")).join(", ") || "none"}${entry.expectedAfterFirstDeploy ? " (expected after first deploy)" : ""}`)
       : ["  Upload CORS: not required (no direct fields); existing rules are preserved."]),
   ];
 }

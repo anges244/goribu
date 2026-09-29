@@ -403,28 +403,32 @@ describe("R2 bucket planning and provisioning", () => {
 
   it.each(["keys", "origins", "first deploy"])("blocks direct uploads before any provisioning write when missing %s", async (reason) => {
     const remote = cloudflare({ bindings: reason === "first deploy" ? null : [], enabled: false,
+      override: (call) => reason === "origins" && call.path === "/workers/subdomain" ? failure(404, 10007) : undefined,
       routes: reason === "keys" ? [{ script: "test-app", pattern: "app.example.com/*" }] : [{ script: "test-app", pattern: "*.example.com/*" }] });
     const appConfig = config({ name: "app-files", jurisdiction: "eu" });
     const { options, check, output } = setup(appConfig, remote);
     options.listSecrets = vi.fn(async () => reason === "keys" ? ["R2_ACCESS_KEY_ID"] : ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]);
     writeUploadBuild(options.projectRoot, appConfig, { file: { accept: ["application/pdf"], maxBytes: 10, private: false, direct: true } });
     writeFileSync(join(options.projectRoot, ".env.production"), "R2_ACCESS_KEY_ID=test-only\nR2_SECRET_ACCESS_KEY=not-a-real-secret\n");
-    await expect(check()).rejects.toThrow(reason === "origins" ? "no discoverable application origin" : "R2 direct uploads need Worker secrets");
+    await expect(check()).rejects.toThrow(reason === "origins" ? "account has no workers.dev subdomain" : "R2 direct uploads need Worker secrets");
     const later = { provision: vi.fn(), provisionKV: vi.fn(), migrate: vi.fn(), deploy: vi.fn(), ensureR2SigningSecret: vi.fn() };
     await expect(runDeploy({ ...options, ...later, loadConfig: async () => appConfig, build: async () => {},
       finalizeR2Account() {}, validateSecrets() {},
       provisionR2: (input) => provisionR2({ ...input, fetch: remote.fetch, listSecrets: options.listSecrets }),
-    })).rejects.toThrow("[Goribu] R2 cannot proceed");
+    })).rejects.toThrow(reason === "origins" ? "account has no workers.dev subdomain" : "[Goribu] R2 cannot proceed");
     Object.values(later).forEach((fn) => expect(fn).not.toHaveBeenCalled());
     expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
     if (reason === "first deploy") {
       expect(options.listSecrets).not.toHaveBeenCalled();
       expect(output()).toContain("https://test-app.test-account.workers.dev (expected after first deploy)");
       expect(output()).not.toContain("no discoverable application origin");
-      // After manual key setup creates a draft, normal enabled-host discovery
-      // succeeds without removing direct fields or deploying a different app.
-      const draft = cloudflare({ bindings: [], enabled: true });
-      await expect(provisionR2({ ...options, fetch: draft.fetch })).resolves.toMatchObject({ uploads: { keys: "existing" } });
+      // Secret setup can create a disabled draft. Wrangler will enable its
+      // address on this deploy, so the plan must include it and allow CORS.
+      const draft = cloudflare({ bindings: [], enabled: false });
+      await expect(provisionR2({ ...options, fetch: draft.fetch })).resolves.toMatchObject({ uploads: {
+        keys: "existing", cors: [{ origins: ["https://test-app.test-account.workers.dev"], enabledByDeploy: "https://test-app.test-account.workers.dev" }],
+      } });
+      expect(output()).toContain("https://test-app.test-account.workers.dev (enabled by this deploy)");
       expect(draft.calls.some((call) => call.method === "PUT" && call.path.endsWith("/cors"))).toBe(true);
     }
     if (reason === "keys") {

@@ -46,20 +46,19 @@ describe("R2 application origin discovery", () => {
     expect(found.warnings.every((warning) => warning.includes("Skipped wildcard-host"))).toBe(true);
   });
 
-  it("predicts first-deploy workers.dev without querying an absent script, and respects existing disabled workers.dev", async () => {
+  it("predicts workers.dev for both missing Workers and existing disabled Workers", async () => {
     const remote = fixture();
     expect(await remote.client.origins("my-app", false)).toEqual({ origins: ["https://my-app.account-name.workers.dev"], warnings: [], expectedAfterFirstDeploy: true });
     expect(remote.calls).toEqual(["/workers/subdomain"]);
     remote.calls.length = 0;
-    expect(await remote.client.origins("my-app", true)).toEqual({ origins: [], warnings: [] });
-    expect(remote.calls).not.toContain("/workers/subdomain");
+    expect(await remote.client.origins("my-app", true)).toEqual({ origins: ["https://my-app.account-name.workers.dev"], warnings: [], enabledByDeploy: "https://my-app.account-name.workers.dev" });
+    expect(remote.calls).toContain("/workers/subdomain");
   });
 
   it("blocks a missing account subdomain and never mistakes a generic 404 for absence", async () => {
     const missing = fixture({ override: (path) => path === "/workers/subdomain" ? Response.json({ success: false, errors: [{ code: 10007 }] }, { status: 404 }) : undefined });
-    const found = await missing.client.origins("my-app", false);
-    expect(found.origins).toEqual([]);
-    expect(found.warnings.join(" ")).toContain("Register one in Cloudflare Workers & Pages");
+    await expect(missing.client.origins("my-app", false)).rejects.toThrow("Register one in Cloudflare Workers & Pages");
+    await expect(missing.client.origins("my-app", true)).rejects.toThrow("Register one in Cloudflare Workers & Pages");
     const unknown = fixture({ override: (path) => path === "/workers/subdomain" ? Response.json({ success: false, errors: [{ code: 99999 }] }, { status: 404 }) : undefined });
     await expect(unknown.client.origins("my-app", false)).rejects.toThrow("HTTP 404");
   });
@@ -82,7 +81,7 @@ describe("R2 application origin discovery", () => {
       return Response.json({ success: true, result, result_info: { page, per_page: 50, count: result.length, total_count: items.length, total_pages: Math.ceil(items.length / 50) } });
     } });
     const found = await remote.client.origins("my-app", true);
-    expect(found.origins).toHaveLength(102);
+    expect(found.origins).toHaveLength(103);
     expect(found.origins).toContain("https://r50.zone50.example.com");
     expect(found.origins).toContain("https://d50.example.com");
     expect(requested.filter(([, page]) => page === 2)).toEqual([["/workers/domains", 2], ["/zones", 2], [`/zones/${zones[50].id}/workers/routes`, 2]]);

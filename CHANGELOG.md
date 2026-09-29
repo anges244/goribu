@@ -53,8 +53,9 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   preserving unrelated rules. Wildcard hostnames warn and are skipped; missing
   origins or keys block provisioning. Check uses timestamped build metadata
   without rebuilding and skips upload CORS/key checks when no metadata exists.
-  First-deploy plans predict the workers.dev origin from the account subdomain;
-  origin discovery follows paginated domain, zone and route inventories.
+  Plans include the workers.dev origin that Wrangler enables on every deployment,
+  including existing disabled Workers and secret-created drafts; origin discovery
+  follows paginated domain, zone and route inventories.
   Browser upload components/helpers and live verification remain in progress.
   R2 stays unreleased until the remaining batches are complete.
 
