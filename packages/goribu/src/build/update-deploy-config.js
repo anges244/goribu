@@ -10,13 +10,25 @@ export function updateDeployConfig({ projectRoot, resource, update }) {
       { cause },
     );
   }
+  const { config, configFile, realConfig } = readDeployConfig({ projectRoot, fail });
+  update(config, fail);
+  writeFileSync(realConfig, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  return configFile;
+}
+
+/** Read the generated redirect and config without modifying build output. */
+export function readDeployConfig({ projectRoot, fail, optional = false }) {
   function readJson(path, label) {
     try { return JSON.parse(readFileSync(path, "utf8")); }
-    catch (cause) { throw fail(`could not read ${label}`, cause); }
+    catch (cause) {
+      if (optional && cause.code === "ENOENT") return undefined;
+      throw fail(`could not read ${label}`, cause);
+    }
   }
   const root = resolve(projectRoot);
   const redirectFile = join(root, ".wrangler", "deploy", "config.json");
   const redirect = readJson(redirectFile, "the Wrangler deploy redirect");
+  if (redirect === undefined && optional) return null;
   if (typeof redirect?.configPath !== "string" || !redirect.configPath) {
     throw fail("the Wrangler deploy redirect has no configPath");
   }
@@ -34,16 +46,16 @@ export function updateDeployConfig({ projectRoot, resource, update }) {
     realRoot = realpathSync(root);
     realConfig = realpathSync(configFile);
   } catch (cause) {
+    if (optional && cause.code === "ENOENT") return null;
     throw fail("the emitted Wrangler config cannot be resolved", cause);
   }
   if (!contained(realRoot, realConfig)) {
     throw fail("the emitted Wrangler config resolves outside the application");
   }
   const config = readJson(realConfig, "the emitted Wrangler config");
+  if (config === undefined && optional) return null;
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw fail("the emitted Wrangler config is not an object");
   }
-  update(config, fail);
-  writeFileSync(realConfig, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-  return configFile;
+  return { config, configFile, realConfig };
 }

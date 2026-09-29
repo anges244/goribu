@@ -9,7 +9,7 @@ export async function provisionR2(options) {
   const stdout = options.stdout ?? process.stdout;
   const access = await (options.getAccess ?? getCloudflareAccess)({ projectRoot });
   const client = createR2ManagementClient({ access, fetch: options.fetch });
-  const plan = await inspectR2({ projectRoot, appConfig, client, access, listSecrets: options.listSecrets });
+  const plan = await inspectR2({ projectRoot, appConfig, client, access, listSecrets: options.listSecrets, requireUploads: true });
   stdout.write(formatR2Plan(plan));
   assertR2PlanSafe(plan);
   for (const bucket of plan.buckets) {
@@ -27,6 +27,11 @@ export async function provisionR2(options) {
     const remote = await client.bucket(bucket, jurisdiction);
     if (!remote?.domains.some((domain) => domain.domain === name && domain.enabled)) throw new Error(`[Goribu] R2 domain ${name} was not enabled after attachment. Inspect its status in Cloudflare and rerun \`goribu check\`; no domain was disconnected.`);
     stdout.write(`✓ Connected R2 domain ${name}; DNS and certificate activation may still be pending.\n`);
+  }
+  for (const entry of plan.uploads.cors) {
+    if (await client.upsertUploadCors(entry.bucket, entry.jurisdiction, entry.origins)) {
+      stdout.write(`✓ Updated R2 upload CORS for ${entry.bucket} (${entry.jurisdiction})\n`);
+    }
   }
   return plan;
 }

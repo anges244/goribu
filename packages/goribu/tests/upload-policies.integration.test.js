@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
 import { expect, it } from "vitest";
+import { readR2Uploads } from "../src/build/read-r2-uploads.js";
 
 const fixture = fileURLToPath(new URL("../../../fixtures/basic-app", import.meta.url));
 const cli = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
@@ -57,9 +58,13 @@ export default function Page() { return <Form method="post" action="/upload-acti
     expect(workerSource).toContain(marker);
     expect(workerSource).toContain(closureMarker);
     const metadata = JSON.parse(readFileSync(join(worker, "r2-uploads.json"), "utf8"));
-    expect(metadata).toEqual({ version: 1, routes: [{ id: "src/routes/upload-action/index.jsx", pattern: "/upload-action", fields: {
+    expect(Number.isFinite(Date.parse(metadata.builtAt))).toBe(true);
+    expect(metadata).toEqual({ version: 1, builtAt: expect.any(String), routes: [{ id: "src/routes/upload-action/index.jsx", pattern: "/upload-action", fields: {
       avatar: { ...hints.avatar, private: true, direct: true },
     } }] });
+    expect(readR2Uploads({ projectRoot: root, required: true, appConfig: {
+      name: "upload-policies", r2: { name: "fixture-media", domain: "media.example.com", private: { name: "fixture-files" } },
+    } })).toEqual({ builtAt: metadata.builtAt, routes: metadata.routes });
     expect(existsSync(join(client, "upload-action.html"))).toBe(false);
     // Inspect every client artifact, including HTML, navigation data and chunks.
     let sourceMaps = 0;

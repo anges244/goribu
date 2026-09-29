@@ -48,7 +48,14 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the route, field, bucket and a random upload ID stored with the object. A
   skipped or conflicting PUT cannot claim or delete an older object; cleanup
   requires a matching upload ID and failed size/type verification.
-  Browser upload components/helpers and deployment CORS/key checks remain in progress.
+  Direct-upload deployment discovers application origins from Cloudflare, checks
+  R2 credential names, and upserts CORS only on direct-upload buckets while
+  preserving unrelated rules. Wildcard hostnames warn and are skipped; missing
+  origins or keys block provisioning. Check uses timestamped build metadata
+  without rebuilding and skips upload CORS/key checks when no metadata exists.
+  First-deploy plans predict the workers.dev origin from the account subdomain;
+  origin discovery follows paginated domain, zone and route inventories.
+  Browser upload components/helpers and live verification remain in progress.
   R2 stays unreleased until the remaining batches are complete.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked

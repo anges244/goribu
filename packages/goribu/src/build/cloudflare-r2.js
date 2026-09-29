@@ -1,9 +1,12 @@
 import { CLOUDFLARE_AUTH_HELP } from "./wrangler-diagnostics.js";
+import { isDeepStrictEqual } from "node:util";
+import { mergeR2UploadCors, validateR2CorsRules } from "./r2-cors.js";
+import { discoverR2Origins } from "./r2-origins.js";
 
 const BUCKET_NAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const JURISDICTIONS = new Set(["default", "eu", "us", "fedramp", "fedramp-high"]);
 
-/** Metadata reads, bucket creation, and domain attachment. No object/deletion API. */
+/** Metadata reads and managed bucket settings. No object/deletion API. */
 export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis.fetch }) {
   if (!/^[a-f0-9]{32}$/i.test(access?.accountId ?? "") || !access?.headers) {
     throw new Error("[Goribu] R2 management needs the authenticated Cloudflare account. Run `goribu check` again after selecting an account with CLOUDFLARE_ACCOUNT_ID.");
@@ -29,12 +32,15 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
         Array.isArray(payload.errors) && payload.errors.length === 1 && payload.errors[0]?.code === missingCode) return null;
     if (!response.ok || payload?.success !== true || !Object.hasOwn(payload, "result")) {
       const domainHelp = method === "POST" && path.endsWith("/domains/custom") ? "Check whether the hostname already belongs to another bucket or DNS record; Goribu does not reassign it. " : "";
-      throw new Error(`[Goribu] Cloudflare rejected R2 management (${method}, HTTP ${response.status}). Confirm account access, R2 permissions, Workers Scripts Read, and Zone Read when a domain is configured. ${domainHelp}${CLOUDFLARE_AUTH_HELP}Then rerun \`goribu check\` before deploying. Existing buckets and objects are preserved.`);
+      throw new Error(`[Goribu] Cloudflare rejected R2 management (${method}, HTTP ${response.status}). Confirm account access, R2 permissions, Workers Scripts Read, Zone Read for domains, and Workers Routes Read on the account's zones for direct uploads. ${domainHelp}${CLOUDFLARE_AUTH_HELP}Then rerun \`goribu check\` before deploying. Existing buckets and objects are preserved.`);
     }
     return envelope ? payload : payload.result;
   }
 
   return Object.freeze({
+    origins(workerName, workerExists) {
+      return discoverR2Origins({ request, accountId: access.accountId, workerName, workerExists });
+    },
     async worker(workerName) {
       const settings = await request(`/workers/scripts/${encodeURIComponent(workerName)}/settings`, { missingCode: 10007 });
       if (settings === null) return Object.freeze({ exists: false, bindings: Object.freeze([]) });
@@ -109,6 +115,24 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
         method: "POST", jurisdiction, body: { domain, zoneId, enabled: true, minTLS: "1.2" },
       });
       if (result?.domain !== domain || result.enabled !== true || result.zoneId !== zoneId) throw invalidMetadata("attached custom domain");
+    },
+    async cors(name, jurisdiction) {
+      const result = await request(`/r2/buckets/${encodeURIComponent(name)}/cors`, { jurisdiction });
+      return validateR2CorsRules(result?.rules);
+    },
+    async upsertUploadCors(name, jurisdiction, origins) {
+      const path = `/r2/buckets/${encodeURIComponent(name)}/cors`;
+      // Refresh immediately before merging: a prior check's snapshot may be old.
+      const current = await request(path, { jurisdiction });
+      const merged = mergeR2UploadCors(current?.rules, origins);
+      if (!merged.changed) return false;
+      await request(path, { method: "PUT", jurisdiction, body: { rules: merged.rules } });
+      const confirmed = await request(path, { jurisdiction });
+      validateR2CorsRules(confirmed?.rules);
+      if (!isDeepStrictEqual(confirmed.rules, merged.rules)) {
+        throw new Error("[Goribu] The R2 CORS update could not be confirmed. Inspect the bucket's CORS settings for concurrent changes, then rerun `goribu check` before deploying. Goribu will not retry by replacing rules from an old snapshot.");
+      }
+      return true;
     },
   });
 }

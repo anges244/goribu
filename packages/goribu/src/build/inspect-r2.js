@@ -1,6 +1,8 @@
 import { getCloudflareAccess } from "./cloudflare-access.js";
 import { createR2ManagementClient } from "./cloudflare-r2.js";
 import { listR2SecretNames } from "./r2-secrets.js";
+import { readR2Uploads } from "./read-r2-uploads.js";
+import { formatR2Uploads, inspectR2Uploads } from "./inspect-r2-uploads.js";
 
 export function declaredR2Buckets(appConfig) {
   if (appConfig.r2 === undefined) return [];
@@ -15,6 +17,7 @@ export function declaredR2Buckets(appConfig) {
 export async function inspectR2(options) {
   const { projectRoot, appConfig } = options;
   if (appConfig.r2 === undefined) return null;
+  const metadata = readR2Uploads({ projectRoot, appConfig, required: options.requireUploads === true });
   const access = options.access ?? await (options.getAccess ?? getCloudflareAccess)({ projectRoot });
   const client = options.client ?? createR2ManagementClient({ access, fetch: options.fetch });
   const worker = await client.worker(appConfig.name);
@@ -33,7 +36,10 @@ export async function inspectR2(options) {
     domain = Object.freeze({ name: first.domain, bucket: first.name, jurisdiction: first.jurisdiction, zoneId: zone.id, action: connected ? "none" : "connect" });
   }
   const names = worker.exists ? await (options.listSecrets ?? listR2SecretNames)({ projectRoot, appConfig, access }) : [];
-  return Object.freeze({ ...plan, domain, signingSecret: names.includes("GORIBU_SECRET") ? "existing" : "missing", workerExists: worker.exists });
+  const uploads = await inspectR2Uploads({ metadata, buckets, client, names, access, appConfig, workerExists: worker.exists });
+  return Object.freeze({ ...plan, domain, uploads,
+    warnings: Object.freeze([...plan.warnings, ...uploads.warnings]), errors: Object.freeze([...plan.errors, ...uploads.errors]),
+    signingSecret: names.includes("GORIBU_SECRET") ? "existing" : "missing", workerExists: worker.exists });
 }
 
 export function createR2Plan(buckets, previous = []) {
@@ -82,6 +88,7 @@ export function formatR2Plan(plan) {
   ...(plan.domain ? [`  ${plan.domain.action === "connect" ? "connect domain" : "existing domain"}  ${plan.domain.name} -> ${plan.domain.bucket} (${plan.domain.jurisdiction})`] : []),
   ...(plan.signingSecret ? [plan.signingSecret === "missing" ? "  create secret    GORIBU_SECRET (generated; an app-provided .env.production value takes precedence on upload)" : "  existing secret  GORIBU_SECRET",
     ...(plan.workerExists === false ? ["  First deploy: Wrangler creates a draft Worker to hold the secret before the final upload."] : [])] : []),
+  ...formatR2Uploads(plan.uploads),
   ""].join("\n");
 }
 

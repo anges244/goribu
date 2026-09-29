@@ -86,7 +86,7 @@ export async function prerenderStaticRoutes(options) {
   if (!inspectUploads) {
     // A fresh empty inventory is useful to deploy too, without executing app
     // code merely to prove what route analysis already knows.
-    writeFileSync(uploadManifestPath, JSON.stringify({ version: 1, routes: [] }, null, 2) + "\n");
+    writeFileSync(uploadManifestPath, JSON.stringify({ version: 1, builtAt: new Date().toISOString(), routes: [] }, null, 2) + "\n");
   }
   if (staticRoutes.length === 0 && !inspectUploads) {
     navigationOutput.finish();
@@ -116,7 +116,7 @@ export async function prerenderStaticRoutes(options) {
       if (response.status !== 200 || uploads?.version !== 1 || !Array.isArray(uploads.routes)) {
         throw new Error("[Goribu] The built Worker returned an invalid upload manifest. Rebuild with matching Goribu build and runtime versions.");
       }
-      writeFileSync(uploadManifestPath, JSON.stringify(uploads, null, 2) + "\n");
+      writeFileSync(uploadManifestPath, JSON.stringify({ ...uploads, builtAt: new Date().toISOString() }, null, 2) + "\n");
     }
     for (const route of staticRoutes) {
       const result = await renderThroughWorker(worker, route);

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { inspectR2 } from "../src/build/inspect-r2.js";
 import { provisionR2 } from "../src/build/provision-r2.js";
 import { createCheckPlan, runCheck } from "../src/build/run-check.js";
 import { runDeploy } from "../src/build/run-deploy.js";
+import { builtAt, writeUploadBuild } from "./fixtures/r2-upload-build.js";
 
 const access = { accountId: "a".repeat(32), headers: { Authorization: "Bearer test-credential" } };
 const roots = [];
@@ -18,7 +19,7 @@ const failure = (status, code) => Response.json({ success: false, errors: [{ cod
 
 // A Cloudflare management fixture. Unexpected paths/methods fail, including
 // object access, deletion, and secret inspection.
-function cloudflare({ bindings = null, buckets = [], override = () => undefined } = {}) {
+function cloudflare({ bindings = null, buckets = [], override = () => undefined, enabled = true, domains = [], routes = [] } = {}) {
   const state = new Map(buckets.map((bucket) => [`${bucket.jurisdiction ?? "default"}/${bucket.name}`, bucket]));
   const calls = [];
   const fetch = async (url, init) => {
@@ -26,7 +27,7 @@ function cloudflare({ bindings = null, buckets = [], override = () => undefined 
     expect(init.redirect).toBe("error");
     const parsed = new URL(url);
     expect(parsed.origin).toBe("https://api.cloudflare.com");
-    const path = parsed.pathname.startsWith("/client/v4/zones") ? "/zones" : parsed.pathname.split(`/accounts/${access.accountId}`)[1];
+    const path = parsed.pathname.startsWith("/client/v4/zones") ? parsed.pathname.slice("/client/v4".length) : parsed.pathname.split(`/accounts/${access.accountId}`)[1];
     const jurisdiction = init.headers["cf-r2-jurisdiction"];
     const call = { path, method: init.method, jurisdiction, body: init.body && JSON.parse(init.body), ...(path === "/zones" ? { query: Object.fromEntries(parsed.searchParams) } : {}) };
     calls.push(call);
@@ -36,8 +37,12 @@ function cloudflare({ bindings = null, buckets = [], override = () => undefined 
       expect(init.method).toBe("GET");
       expect(jurisdiction).toBeUndefined();
       expect(call.query["account.id"]).toBe(access.accountId);
-      return success(call.query.name === "example.com" ? [{ id: "b".repeat(32), name: "example.com", account: { id: access.accountId }, status: "active" }] : []);
+      return success(!call.query.name || call.query.name === "example.com" ? [{ id: "b".repeat(32), name: "example.com", account: { id: access.accountId }, status: "active" }] : []);
     }
+    if (parsed.pathname.endsWith(`/zones/${"b".repeat(32)}/workers/routes`)) return success(routes);
+    if (path === "/workers/scripts/test-app/subdomain") return success({ enabled });
+    if (path === "/workers/subdomain") return success({ subdomain: "test-account" });
+    if (path === "/workers/domains") return success(domains);
     if (path === "/workers/scripts/test-app/settings" && init.method === "GET") {
       expect(jurisdiction).toBeUndefined();
       return bindings === null ? failure(404, 10007) : success({ bindings });
@@ -46,6 +51,14 @@ function cloudflare({ bindings = null, buckets = [], override = () => undefined 
       const bucket = { ...call.body, jurisdiction };
       state.set(`${jurisdiction}/${bucket.name}`, bucket);
       return success(bucket);
+    }
+    const corsMatch = /^\/r2\/buckets\/([^/]+)\/cors$/.exec(path);
+    if (corsMatch) {
+      const bucket = state.get(`${jurisdiction}/${corsMatch[1]}`);
+      if (!bucket) return failure(404, 10006);
+      if (init.method === "PUT") { bucket.cors = call.body.rules; return success({}); }
+      expect(init.method).toBe("GET");
+      return success({ rules: bucket.cors ?? [] });
     }
     const match = /^\/r2\/buckets\/([^/]+)(\/domains\/(managed|custom))?$/.exec(path);
     if (match?.[3] === "custom" && init.method === "POST") {
@@ -68,6 +81,7 @@ function cloudflare({ bindings = null, buckets = [], override = () => undefined 
 function setup(appConfig, remote) {
   const projectRoot = mkdtempSync(join(tmpdir(), "goribu-r2-plan-"));
   roots.push(projectRoot);
+  writeUploadBuild(projectRoot, appConfig);
   let output = "";
   const options = { projectRoot, appConfig, getAccess: async () => access, fetch: remote.fetch, listSecrets: async () => [],
     stdout: { write(text) { output += text; } } };
@@ -331,5 +345,93 @@ describe("R2 bucket planning and provisioning", () => {
     listSecrets.mockClear();
     expect((await inspectR2({ ...options, fetch: cloudflare().fetch, listSecrets })).signingSecret).toBe("missing");
     expect(listSecrets).not.toHaveBeenCalled();
+  });
+
+  it("keeps check build-free when metadata is missing while deploy requires fresh metadata", async () => {
+    const remote = cloudflare();
+    const { options, check, output } = setup(config({ name: "app-files" }), remote);
+    rmSync(join(options.projectRoot, "output/r2-uploads.json"));
+    const plan = await check();
+    expect(plan.r2.buckets[0].state).toBe("missing");
+    expect(plan.r2.signingSecret).toBe("missing");
+    expect(output()).toContain("CORS and R2 key checks skipped: run goribu build first");
+    expect(output()).toContain("create secret    GORIBU_SECRET");
+    await expect(provisionR2(options)).rejects.toThrow("Run `goribu build` first");
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+    rmSync(join(options.projectRoot, ".wrangler"), { recursive: true });
+    await expect(check()).resolves.toMatchObject({ r2: { uploads: { builtAt: null } } });
+  });
+
+  it("uses the last build for check, provisions only direct buckets, and retains unrelated rules", async () => {
+    const otherRule = { id: "public-read", allowed: { origins: ["https://reader.example.com"], methods: ["GET"] } };
+    const remote = cloudflare({ bindings: [], buckets: [{ name: "app-files", jurisdiction: "eu", cors: [otherRule] }],
+      domains: [{ service: "test-app", environment: "production", hostname: "app.example.com" }],
+      routes: [{ script: "test-app", pattern: "https://form.example.com/upload*" }, { script: "test-app", pattern: "*.example.com/*" }] });
+    const appConfig = config({ name: "app-media", domain: "media.example.com", private: { name: "app-files" }, jurisdiction: "eu" });
+    const { options, check, output } = setup(appConfig, remote);
+    options.listSecrets = async () => ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "GORIBU_SECRET"];
+    const fields = { file: { accept: ["application/pdf"], maxBytes: 200_000_000, private: true, direct: true },
+      publicFile: { accept: ["image/svg+xml"], maxBytes: 100, private: false, direct: false } };
+    writeUploadBuild(options.projectRoot, appConfig, fields);
+    // Check must not evaluate source code or app-authored env files.
+    writeFileSync(join(options.projectRoot, ".env.production"), "R2_SECRET_ACCESS_KEY=never-read-test-value");
+    const plan = await check();
+    expect(output()).toContain(`Upload policies from build ${builtAt}`);
+    expect(output()).toContain("source edits since that build are not inspected");
+    expect(output()).toContain("Skipped wildcard-host Worker route");
+    expect(output()).toContain("accepts active HTML or SVG");
+    expect(output()).not.toContain("never-read-test-value");
+    expect(plan.r2.uploads.cors).toEqual([{ bucket: "app-files", jurisdiction: "eu", action: "upsert", origins: [
+      "https://app.example.com", "https://form.example.com", "https://test-app.test-account.workers.dev",
+    ] }]);
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+    await provisionR2(options);
+    expect(remote.state.get("eu/app-files").cors[0]).toEqual(otherRule);
+    expect(remote.state.get("eu/app-files").cors[1].allowed.headers).toEqual(["content-type", "cache-control", "if-none-match", "x-amz-meta-goribu-upload"]);
+    expect(remote.calls.filter((call) => call.path.endsWith("/cors")).every((call) => call.path.includes("app-files") && call.jurisdiction === "eu")).toBe(true);
+    const start = remote.calls.length;
+    await provisionR2(options);
+    expect(remote.calls.slice(start).every((call) => call.method === "GET")).toBe(true);
+    writeUploadBuild(options.projectRoot, appConfig, { file: { ...fields.file, maxBytes: 10, direct: false } });
+    const before = structuredClone(remote.state.get("eu/app-files").cors);
+    const after = remote.calls.length;
+    options.listSecrets = async () => [];
+    await provisionR2(options);
+    expect(remote.state.get("eu/app-files").cors).toEqual(before);
+    expect(remote.calls.slice(after).some((call) => call.path.endsWith("/cors") || call.path.endsWith("/subdomain"))).toBe(false);
+  });
+
+  it.each(["keys", "origins", "first deploy"])("blocks direct uploads before any provisioning write when missing %s", async (reason) => {
+    const remote = cloudflare({ bindings: reason === "first deploy" ? null : [], enabled: false,
+      routes: reason === "keys" ? [{ script: "test-app", pattern: "app.example.com/*" }] : [{ script: "test-app", pattern: "*.example.com/*" }] });
+    const appConfig = config({ name: "app-files", jurisdiction: "eu" });
+    const { options, check, output } = setup(appConfig, remote);
+    options.listSecrets = vi.fn(async () => reason === "keys" ? ["R2_ACCESS_KEY_ID"] : ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]);
+    writeUploadBuild(options.projectRoot, appConfig, { file: { accept: ["application/pdf"], maxBytes: 10, private: false, direct: true } });
+    writeFileSync(join(options.projectRoot, ".env.production"), "R2_ACCESS_KEY_ID=test-only\nR2_SECRET_ACCESS_KEY=not-a-real-secret\n");
+    await expect(check()).rejects.toThrow(reason === "origins" ? "no discoverable application origin" : "R2 direct uploads need Worker secrets");
+    const later = { provision: vi.fn(), provisionKV: vi.fn(), migrate: vi.fn(), deploy: vi.fn(), ensureR2SigningSecret: vi.fn() };
+    await expect(runDeploy({ ...options, ...later, loadConfig: async () => appConfig, build: async () => {},
+      finalizeR2Account() {}, validateSecrets() {},
+      provisionR2: (input) => provisionR2({ ...input, fetch: remote.fetch, listSecrets: options.listSecrets }),
+    })).rejects.toThrow("[Goribu] R2 cannot proceed");
+    Object.values(later).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+    if (reason === "first deploy") {
+      expect(options.listSecrets).not.toHaveBeenCalled();
+      expect(output()).toContain("https://test-app.test-account.workers.dev (expected after first deploy)");
+      expect(output()).not.toContain("no discoverable application origin");
+      // After manual key setup creates a draft, normal enabled-host discovery
+      // succeeds without removing direct fields or deploying a different app.
+      const draft = cloudflare({ bindings: [], enabled: true });
+      await expect(provisionR2({ ...options, fetch: draft.fetch })).resolves.toMatchObject({ uploads: { keys: "existing" } });
+      expect(draft.calls.some((call) => call.method === "PUT" && call.path.endsWith("/cors"))).toBe(true);
+    }
+    if (reason === "keys") {
+      expect(output()).toContain(`CLOUDFLARE_ACCOUNT_ID=${access.accountId} wrangler secret put R2_SECRET_ACCESS_KEY --name test-app`);
+      expect(output()).toContain("app-files (eu)");
+      expect(output()).not.toContain("wrangler secret put R2_ACCESS_KEY_ID");
+      expect(output()).not.toContain("not-a-real-secret");
+    }
   });
 });

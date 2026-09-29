@@ -448,7 +448,7 @@ describe("prerenderStaticRoutes", () => {
     const startWorker = vi.fn(() => { throw new Error("must not start"); });
     await prerenderStaticRoutes({ projectRoot: root, log: makeLog(), startWorker });
     expect(startWorker).not.toHaveBeenCalled();
-    expect(JSON.parse(readFileSync(join(root, ".goribu/dist/app/r2-uploads.json"), "utf8"))).toEqual({ version: 1, routes: [] });
+    expect(JSON.parse(readFileSync(join(root, ".goribu/dist/app/r2-uploads.json"), "utf8"))).toEqual({ version: 1, builtAt: expect.any(String), routes: [] });
   });
 
   it("teaches when the build output is missing", async () => {
