@@ -13,14 +13,15 @@ private repository. The legacy `site/` app remains here for integration tests.
 - [Handlers](handlers.md), [middleware](middleware.md), and [errors](errors.md).
 - [Navigation](navigation.md), [forms](forms.md), and [metadata](metadata.md).
 - [TypeScript](typescript.md) and [environment variables](environment-variables.md).
-- [D1](d1.md), [migrations](migrations.md), [KV](kv.md), and [R2](r2.md) (in progress).
+- [D1](d1.md), [migrations](migrations.md), [KV](kv.md), and [R2](r2.md) (unreleased; pending live verification).
 - [CLI](cli.md) and [deployment](deploy.md).
 
 ## Contributor references
 
 [Contributing](../CONTRIBUTING.md) explains local setup and validation.
 [Decisions](decisions.md) records design choices in order; later entries may
-explicitly supersede earlier ones.
+explicitly supersede earlier ones. The [R2 live checkpoint](r2-live-checkpoint.md)
+collects the pending account and browser release checks.
 
 Historical block writeups and implementation reviews are archived locally and
 are not part of a fresh clone. Current guides, decisions, and tests contain the
