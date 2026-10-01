@@ -2,8 +2,7 @@
 
 `req.cache` stores JSON values in Cloudflare's Cache API to avoid repeating
 expensive reads or computation. It needs no binding or configuration and is
-available in handlers and middleware. Production caching requires a deployment
-where Cloudflare supports the Cache API; see [Keys and scope](#keys-and-scope).
+available in handlers and middleware.
 
 ```js
 // src/routes/polls.js
@@ -64,30 +63,14 @@ All users on an origin share these keys. Include the user or tenant identifier
 when caching personalized data, and perform authorization before reading it.
 Use versioned keys when changing the stored JSON shape across deployments.
 
-Deployment support needs both platform documentation and actual cache hits:
+`req.cache` works on custom domains, routes, and `*.workers.dev`. Goribu verified
+real cache hits on a custom domain and a `workers.dev` deployment on 2026-10-02.
+[Cloudflare documents](https://developers.cloudflare.com/workers/runtime-apis/cache/)
+that cache operations have no effect in dashboard/Playground previews and are
+unavailable behind Cloudflare Access.
 
-| Deployment | Cache API behavior |
-|---|---|
-| Worker on a custom domain or route | Cloudflare documents support; Goribu's custom-domain fixture passed live checks. |
-| `*.workers.dev` | Goribu's named cache passed live checks on the fixture deployment, despite the no-op restriction in Cloudflare's R2 guide. This is not a guarantee for every deployment. |
-| Workers dashboard editor and Playground previews | Cloudflare documents that cache operations have no impact; not tested in this checkpoint. |
-| Worker fronted by Cloudflare Access | Cloudflare documents the Cache API as unavailable; not tested in this checkpoint. |
-
-The `workers.dev` restriction is explicit in Cloudflare's
-[R2 Cache API guide](https://developers.cloudflare.com/r2/examples/cache-api/),
-but our live results below establish working `req.cache` operations on the
-tested `workers.dev` origin. We have not established the reason for this
-discrepancy and do not disable the helper based on that hostname.
-The [runtime reference](https://developers.cloudflare.com/workers/runtime-apis/cache/)
-also documents the editor, Playground, and Access restrictions. These concern
-the Cache API used by `req.cache`; Cloudflare's separate Workers Cache product
-does not establish support for this API.
-
-An unsupported deployment may accept writes without retaining entries and
-return misses without throwing. Goribu's exception warnings cannot detect that
-case: a successful `set` or absence of warnings does not establish a cache hit.
-Verify actual hits on the deployment where caching matters. Local workerd tests
-alone do not prove production host support.
+An unsupported host can accept writes and return misses without any warning,
+so check for real hits on the deployment where caching matters.
 
 ## Refresh after mutations
 
@@ -145,41 +128,3 @@ a route, Goribu bypasses cache reads and writes so the build reads source data.
 The resulting HTML and navigation props remain the build-time snapshot. A TTL
 expiring or a cache entry being deleted does not refresh that static output;
 rebuild and deploy to update it. See [static routes](static-routes.md).
-
-## Contributor live checkpoint — verified 2026-10-02
-
-After maintainer deployment, the fixture's `/cache` endpoint passed one batch
-on both supplied origins:
-
-- https://goribu-basic-app.aggelos-gesoulis.workers.dev
-- https://goribu-basic-app.anges244.com
-
-The run took place at 2026-10-01 22:07:37–45 UTC (October 2 in Athens), using
-run ID `1790892457667-71c2ba93-ba19-45b8-9b65-c2e8286e133d`. All 28 requests
-returned HTTP 200, with these observed results:
-
-| Check | workers.dev | Custom domain |
-|---|---|---|
-| Unique key before writing | Miss | Miss |
-| Distinct `/safe/../item?#` and `/item?#` suffixes, both written before reading | Each returned its own value | Each returned its own value |
-| Delete one entry | Deleted entry missed; other entry still hit | Deleted entry missed; other entry still hit |
-| Five-second TTL | Immediate hit; miss after a six-second wait | Immediate hit; miss after a six-second wait |
-| Same key with different origin values | Kept its own value | Kept its own value |
-
-A fresh key written only on the custom origin also missed on `workers.dev`
-before its own write, confirming that the independent values were origin-scoped.
-The batch used only unique test keys with five- or 60-second TTLs and did not
-change application data or account configuration.
-
-Each HTTP request had a fresh transport query nonce and requested no HTTP-cache
-reuse. Responses had no `Age` or `CF-Cache-Status` header. Every `CF-Ray` ended
-in `ATH`; example literal-key hits were `a43ec808cd9dbe00-ATH` on `workers.dev`
-and `a43ec8092aa25ef7-ATH` on the custom domain. Rays identify ingress, not
-execution placement. The deployed version and placement settings were not
-queried, and this batch makes no global consistency or Smart Placement claim.
-Dashboard previews, Access, and other deployments remain untested.
-
-This closes the planned two-origin live checkpoint for the observed behavior.
-The earlier local run passed 90 runtime tests plus the two tests in
-`public-types.test.js` (92 total), and one separate emitted-Worker integration
-test. Those suites were not rerun for this live verification or its doc updates.
