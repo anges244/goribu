@@ -328,6 +328,65 @@ describe("createApp().fetch", () => {
 describe("createApp().fetch(request, env, ctx)", () => {
   const ROOT_MIDDLEWARE = "src/routes/_middleware.js";
 
+  it("shares one cache facade with middleware and keeps background writes explicit", async () => {
+    const native = { put: vi.fn(async () => {}) };
+    const caches = { open: vi.fn(async () => native) };
+    vi.stubGlobal("caches", caches);
+    const facades = [];
+    let task;
+    const ctx = { waitUntil: vi.fn() };
+    const app = createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([
+        [ROOT_MIDDLEWARE, { default: (req) => { facades.push(req.cache); } }],
+        ["hello", { GET: (req, res) => {
+          expect(req.cache).toBe(facades.at(-1));
+          task = req.cache.set("/hello", { greeting: "hello" });
+          req.waitUntil(task);
+          return res.text("ok");
+        } }],
+      ]),
+      errorPages: { notFound: null },
+      middlewareByRoute: new Map([["hello", [{ id: ROOT_MIDDLEWARE, relativePath: "_middleware.js" }]]]),
+    });
+    try {
+      expect(caches.open).not.toHaveBeenCalled();
+      for (let index = 0; index < 2; index++) {
+        const response = await app.fetch(get("/hello"), {}, ctx);
+        expect(await response.text()).toBe("ok");
+        expect(ctx.waitUntil).toHaveBeenLastCalledWith(task);
+        await task;
+      }
+      expect(facades[0]).not.toBe(facades[1]);
+      expect(native.put).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("bypasses cache reads and writes during prerendering", async () => {
+    const caches = { open: vi.fn(() => { throw new Error("must not open during prerender"); }) };
+    vi.stubGlobal("caches", caches);
+    const app = createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([["hello", { GET: async (req, res) => {
+        const cached = await req.cache.get("/hello");
+        await req.cache.set("/hello", "source data");
+        await req.cache.delete("/hello");
+        return res.json({ cached });
+      } }]]),
+      errorPages: { notFound: null },
+    });
+    try {
+      const response = await app.fetch(get("/hello"), { __GORIBU_PRERENDER: true }, CTX());
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ cached: null });
+      expect(caches.open).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("passes the exact env bindings object to middleware and the handler", async () => {
     const bindings = { API_TOKEN: "secret" };
     let middlewareRequest;

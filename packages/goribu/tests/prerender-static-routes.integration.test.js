@@ -208,6 +208,55 @@ describe("goribu build static output (workerd)", () => {
     }
   });
 
+  it("round-trips req.cache keys, origins, deletion, and expiry in the emitted Worker", async () => {
+    expect(build.error, String(build.error)).toBeUndefined();
+    expect(build.status, build.output).toBe(0);
+    const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
+    try {
+      await harness.listen();
+      const worker = harness.getWorker();
+      const urlFor = (key, origin = "https://goribu.test") =>
+        `${origin}/cache?${new URLSearchParams({ key })}`;
+      const entries = [["/safe/../item", "literal"], ["/item", "normalized"]];
+      for (const [key, value] of entries) {
+        const stored = await worker.fetch(urlFor(key), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value }),
+        });
+        expect(stored.status).toBe(200);
+      }
+      // Read after both writes so URL normalization cannot hide a key collision.
+      for (const [key, value] of entries) {
+        const response = await worker.fetch(urlFor(key));
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ value });
+      }
+      const otherOrigin = await worker.fetch(urlFor("/item", "https://other.test"));
+      expect(await otherOrigin.json()).toEqual({ value: null });
+
+      const deleted = await worker.fetch(urlFor("/safe/../item"), { method: "DELETE" });
+      expect(deleted.status).toBe(200);
+      expect(await deleted.text()).toBe("Deleted");
+      const missing = await worker.fetch(urlFor("/safe/../item"));
+      expect(await missing.json()).toEqual({ value: null });
+
+      const expiring = await worker.fetch(urlFor("/item"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "expires", ttl: 1 }),
+      });
+      expect(expiring.status).toBe(200);
+      const fresh = await worker.fetch(urlFor("/item"));
+      expect(await fresh.json()).toEqual({ value: "expires" });
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const expired = await worker.fetch(urlFor("/item"));
+      expect(await expired.json()).toEqual({ value: null });
+    } finally {
+      await harness.close();
+    }
+  }, 30000);
+
   it("uses the production _500 boundary and preserves safe HttpError responses", async () => {
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();

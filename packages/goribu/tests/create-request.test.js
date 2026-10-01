@@ -14,6 +14,7 @@ describe("createRequest", () => {
     const params = { team: "Goribu" };
     const env = { DB: { binding: "primary" } };
     const d1 = () => {};
+    const cache = { get: async () => null, set: async () => {}, delete: async () => {} };
     const waitUntil = vi.fn();
     const backgroundTask = Promise.resolve();
     Object.defineProperty(params, "__proto__", {
@@ -21,7 +22,7 @@ describe("createRequest", () => {
       value: "member/admin",
     });
 
-    const wrapped = createRequest(request, params, { env, waitUntil, d1 });
+    const wrapped = createRequest(request, params, { env, waitUntil, d1, cache });
 
     expect(wrapped.method).toBe("GET");
     expect(wrapped.path).toBe("/teams/member");
@@ -31,6 +32,7 @@ describe("createRequest", () => {
     expect(wrapped.headers.get("x-request-id")).toBe("abc");
     expect(wrapped.env).toBe(env);
     expect(wrapped.d1).toBe(d1);
+    expect(wrapped.cache).toBe(cache);
     expect(wrapped).not.toHaveProperty("ctx");
     expect(wrapped.waitUntil(backgroundTask)).toBeUndefined();
     expect(waitUntil).toHaveBeenCalledWith(backgroundTask);
@@ -40,6 +42,7 @@ describe("createRequest", () => {
     expect(Object.getPrototypeOf(wrapped.params)).toBe(Object.prototype);
     expect(Object.keys(wrapped).sort()).toEqual([
       "body",
+      "cache",
       "cookies",
       "d1",
       "env",

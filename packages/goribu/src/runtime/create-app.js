@@ -32,6 +32,7 @@ import { copyProtocolResponseMark } from "./protocol-response.js";
 import { createD1BindingResolver } from "../db/create-d1-binding-resolver.js";
 import { createD1RequestController } from "../db/create-d1-request-controller.js";
 import { createKV } from "./create-kv.js";
+import { createCache } from "./create-cache.js";
 import { createR2 } from "./create-r2.js";
 import { serveR2Public } from "./serve-r2-public.js";
 import { serveR2Download } from "../r2/serve-download.js";
@@ -57,7 +58,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, body helpers, cookies, D1, KV, R2, Worker bindings, and a bound
+ * params, query, headers, body helpers, cookies, D1, KV, R2, cache, Worker bindings, and a bound
  * waitUntil capability) and returns any res.* intent: res.text(), res.json(),
  * res.redirect(), res.render(props) to stream the route's own page with data, or
  * res.notFound(props) for the _404 page.
@@ -187,6 +188,7 @@ export function createApp(options) {
         cookies: cookieJar,
         d1: d1Controller.d1,
         kv: createKV(env),
+        cache: createCache(globalThis.caches, request.url, { prerender: env.__GORIBU_PRERENDER === true }),
         r2: createR2(env, applicationConfig?.r2, mode, { requestUrl: request.url, prerender: env.__GORIBU_PRERENDER === true }),
       };
       let applicationRequest = request;
@@ -536,7 +538,7 @@ export function createApp(options) {
 
   // Run one named method handler and preserve its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, body helpers, cookies, D1, KV, R2, Worker bindings, and waitUntil) and the
+  // headers, body helpers, cookies, D1, KV, R2, cache, Worker bindings, and waitUntil) and the
   // response builder.
   async function dispatchHandler(
     match,

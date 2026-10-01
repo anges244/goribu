@@ -53,6 +53,7 @@ export async function POST(req, res) {
 | `req.query` | a `URLSearchParams` — `req.query.get("name")`, `req.query.getAll(...)` |
 | `req.headers` | the request `Headers` |
 | `req.cookies` | the cookie jar — see [Cookies](#cookies) |
+| `req.cache` | JSON cache get/set/delete — see [Cache](cache.md) |
 | `req.r2` | native R2 operations and public URLs — see [R2](r2.md) (in progress) |
 | `req.env` | the Worker bindings object (see [Bindings](#bindings-and-background-work)) |
 | `req.waitUntil(promise)` | keep the Worker alive for background work |

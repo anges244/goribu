@@ -15,7 +15,7 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object }} [runtime]
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object, cache?: object }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
@@ -43,6 +43,7 @@ export function createRequest(request, params, runtime) {
     cookies: worker.cookies,
     d1: worker.d1,
     kv: worker.kv,
+    cache: worker.cache,
     r2: worker.r2,
     waitUntil(promise) {
       assertWaitUntilPromise(promise);
@@ -94,7 +95,7 @@ function assertRuntime(runtime) {
   if (runtime === undefined) return {};
   if (runtime === null || typeof runtime !== "object" || Array.isArray(runtime)) {
     throw new TypeError(
-      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV/R2 facades.",
+      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV/R2/cache facades.",
     );
   }
   if (
@@ -126,6 +127,15 @@ function assertRuntime(runtime) {
   if (runtime.d1 !== undefined && typeof runtime.d1 !== "function") {
     throw new TypeError(
       "[Goribu] createRequest(request, params, runtime) requires runtime.d1 to be the request-scoped D1 facade. Pass createD1RequestController(...).d1 from the application boundary.",
+    );
+  }
+  if (
+    runtime.cache !== undefined &&
+    (runtime.cache === null || typeof runtime.cache !== "object" ||
+      ["get", "set", "delete"].some((method) => typeof runtime.cache[method] !== "function"))
+  ) {
+    throw new TypeError(
+      "[Goribu] createRequest requires runtime.cache to be the request-scoped cache facade. Pass createCache(...) from the application boundary.",
     );
   }
   if (

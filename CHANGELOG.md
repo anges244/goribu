@@ -11,6 +11,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Request-scoped `req.cache` provides JSON get/set/delete with no binding setup,
+  literal path-shaped keys isolated by origin in a named Cloudflare cache, and
+  positive integer TTLs (60 seconds by default). Invalid input rejects while
+  platform failures degrade gracefully. Prerendering bypasses the cache; types
+  and a guide cover explicit background writes and local invalidation.
+
 - R2 configuration accepts one default bucket and an optional private bucket,
   validates names and custom hostnames, and carries optional EU jurisdiction
   into generated `R2`/`R2_PRIVATE` bindings. Configuration types and binding

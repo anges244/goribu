@@ -12,6 +12,8 @@ pnpm install
 pnpm dev
 ```
 
+To opt out of Cloudflare's Wrangler usage telemetry, add `WRANGLER_SEND_METRICS=false` to your project's `.env` file.
+
 <!-- typescript-only:start -->
 Run `pnpm typecheck` to check the app's types. `pnpm build` bundles the app;
 type checking is a separate command. Routes use `.ts` and `.tsx`, while

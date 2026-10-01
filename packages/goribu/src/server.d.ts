@@ -97,6 +97,20 @@ export interface KV {
   delete(key: string): Promise<void>;
 }
 
+/**
+ * Best-effort JSON cache scoped to the request origin and execution location.
+ * Keys are literal strings starting with "/". Platform failures become misses
+ * or no-ops; entries may be evicted before their TTL expires.
+ */
+export interface GoribuCache {
+  /** The optional type argument describes the stored JSON; it does not validate it. */
+  get<Value = unknown>(key: string): Promise<Value | null>;
+  /** JSON serialization must succeed. TTL is a positive safe integer in seconds, defaulting to 60. */
+  set(key: string, value: unknown, options?: { ttl?: number }): Promise<void>;
+  /** Deletes the named keys only at the current execution location. */
+  delete(...keys: string[]): Promise<void>;
+}
+
 // Workers and DOM Web types differ structurally. Accept both for application
 // File/Blob/Headers values while retaining native options and return types.
 type R2PutValue = Parameters<R2Bucket["put"]>[1] | Blob | ReadableStream;
@@ -152,6 +166,7 @@ export interface GoribuRequest<Env extends object = Record<string, unknown>, Par
   cookies: Cookies;
   d1: D1;
   kv: KV;
+  cache: GoribuCache;
   r2: GoribuR2;
   waitUntil(promise: Promise<unknown>): void;
   /**

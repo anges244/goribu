@@ -2,7 +2,7 @@ import { createRef } from "react";
 import { ClientEntry, Form, FileUpload, upload, UploadError, Link, NavLink, Stylesheet, navigate } from "goribu";
 import type { DocumentProps, Meta } from "goribu";
 import { createApp, defineConfig } from "goribu/server";
-import type { Handler, Middleware, ServerErrorProps } from "goribu/server";
+import type { GoribuCache, Handler, Middleware, ServerErrorProps } from "goribu/server";
 import { goribu } from "goribu/vite";
 import "goribu/client";
 
@@ -64,6 +64,20 @@ const GET: Handler<Props, Env, { id: string }> = async (req, res) => {
   if (!page.list_complete) { const cursor: string = page.cursor; }
   req.waitUntil(req.kv.put(id, JSON.stringify(row), { expirationTtl: 300 }));
   await req.kv.delete("old");
+  const cache: GoribuCache = req.cache;
+  const cachedName: Props | null = await cache.get<Props>(`/names/${id}`);
+  req.waitUntil(cache.set(`/names/${id}`, row, { ttl: 300 }));
+  await cache.set("/names", names);
+  await cache.delete("/names", `/names/${id}`);
+  const unknownCached = await cache.get("/names");
+  // @ts-expect-error Untyped cache reads require narrowing before property access.
+  unknownCached.name;
+  // @ts-expect-error Cache set accepts only TTL options.
+  cache.set("/names", names, { expirationTtl: 300 });
+  // @ts-expect-error TTL is expressed in seconds as a number.
+  cache.set("/names", names, { ttl: "300" });
+  // @ts-expect-error The native Cache API is not exposed through the facade.
+  cache.raw;
   const publicUrl: string = req.r2.url("avatars/a b.png");
   const signedUrl: string = await req.r2.signedUrl(id);
   const downloadUrl: string = await req.r2.private.signedUrl(id, { expiresIn: 600, download: "invoice.pdf" });
