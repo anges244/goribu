@@ -58,7 +58,7 @@ function cloudflare({ bindings = null, buckets = [], override = () => undefined,
       if (!bucket) return failure(404, 10006);
       if (init.method === "PUT") { bucket.cors = call.body.rules; return success({}); }
       expect(init.method).toBe("GET");
-      return success({ rules: bucket.cors ?? [] });
+      return bucket.cors === undefined ? failure(404, 10059) : success({ rules: bucket.cors });
     }
     const match = /^\/r2\/buckets\/([^/]+)(\/domains\/(managed|custom))?$/.exec(path);
     if (match?.[3] === "custom" && init.method === "POST") {

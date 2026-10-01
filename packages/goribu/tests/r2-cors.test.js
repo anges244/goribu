@@ -24,6 +24,20 @@ function fixture(initial, override = () => undefined) {
 }
 
 describe("managed R2 upload CORS", () => {
+  it("plans and installs the first policy when R2 reports no CORS configuration", async () => {
+    const remote = fixture([], (call, count) => count <= 2
+      ? Response.json({ success: false, errors: [{ code: 10059 }] }, { status: 404 })
+      : undefined);
+    await expect(remote.client.cors("app-files", "default")).resolves.toEqual([]);
+    await expect(remote.client.upsertUploadCors("app-files", "default", [origin])).resolves.toBe(true);
+    expect(remote.calls.map((call) => call.method)).toEqual(["GET", "GET", "PUT", "GET"]);
+    expect(remote.rules()).toEqual([{
+      id: "goribu-uploads", allowed: { origins: [origin], methods: ["PUT"],
+        headers: ["content-type", "cache-control", "if-none-match", "x-amz-meta-goribu-upload"] }, maxAgeSeconds: 3600,
+    }]);
+    await expect(remote.client.upsertUploadCors("app-files", "default", [origin])).resolves.toBe(false);
+  });
+
   it.each(["default", "eu"])("preserves other rules and performs an idempotent, verified upsert (%s)", async (jurisdiction) => {
     const remote = fixture([external, { id: "goribu-uploads", allowed: { origins: ["https://old.example.com"], methods: ["PUT"] } }]);
     await expect(remote.client.upsertUploadCors("app-files", jurisdiction, [origin, origin])).resolves.toBe(true);
@@ -58,10 +72,39 @@ describe("managed R2 upload CORS", () => {
     expect(remote.calls.map((call) => call.method)).toEqual(["GET"]);
   });
 
-  it("does not treat a CORS 404 as an empty policy or print the response body", async () => {
-    const remote = fixture([], () => Response.json({ success: false, errors: [{ code: 10006, message: "untrusted-api-text" }] }, { status: 404 }));
-    await expect(remote.client.upsertUploadCors("app-files", "default", [origin])).rejects.toThrow("HTTP 404");
-    expect(remote.calls.map((call) => call.method)).toEqual(["GET"]);
+  it.each([
+    [404, false, [10006]],
+    [404, false, [99999]],
+    [403, false, [10059]],
+    [404, false, [10059, 10006]],
+    [404, true, [10059]],
+  ])("rejects an ambiguous or unrelated CORS failure (%s/%s/%j)", async (status, success, codes) => {
+    const remote = fixture([], () => Response.json({ success,
+      errors: codes.map((code) => ({ code, message: "untrusted-api-text" })),
+    }, { status }));
+    for (const read of [() => remote.client.cors("app-files", "default"),
+      () => remote.client.upsertUploadCors("app-files", "default", [origin])]) {
+      let error;
+      try { await read(); } catch (cause) { error = cause; }
+      expect(error?.message).toContain(`HTTP ${status}`);
+      expect(error?.message).not.toContain("untrusted-api-text");
+    }
+    expect(remote.calls.map((call) => call.method)).toEqual(["GET", "GET"]);
+  });
+
+  it("does not mistake a successful null result for the missing-policy error", async () => {
+    const remote = fixture([], () => Response.json({ success: true, result: null }));
+    await expect(remote.client.cors("app-files", "default")).rejects.toThrow("invalid or ambiguous R2 CORS rules");
+    await expect(remote.client.upsertUploadCors("app-files", "default", [origin])).rejects.toThrow("invalid or ambiguous R2 CORS rules");
+    expect(remote.calls.map((call) => call.method)).toEqual(["GET", "GET"]);
+  });
+
+  it("rejects a policy still missing after a successful write", async () => {
+    const remote = fixture([], (call, count) => count === 3
+      ? Response.json({ success: false, errors: [{ code: 10059 }] }, { status: 404 })
+      : undefined);
+    await expect(remote.client.upsertUploadCors("app-files", "default", [origin])).rejects.toThrow("CORS update could not be confirmed");
+    expect(remote.calls.map((call) => call.method)).toEqual(["GET", "PUT", "GET"]);
   });
 
   it("stops after a failed read-back without retrying from the old snapshot", async () => {

@@ -61,13 +61,18 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   preview cleanup. Form exposes
   `uploading`, waits for current uploads before collecting refs, and keeps
   managed fields URL-encoded. Hydration, navigation and form renders carry the
-  current route's hints. Live verification remains pending.
-  R2 stays unreleased until the remaining batches are complete.
+  current route's hints. Core upload and download flows passed live verification;
+  the maintainer accepted the documented account-specific verification gaps.
+  R2 stays unreleased pending package preparation and publication.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked
   from the Document. Scaffolder packaging preserves public asset bytes and names.
 
 ### Fixed
+
+- R2 CORS planning recognizes Cloudflare's HTTP 404/code 10059 as an absent
+  policy, allowing first-time direct-upload setup. Other errors still block
+  writes, and a policy missing after an update still fails verification.
 
 - Client source maps exclude embedded original source text, preventing published
   maps from exposing server handlers colocated with page components when

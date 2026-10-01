@@ -37,6 +37,13 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
     return envelope ? payload : payload.result;
   }
 
+  async function readCors(path, jurisdiction) {
+    // Live R2 returns 404/10059 when the bucket has no CORS configuration.
+    // Missing buckets, denied access and unrelated 404s must still block writes.
+    const response = await request(path, { jurisdiction, missingCode: 10059, envelope: true });
+    return response === null ? [] : validateR2CorsRules(response.result?.rules);
+  }
+
   return Object.freeze({
     origins(workerName, workerExists) {
       return discoverR2Origins({ request, accountId: access.accountId, workerName, workerExists });
@@ -117,19 +124,17 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
       if (result?.domain !== domain || result.enabled !== true || result.zoneId !== zoneId) throw invalidMetadata("attached custom domain");
     },
     async cors(name, jurisdiction) {
-      const result = await request(`/r2/buckets/${encodeURIComponent(name)}/cors`, { jurisdiction });
-      return validateR2CorsRules(result?.rules);
+      return readCors(`/r2/buckets/${encodeURIComponent(name)}/cors`, jurisdiction);
     },
     async upsertUploadCors(name, jurisdiction, origins) {
       const path = `/r2/buckets/${encodeURIComponent(name)}/cors`;
       // Refresh immediately before merging: a prior check's snapshot may be old.
-      const current = await request(path, { jurisdiction });
-      const merged = mergeR2UploadCors(current?.rules, origins);
+      const current = await readCors(path, jurisdiction);
+      const merged = mergeR2UploadCors(current, origins);
       if (!merged.changed) return false;
       await request(path, { method: "PUT", jurisdiction, body: { rules: merged.rules } });
-      const confirmed = await request(path, { jurisdiction });
-      validateR2CorsRules(confirmed?.rules);
-      if (!isDeepStrictEqual(confirmed.rules, merged.rules)) {
+      const confirmed = await readCors(path, jurisdiction);
+      if (!isDeepStrictEqual(confirmed, merged.rules)) {
         throw new Error("[Goribu] The R2 CORS update could not be confirmed. Inspect the bucket's CORS settings for concurrent changes, then rerun `goribu check` before deploying. Goribu will not retry by replacing rules from an old snapshot.");
       }
       return true;
