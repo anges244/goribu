@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-02
+
 ### Added
 
 - `goribu tail` streams live logs for the configured production Worker through
@@ -81,10 +83,19 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   managed fields URL-encoded. Hydration, navigation and form renders carry the
   current route's hints. Core upload and download flows passed live verification;
   the maintainer accepted the documented account-specific verification gaps.
-  R2 stays unreleased pending package preparation and publication.
 
 - Both starter variants include a `public/` folder with an SVG favicon linked
   from the Document. Scaffolder packaging preserves public asset bytes and names.
+
+### Changed
+
+- **Breaking:** Route analysis rejects lowercase or mixed-case HTTP handler
+  exports that previously built with silently omitted handlers or incorrectly
+  static pages. Rename exports such as `get` to `GET`; the build error identifies
+  the file and required uppercase name. Destructured handler exports are
+  recognized by their exported binding names too. Namespaces containing only
+  interfaces and type aliases, including nested namespaces and local export
+  aliases, remain valid.
 
 ### Fixed
 
@@ -99,13 +110,6 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Deploy passes the authenticated account explicitly to Wrangler for both secret
   validation and Worker upload, keeping every app's deployment aligned with
   provisioning even when the project's `.env` selects another account.
-
-- Route analysis rejects lowercase or mixed-case HTTP handler exports with a
-  filename and uppercase repair instruction, instead of silently omitting the
-  handler or incorrectly classifying its page as static. Destructured handler
-  exports are recognized by their exported binding names too. Namespaces
-  containing only interfaces and type aliases, including nested namespaces and
-  local export aliases, remain valid.
 
 - Cloudflare diagnostics direct ordinary login through `pnpm exec goribu
   cloudflare-login`. Resource checks and remote migrations now include that

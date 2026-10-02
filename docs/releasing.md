@@ -2,11 +2,36 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare `0.8.1`, including static navigation, app setup and multipart migrations,
-the redesigned starter and default error pages, and development/client fixes;
+prepare `0.9.0`, including R2 storage and uploads, request caching, application
+custom domains, live Worker logs, and deployment/client fixes;
 substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.8.1 to 0.9.0
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.9.0` from its directory, then rebuild and deploy.
+The new APIs and configuration are opt-in; existing apps need no configuration
+migration.
+
+- Review [R2](r2.md) before adding buckets or uploads. Build before running
+  `goribu check` so its read-only plan includes current upload requirements.
+- Add an application [`domain`](deploy.md#custom-domain) only when you want
+  deployment to connect that hostname. Existing domains remain connected.
+- Use [`req.cache`](cache.md) for JSON caching and
+  [`goribu tail`](cli.md#goribu-tail) for live production logs.
+- Fix lowercase or mixed-case HTTP handler exports reported by the build:
+  use uppercase names such as `GET` and `POST`.
+- Confirm the authenticated Cloudflare account before redeploying. Deploy now
+  explicitly uses that account for secret validation and Worker upload, even if
+  the app's `.env` sets `CLOUDFLARE_ACCOUNT_ID` to a different account. To select
+  another authorized account, set `CLOUDFLARE_ACCOUNT_ID` in your shell.
+- Rebuild and deploy to replace previously uploaded client source maps if
+  `build.sourcemap` is enabled. New client maps omit embedded source text.
+
+Newly generated apps include the starter favicon; existing apps retain their
+own public assets and Document.
 
 ## Upgrading apps from 0.8.0 to 0.8.1
 
@@ -104,7 +129,7 @@ or deploys the site.
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.8.1
+pnpm release prepare 0.9.0
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -120,7 +145,7 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.8.1
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.0
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
@@ -139,8 +164,8 @@ framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.8.1.tgz`
-- `create-goribu-0.8.1.tgz`
+- `goribu-0.9.0.tgz`
+- `create-goribu-0.9.0.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -167,7 +192,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.8.1
+pnpm release publish ../goribu-release-0.9.0
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command

@@ -3,7 +3,9 @@
 A React framework for Cloudflare Workers. File-based routes stream server-rendered
 HTML and hydrate in the browser. Pages that need no request-time work build to
 HTML served by Cloudflare Static Assets. Goribu also provides route handlers,
-forms, client navigation, and app-configured D1 databases, migrations, and KV.
+forms, client navigation, app-configured D1 databases, migrations, KV, and R2
+storage and uploads. Request caching needs no binding setup; an optional
+application domain connects during deployment.
 
 The starter uses TypeScript and Tailwind; add `--js` for JavaScript.
 The framework itself is JavaScript ESM, with public TypeScript declarations.
@@ -42,6 +44,7 @@ Run these from the generated app directory:
 | `pnpm typecheck` | Check a TypeScript app without emitting files. |
 | `pnpm check` | Inspect the production resource and migration plan. |
 | `pnpm exec goribu cloudflare-login` | Log in to Cloudflare through Wrangler. |
+| `pnpm exec goribu tail` | Stream live production Worker logs. |
 | `pnpm run deploy` | Build, provision resources, apply migrations, and deploy. |
 
 Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.

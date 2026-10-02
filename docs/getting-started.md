@@ -2,9 +2,9 @@
 
 ## Before you start
 
-This page describes the 0.8.1 source, including the new starter and setup layout.
-Until that release is published, `@latest` may generate an older layout. Use the
-reviewed local archives when testing these changes before publication.
+This page describes the starter in this checkout. `@latest` selects the
+published release; use the reviewed local archives when testing changes before
+publication.
 
 This guide creates a TypeScript app with Tailwind and one static welcome page.
 You do not need to copy routes or read framework source.
