@@ -114,8 +114,8 @@ through Wrangler's terminal interaction and exit status; it does not manage
 credentials itself. For non-interactive authentication, configure
 `CLOUDFLARE_API_TOKEN` instead.
 
-Login is explicit: `goribu deploy` checks credentials before building and asks
-you to repair authentication if needed.
+Login is explicit for deployment: `goribu deploy` checks credentials before
+building and asks you to repair authentication if needed.
 
 When deploy, resource inspection in `goribu check`, or a remote migration needs
 authentication, use `pnpm exec goribu cloudflare-login` and retry the command.
@@ -153,6 +153,51 @@ changes and connected after the Worker upload succeeds. Existing domains and
 workers.dev remain available. A domain failure after upload reports that the
 Worker is already deployed and exits non-zero so the connection can be repaired
 and retried.
+
+## `goribu tail`
+
+Stream live invocation logs, console output, and exceptions from the deployed
+production Worker named by the current `goribu.config.js`. No build is needed;
+the command does not deploy or change Worker configuration.
+
+```sh
+pnpm exec goribu tail
+```
+
+Wrangler uses its saved login or `CLOUDFLARE_API_TOKEN` from your shell. To sign in
+explicitly, run `pnpm exec goribu cloudflare-login`. Set `CLOUDFLARE_ACCOUNT_ID`
+to select the intended account when you have access to several; otherwise,
+Wrangler may ask you to select it each run because tail uses a temporary working
+directory. The Worker must already be deployed in that account.
+
+Terminal request lines show the actual HTTP response status:
+
+```text
+GET https://example.com/hello - 200 OK @ 2026-10-02T10:30:00.000Z
+GET https://example.com/missing - 404 Not Found @ 2026-10-02T10:30:01.000Z
+GET https://example.com/boom - 500 Internal Server Error @ 2026-10-02T10:30:02.000Z
+```
+
+Console messages and exceptions follow the request line. Worker failures appear
+separately as `[Worker outcome: exception]`, for example when background work
+fails after a response. If Cloudflare supplies no response status, the line says
+`HTTP status unavailable`; Goribu does not infer a status from the Worker outcome.
+Output remains Wrangler's JSON when piped. Unrecognized event types also retain
+their JSON in a terminal.
+
+Only requests that invoke the Worker appear; prerendered pages and other files
+served directly by Static Assets do not. This is a live stream, not a historical
+log query. See
+[Cloudflare real-time logs](https://developers.cloudflare.com/workers/observability/logs/real-time-logs/)
+for platform details.
+
+Press Ctrl+C to close the stream and its remote tail session. Shutdown errors
+remain visible. If cleanup has not finished after 10 seconds, Goribu stops the
+local Wrangler processes and exits non-zero; any remaining remote session will
+expire automatically. Output is suppressed once the terminal hangs up.
+
+`goribu tail` takes no arguments: filters, environment selectors, and Wrangler
+pass-through options are not supported.
 
 ## `goribu check`
 

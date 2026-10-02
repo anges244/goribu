@@ -11,6 +11,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `goribu tail` streams live logs for the configured production Worker through
+  the installed Wrangler without building or deploying. It uses existing
+  Cloudflare authentication, shows HTTP response statuses in the terminal,
+  preserves piped JSON output, and closes the tail session on Ctrl+C with a
+  bounded cleanup wait and visible shutdown errors.
+
 - Optional application `domain` connects a custom hostname during deployment.
   Check previews same-account zone and hostname ownership; deploy attaches only
   after a successful Worker upload and verifies the result. Existing app domains

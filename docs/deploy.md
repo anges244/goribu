@@ -40,6 +40,11 @@ The app is served from its `workers.dev` URL (and any custom domain you have
 configured), under the `name` from `goribu.config.js`. Re-running `goribu deploy`
 replaces what production serves.
 
+To watch live Worker requests, console output, and errors after deployment, run
+[`goribu tail`](./cli.md#goribu-tail) from the app directory. It streams the
+configured Worker's logs without rebuilding or deploying; Ctrl+C closes the
+stream.
+
 If `.env.production` exists at the app root, deploy uploads it unchanged as
 Worker secrets through Wrangler. Omitted secrets are preserved. If absent,
 existing platform secrets are used; local `.env` is never an upload fallback.

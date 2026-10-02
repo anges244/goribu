@@ -14,12 +14,13 @@ function runCli(args, nodeArgs = []) {
 }
 
 describe("goribu CLI", () => {
-  it("lists Cloudflare login and migration commands in help", () => {
+  it("lists Cloudflare login, tail, and migration commands in help", () => {
     const { status, stdout } = runCli(["--help"]);
     expect(status).toBe(0);
     expect(stdout).toContain("migrate:down");
     expect(stdout).toContain("migrate:seed");
     expect(stdout).toMatch(/cloudflare-login\s+Log in to Cloudflare through Wrangler\./);
+    expect(stdout).toMatch(/tail\s+.*logs/);
   });
 
   it("prints the version", () => {
@@ -57,6 +58,53 @@ describe("goribu CLI", () => {
     const { status, stderr } = runCli(["deploy", "--definitely-not-a-real-option"]);
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\] `goribu deploy` does not accept arguments/);
+  });
+
+  it("rejects trailing arguments to tail before loading config or connecting", () => {
+    const { status, stderr } = runCli(["tail", "--env", "staging"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/\[Goribu\] `goribu tail` does not accept arguments/);
+    expect(stderr).not.toMatch(/goribu\.config\.js.*is missing/);
+  });
+
+  it("requires application config before starting tail", () => {
+    const { status, stderr } = runCli(["tail"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/\[Goribu\].*goribu\.config\.js.*is missing/);
+  });
+
+  it("dispatches tail for the configured production Worker and forwards its exit status", () => {
+    const fixtureRoot = fileURLToPath(new URL("../../../fixtures/basic-app/", import.meta.url));
+    for (const code of [0, 2]) {
+      // Load the real app config and CLI, replacing only the Wrangler subprocess
+      // so this contract test never connects to Cloudflare.
+      const preload = `
+        import childProcess from "node:child_process";
+        import { syncBuiltinESMExports } from "node:module";
+        import { EventEmitter } from "node:events";
+        import { readFileSync } from "node:fs";
+        import { dirname } from "node:path";
+        import assert from "node:assert/strict";
+        process.chdir(${JSON.stringify(fixtureRoot)});
+        childProcess.spawn = (command, args, options) => {
+          assert.equal(command, process.execPath);
+          assert.match(args[0], /wrangler[.]js$/);
+          const configPath = args[4];
+          assert.deepEqual(args.slice(1), ["tail", "goribu-basic-app", "--config", configPath, "--env", ""]);
+          assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), { name: "goribu-basic-app" });
+          assert.notEqual(options.cwd, process.cwd());
+          assert.deepEqual(options, { cwd: dirname(configPath), stdio: ["inherit", "inherit", "pipe"], detached: process.platform !== "win32" });
+          const child = new EventEmitter();
+          queueMicrotask(() => child.emit("close", ${code}, null));
+          return child;
+        };
+        syncBuiltinESMExports();
+      `;
+      const result = runCli(["tail"], ["--import", `data:text/javascript,${encodeURIComponent(preload)}`]);
+      expect(result.status).toBe(code);
+      if (code === 0) expect(result.stderr).toBe("");
+      else expect(result.stderr).toMatch(/\[Goribu\].*rerun `goribu tail`/);
+    }
   });
 
   it("rejects trailing arguments to cloudflare-login without starting login", () => {

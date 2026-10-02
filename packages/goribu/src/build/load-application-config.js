@@ -33,7 +33,7 @@ export async function loadApplicationConfig(options) {
   } catch (cause) {
     if (cause?.code === "ENOENT") {
       throw new Error(
-        `[Goribu] Cannot build because ${JSON.stringify(configFile)} is missing. ` +
+        `[Goribu] Application configuration ${JSON.stringify(configFile)} is missing. ` +
           `Create ${APPLICATION_CONFIG_FILENAME} that default-exports defineConfig({ name, compatibilityDate }).`,
         { cause },
       );
@@ -47,7 +47,7 @@ export async function loadApplicationConfig(options) {
 
   if (!stats.isFile()) {
     throw new Error(
-      `[Goribu] Cannot build because ${JSON.stringify(configFile)} is not a regular file. ` +
+      `[Goribu] Application configuration ${JSON.stringify(configFile)} is not a regular file. ` +
         `Replace it with ${APPLICATION_CONFIG_FILENAME} that default-exports defineConfig({ name, compatibilityDate }).`,
     );
   }

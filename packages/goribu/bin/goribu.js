@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { runCheck } from "../src/build/run-check.js";
 import { runCloudflareLogin } from "../src/build/run-cloudflare-login.js";
+import { runTail } from "../src/build/run-tail.js";
 import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
@@ -23,6 +24,7 @@ const COMMANDS = {
   build: "Produce the production Worker and client bundles.",
   check: "Preview production resources without changing them.",
   deploy: "Build, apply production migrations, and deploy to Cloudflare.",
+  tail: "Stream live logs from the deployed Worker.",
   "cloudflare-login": "Log in to Cloudflare through Wrangler.",
   migrate: "Apply pending D1 migrations (default local; --remote for production).",
   "migrate:down": "Roll back the last applied migration (default local; --remote supported).",
@@ -220,6 +222,17 @@ function main(argv) {
   if (command === "deploy") {
     if (!assertNoArguments("deploy", rest)) return;
     runDeploy().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+    return;
+  }
+
+  if (command === "tail") {
+    if (!assertNoArguments("tail", rest)) return;
+    runTail({ projectRoot: process.cwd() }).then((code) => {
+      process.exitCode = code;
+    }).catch((error) => {
       console.error(error);
       process.exitCode = 1;
     });
