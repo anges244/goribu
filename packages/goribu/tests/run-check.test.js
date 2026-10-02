@@ -40,6 +40,27 @@ function fakeSpawn({ output = "[]", code = 0, signal = null, error } = {}) {
 }
 
 describe("goribu check", () => {
+  it("reports a verified app domain and shares its account and plan with read-only R2 inspection", async () => {
+    const config = defineConfig({ name: "app", compatibilityDate: "2026-10-02", domain: "app.example.com", r2: { name: "app-files" } });
+    const access = { accountId: "a".repeat(32), headers: {} };
+    const appDomain = { name: config.domain, worker: config.name, accountId: access.accountId,
+      zoneId: "b".repeat(32), action: "connect", otherDomains: ["www.example.com"], warnings: [] };
+    const inspectAppDomain = vi.fn(async () => appDomain);
+    const inspectR2 = vi.fn(async () => ({ buckets: [], warnings: [], errors: [] }));
+    const written = [];
+    const plan = await runCheck({ projectRoot: "/app", loadConfig: async () => config,
+      getAccess: async () => access, inspectAppDomain, inspectR2, stdout: { write: (value) => written.push(value) } });
+    expect(plan.appDomain).toBe(appDomain);
+    expect(plan.readOnly).toBe(true);
+    expect(inspectAppDomain).toHaveBeenCalledWith({ projectRoot: "/app", appConfig: config, access });
+    expect(inspectR2).toHaveBeenCalledWith({ projectRoot: "/app", appConfig: config, access, appDomain });
+    expect(written.join("")).toMatch(/connect domain.*app.example.com.*app/);
+    expect(written.join("")).toContain("also connected  www.example.com (not managed by Goribu)");
+    expect(written.join("")).not.toContain("Warning:");
+    expect(written.join("")).toMatch(/No changes were made\.\n$/);
+    expect(() => createCheckPlan({ appConfig: config })).toThrow("application domain plan is missing");
+  });
+
   it("reports the secrets file and action without reading or printing values", async () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "goribu-check-secrets-"));
     try {

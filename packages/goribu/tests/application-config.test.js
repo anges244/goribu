@@ -27,6 +27,39 @@ describe("defineConfig", () => {
     expect(Object.isFrozen(config.compatibilityFlags)).toBe(true);
   });
 
+  it("normalizes one optional application hostname without changing the supplied config", () => {
+    const base = { name: "app", compatibilityDate: "2024-01-01" };
+    expect(defineConfig(base).domain).toBeUndefined();
+    for (const domain of ["Example.COM", "App.Example.COM"]) {
+      const input = { ...base, domain };
+      const config = defineConfig(input);
+      expect(config.domain).toBe(domain.toLowerCase());
+      expect(input.domain).toBe(domain);
+      expect(Object.isFrozen(config)).toBe(true);
+    }
+  });
+
+  it("rejects malformed application hostnames and Cloudflare-managed addresses", () => {
+    const base = { name: "app", compatibilityDate: "2024-01-01" };
+    for (const domain of [null, 42, ["app.example.com"], "", "localhost", "https://app.example.com", "app.example.com/", "app.example.com:443", "user@app.example.com", "app.example.com?q=x", "app.example.com#x", "app.example.com\\x", " app.example.com", "app.example.com\n", "*.example.com", "-app.example.com", "app_.example.com", "app..example.com", "app.example.com.", "a".repeat(64) + ".com", ["a".repeat(63), "a".repeat(63), "a".repeat(63), "a".repeat(63)].join("."), "127.0.0.1", "[::1]"]) {
+      expect(() => defineConfig({ ...base, domain }), String(domain))
+        .toThrow(/\[Goribu\].*field domain.*bare hostname.*custom hostname/);
+    }
+    for (const domain of ["workers.dev", "app.account.workers.dev", "APP.ACCOUNT.WORKERS.DEV", "r2.dev", "bucket.r2.dev"]) {
+      expect(() => defineConfig({ ...base, domain }))
+        .toThrow(/\[Goribu\].*field domain cannot use Cloudflare-managed .* hosts.*custom hostname/);
+    }
+  });
+
+  it("requires separate application and R2 hostnames after normalization", () => {
+    const base = { name: "app", compatibilityDate: "2024-01-01", domain: "App.Example.COM" };
+    expect(() => defineConfig({ ...base, r2: { name: "app-media", domain: "app.example.com" } }))
+      .toThrow(/\[Goribu\].*domain must differ from r2.domain.*separate hostnames/);
+    expect(defineConfig({ ...base, r2: { name: "app-media", domain: "Media.Example.COM" } }).r2.domain)
+      .toBe("media.example.com");
+    expect(defineConfig({ ...base, r2: { name: "app-files" } }).domain).toBe("app.example.com");
+  });
+
   it("accepts only a callback-shaped responseHeaders policy", () => {
     const responseHeaders = () => ({ "x-frame-options": "DENY" });
     expect(

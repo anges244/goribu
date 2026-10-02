@@ -4,6 +4,7 @@ import type { FormErrors } from "./index.js";
 export type ResponseHeaders = Record<string, string | string[]>;
 export interface ApplicationConfig<Env extends object = Record<string, unknown>> {
   name: string;
+  domain?: string;
   compatibilityDate: string;
   compatibilityFlags?: string[];
   database?: { type: "d1"; name: string; replication?: boolean };

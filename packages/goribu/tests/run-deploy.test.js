@@ -125,6 +125,58 @@ describe("runWranglerDeploy", () => {
 });
 
 describe("runDeploy", () => {
+  it("inspects the app domain before provisioning and attaches it only after a successful Worker upload", async () => {
+    const projectRoot = makeProject();
+    const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-10-02", domain: "app.example.com",
+      r2: { name: "app-files" }, database: { type: "d1", name: "app-db" } });
+    const access = { accountId: "a".repeat(32), headers: {} };
+    const appDomain = { name: appConfig.domain, worker: appConfig.name, accountId: access.accountId,
+      zoneId: "b".repeat(32), action: "connect", otherDomains: [], warnings: [] };
+    const events = [];
+    const options = {
+      projectRoot, loadConfig: async () => appConfig, getAccess: async () => access,
+      stdout: { write() {} }, build: async () => { events.push("build"); }, finalizeR2Account() {},
+      inspectAppDomain: vi.fn(async () => { events.push("inspect-domain"); return appDomain; }),
+      provisionR2: vi.fn(async () => { events.push("r2"); }),
+      provision: async () => { events.push("d1"); return { uuid: "database-id" }; }, finalize() {},
+      migrate: async () => { events.push("migrate"); }, ensureR2SigningSecret: async () => {},
+      deploy: vi.fn(async () => { events.push("deploy"); return 0; }),
+      provisionAppDomain: vi.fn(async () => { events.push("attach-domain"); }),
+    };
+    await expect(runDeploy(options)).resolves.toBe(0);
+    expect(events).toEqual(["build", "inspect-domain", "r2", "d1", "migrate", "deploy", "attach-domain"]);
+    expect(options.inspectAppDomain).toHaveBeenCalledWith({ projectRoot, appConfig, access });
+    expect(options.provisionR2.mock.calls[0][0].appDomain).toBe(appDomain);
+    expect(options.provisionAppDomain).toHaveBeenCalledWith({ projectRoot, appConfig, access, stdout: options.stdout });
+
+    events.length = 0;
+    options.deploy.mockResolvedValueOnce(2);
+    await expect(runDeploy(options)).resolves.toBe(2);
+    expect(events).not.toContain("attach-domain");
+    options.deploy.mockRejectedValueOnce(new Error("upload interrupted"));
+    await expect(runDeploy(options)).rejects.toThrow("upload interrupted");
+    expect(options.provisionAppDomain).toHaveBeenCalledOnce();
+
+    events.length = 0;
+    options.inspectAppDomain.mockRejectedValueOnce(new Error("hostname is occupied"));
+    await expect(runDeploy(options)).rejects.toThrow("hostname is occupied");
+    expect(events).toEqual(["build"]);
+  });
+
+  it("reports a successful Worker upload separately when domain attachment cannot be confirmed", async () => {
+    const projectRoot = makeProject();
+    const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-10-02", domain: "app.example.com" });
+    const deploy = vi.fn(async () => 0);
+    const cause = new Error("[Goribu] DNS conflict. Remove the conflicting record and retry.");
+    await expect(runDeploy({
+      projectRoot, loadConfig: async () => appConfig, getAccess: fakeAccess, build: async () => {},
+      stdout: { write() {} }, deploy,
+      inspectAppDomain: async () => ({ name: appConfig.domain, worker: appConfig.name, action: "connect", otherDomains: [], warnings: [] }),
+      provisionAppDomain: async () => { throw cause; },
+    })).rejects.toThrow(/\[Goribu\] Worker app was deployed.*app.example.com could not be confirmed.*rerun `goribu deploy`.*DNS conflict/);
+    expect(deploy).toHaveBeenCalledOnce();
+  });
+
   it("rejects duplicate R2 ownership before authentication, build, or deployment", async () => {
     const projectRoot = makeProject();
     const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-09-01", r2: { name: "app-files" } });

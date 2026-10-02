@@ -1,7 +1,8 @@
+import { assertHostname } from "./hostname-config.js";
+
 const R2_FIELDS = new Set(["name", "domain", "private", "jurisdiction"]);
 const PRIVATE_FIELDS = new Set(["name"]);
 const BUCKET_NAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
-const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
 /** Snapshot the two managed buckets without evaluating configuration accessors. */
 export function assertR2Config(value) {
@@ -9,17 +10,7 @@ export function assertR2Config(value) {
   assertBucketName(r2.name, "r2.name");
 
   if (r2.domain !== undefined) {
-    const domain = r2.domain;
-    if (
-      typeof domain !== "string" || domain.length > 253 || !domain.includes(".") ||
-      !domain.split(".").every((label) => HOST_LABEL.test(label)) ||
-      /^[\d.]+$/.test(domain)
-    ) {
-      throw new TypeError(
-        '[Goribu] Application configuration field r2.domain must be a bare hostname with at least two labels, such as "media.example.com", without a scheme, path, port, or IP address. Set r2.domain to your custom hostname.',
-      );
-    }
-    r2.domain = domain.toLowerCase();
+    r2.domain = assertHostname(r2.domain, "r2.domain", "media.example.com");
     if (r2.domain === "r2.dev" || r2.domain.endsWith(".r2.dev")) {
       throw new TypeError(
         '[Goribu] Application configuration field r2.domain cannot use an r2.dev host. Set r2.domain to your custom hostname, such as "media.example.com".',

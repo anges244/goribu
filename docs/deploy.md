@@ -47,6 +47,63 @@ A Wrangler dry run validates the file and built Worker before provisioning or
 migrations. See [Environment variables](./environment-variables.md) for local
 loading, public browser values, and migration from the older loader.
 
+## Custom domain
+
+Add one line to `goribu.config.js` to connect an application hostname:
+
+```js
+import { defineConfig } from "goribu/server";
+
+export default defineConfig({
+  name: "my-app",
+  compatibilityDate: "2026-10-02",
+  domain: "app.example.com",
+});
+```
+
+`domain` accepts one bare hostname, either a zone apex or a subdomain. Goribu
+normalizes it to lowercase and rejects schemes, paths, ports, IP addresses,
+wildcards, and Cloudflare-managed `workers.dev` or `r2.dev` addresses. Use a
+different hostname for `r2.domain` when serving public bucket files.
+
+The hostname must belong to an active Cloudflare zone in the selected deployment
+account. Goribu finds the most specific matching zone; no zone ID is needed in
+configuration. Cloudflare creates the custom domain's DNS records and TLS
+certificate. Connection does not mean DNS and certificate activation have
+finished. See [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+
+Run `goribu check` to preview the connection without making changes. A hostname
+already connected to this Worker is reused. Another Worker's attachment or a
+conflict reported by Cloudflare's domain preview blocks the operation with
+repair instructions. If the Worker does not exist yet, check explains that the
+conflict preview must wait until the first Worker upload.
+
+Your normal `goribu cloudflare-login` works for domain management. Goribu uses
+Cloudflare's native domain preview and attachment operations, so there is no
+separate DNS Read requirement. If you use an API token, it needs Workers Scripts
+Write and Zone Read for the target zone alongside the app's other deployment
+permissions.
+
+`goribu deploy` checks the domain before provisioning resources or applying
+migrations, deploys the Worker, then checks again and attaches the hostname if
+needed. The attachment keeps Cloudflare's Worker and DNS replacement overrides
+disabled, including when a conflict appears after the preview. If attachment or
+verification fails after upload, the command reports that the Worker is already
+deployed and exits with an error. Inspect the reported conflict or connection,
+then retry deployment; Goribu never rolls back by disconnecting a domain.
+
+The `workers.dev` address and existing dashboard-managed domains stay available.
+Changing or removing `domain` does not disconnect the old hostname. With a domain
+configured, check and deploy list other connected app domains as information.
+Manage those connections in the Worker's **Settings > Domains & Routes**. When the
+field is omitted, Goribu skips domain management entirely. The field connects
+the exact hostname; `www` aliases and redirects remain separately configured in
+Cloudflare.
+
+Development and standalone builds validate the hostname without contacting
+Cloudflare. For [R2 direct uploads](r2.md#direct-upload-deployment), the planned
+application domain's HTTPS origin enters the CORS plan before attachment.
+
 ## Deploying with D1 and KV
 
 Declare either or both resources in `goribu.config.js`; the application owns

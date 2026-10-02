@@ -2,6 +2,7 @@ import { CLOUDFLARE_AUTH_HELP } from "./wrangler-diagnostics.js";
 import { isDeepStrictEqual } from "node:util";
 import { mergeR2UploadCors, validateR2CorsRules } from "./r2-cors.js";
 import { discoverR2Origins } from "./r2-origins.js";
+import { findCloudflareZone } from "./cloudflare-zone.js";
 
 const BUCKET_NAME = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const JURISDICTIONS = new Set(["default", "eu", "us", "fedramp", "fedramp-high"]);
@@ -78,21 +79,8 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
       }
       return Object.freeze({ exists: true, bindings: Object.freeze(bindings) });
     },
-    async zone(domain) {
-      const labels = domain.split(".");
-      for (let index = 0; index < labels.length - 1; index++) {
-        const name = labels.slice(index).join(".");
-        const query = new URLSearchParams({ name, "account.id": access.accountId, per_page: "50" });
-        const page = await request(`/zones?${query}`, { accountScoped: false, envelope: true });
-        if (!Array.isArray(page.result) || page.result.length > 1 ||
-            (page.result_info?.total_pages ?? 1) > 1 || (page.result_info?.total_count ?? page.result.length) !== page.result.length) throw invalidMetadata("zone lookup");
-        if (page.result.length === 0) continue;
-        const zone = page.result[0];
-        if (!/^[a-f0-9]{32}$/i.test(zone?.id ?? "") || zone.name !== name || zone.account?.id !== access.accountId) throw invalidMetadata("zone identity or account");
-        if (zone.status !== "active") throw new Error(`[Goribu] The Cloudflare zone ${name} is not active. Activate it in the selected account before connecting ${domain}, then rerun \`goribu check\`.`);
-        return Object.freeze({ id: zone.id, name });
-      }
-      throw new Error(`[Goribu] No accessible zone for ${domain} exists in the selected R2 account. Add or move the zone to this account and grant Zone Read permission, or choose a domain in this account, then rerun \`goribu check\`.`);
+    zone(domain) {
+      return findCloudflareZone({ request, accountId: access.accountId, domain, invalidMetadata, accountLabel: "R2 account" });
     },
     async bucket(name, jurisdiction) {
       const path = `/r2/buckets/${encodeURIComponent(name)}`;

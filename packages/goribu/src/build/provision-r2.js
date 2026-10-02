@@ -9,7 +9,7 @@ export async function provisionR2(options) {
   const stdout = options.stdout ?? process.stdout;
   const access = await (options.getAccess ?? getCloudflareAccess)({ projectRoot });
   const client = createR2ManagementClient({ access, fetch: options.fetch });
-  const plan = await inspectR2({ projectRoot, appConfig, client, access, listSecrets: options.listSecrets, requireUploads: true });
+  const plan = await inspectR2({ projectRoot, appConfig, client, access, appDomain: options.appDomain, listSecrets: options.listSecrets, requireUploads: true });
   stdout.write(formatR2Plan(plan));
   assertR2PlanSafe(plan);
   for (const bucket of plan.buckets) {

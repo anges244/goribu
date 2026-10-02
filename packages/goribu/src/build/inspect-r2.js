@@ -36,7 +36,7 @@ export async function inspectR2(options) {
     domain = Object.freeze({ name: first.domain, bucket: first.name, jurisdiction: first.jurisdiction, zoneId: zone.id, action: connected ? "none" : "connect" });
   }
   const names = worker.exists ? await (options.listSecrets ?? listR2SecretNames)({ projectRoot, appConfig, access }) : [];
-  const uploads = await inspectR2Uploads({ metadata, buckets, client, names, access, appConfig, workerExists: worker.exists });
+  const uploads = await inspectR2Uploads({ metadata, buckets, client, names, access, appConfig, appDomain: options.appDomain, workerExists: worker.exists });
   return Object.freeze({ ...plan, domain, uploads,
     warnings: Object.freeze([...plan.warnings, ...uploads.warnings]), errors: Object.freeze([...plan.errors, ...uploads.errors]),
     signingSecret: names.includes("GORIBU_SECRET") ? "existing" : "missing", workerExists: worker.exists });

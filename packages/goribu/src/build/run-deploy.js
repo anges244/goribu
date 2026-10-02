@@ -15,6 +15,8 @@ import { finalizeKVBinding } from "./finalize-kv-binding.js";
 import { finalizeR2Account } from "./finalize-r2-account.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
+import { inspectAppDomain, formatAppDomainPlan } from "./inspect-app-domain.js";
+import { provisionAppDomain } from "./provision-app-domain.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
@@ -65,6 +67,12 @@ export async function runDeploy(options) {
     await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile, accountId: access.accountId });
   }
 
+  // Prove zone and hostname ownership before any resources or migrations change.
+  // Attachment waits until Wrangler has successfully deployed the Worker.
+  const appDomain = appConfig.domain === undefined ? null
+    : await (options?.inspectAppDomain ?? inspectAppDomain)({ projectRoot, appConfig, access });
+  if (appDomain) (options?.stdout ?? process.stdout).write(formatAppDomainPlan(appDomain));
+
   // Inspect both R2 buckets and reject unsafe public access before D1/KV writes
   // or migrations. R2 itself only creates buckets after its full inspection.
   await (options?.provisionR2 ?? provisionR2)({
@@ -72,6 +80,7 @@ export async function runDeploy(options) {
     appConfig,
     getAccess,
     stdout: options?.stdout ?? process.stdout,
+    ...(appDomain ? { appDomain } : {}),
   });
 
   const database = await provision({
@@ -113,7 +122,22 @@ export async function runDeploy(options) {
   if (appConfig.r2 !== undefined) {
     await (options?.ensureR2SigningSecret ?? ensureR2SigningSecret)({ projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout });
   }
-  return deploy({ projectRoot, secretsFile, accountId: access.accountId });
+  const code = await deploy({ projectRoot, secretsFile, accountId: access.accountId });
+  if (code !== 0) return code;
+  if (appDomain) {
+    try {
+      await (options?.provisionAppDomain ?? provisionAppDomain)({
+        projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout,
+      });
+    } catch (cause) {
+      throw new Error(
+        `[Goribu] Worker ${appConfig.name} was deployed, but its custom domain ${appConfig.domain} could not be confirmed. ` +
+        `The Worker remains deployed; fix the domain problem and rerun \`goribu deploy\`. ${cause.message}`,
+        { cause },
+      );
+    }
+  }
+  return code;
 }
 
 /** Let pinned Wrangler validate the file and built Worker before remote mutation. */

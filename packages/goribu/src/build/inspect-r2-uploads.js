@@ -3,7 +3,7 @@ import { mergeR2UploadCors } from "./r2-cors.js";
 const KEY_NAMES = ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
 const ACTIVE_TYPES = new Set(["text/html", "text/*", "image/svg+xml", "image/*", "application/xhtml+xml", "application/*"]);
 
-export async function inspectR2Uploads({ metadata, buckets, client, names, access, appConfig, workerExists }) {
+export async function inspectR2Uploads({ metadata, buckets, client, names, access, appConfig, appDomain, workerExists }) {
   if (metadata === null) return { builtAt: null, cors: [], warnings: [], errors: [] };
   const direct = new Set(), warnings = [], errors = [], cors = [];
   for (const route of metadata.routes) {
@@ -20,12 +20,26 @@ export async function inspectR2Uploads({ metadata, buckets, client, names, acces
   const missing = KEY_NAMES.filter((name) => !names.includes(name));
   if (missing.length) errors.push(missingKeys(missing, targets, appConfig, access));
   const discovery = await client.origins(appConfig.name, workerExists);
+  let origins = discovery.origins;
+  // A newly configured domain is attached after Worker upload. Include its
+  // verified origin now so the first visit already has working direct uploads.
+  let connectedByDeploy;
+  if (appConfig.domain !== undefined) {
+    if (appDomain?.name !== appConfig.domain || appDomain.worker !== appConfig.name ||
+        appDomain.accountId !== access.accountId || !["connect", "none"].includes(appDomain.action)) {
+      throw new Error("[Goribu] The configured application domain has not been inspected for R2 upload CORS. Rerun `goribu check` or `goribu deploy` to verify its zone and ownership before provisioning.");
+    }
+    const origin = `https://${appDomain.name}`;
+    origins = [...new Set([...origins, origin])].sort();
+    if (appDomain.action === "connect") connectedByDeploy = origin;
+  }
   warnings.push(...discovery.warnings);
   for (const bucket of targets) {
     const rules = bucket.state === "missing" ? [] : await client.cors(bucket.name, bucket.jurisdiction);
-    const action = mergeR2UploadCors(rules, discovery.origins).changed ? "upsert" : "none";
-    cors.push({ bucket: bucket.name, jurisdiction: bucket.jurisdiction, origins: discovery.origins, action,
+    const action = mergeR2UploadCors(rules, origins).changed ? "upsert" : "none";
+    cors.push({ bucket: bucket.name, jurisdiction: bucket.jurisdiction, origins, action,
       ...(discovery.enabledByDeploy ? { enabledByDeploy: discovery.enabledByDeploy } : {}),
+      ...(connectedByDeploy ? { connectedByDeploy } : {}),
       ...(discovery.expectedAfterFirstDeploy ? { expectedAfterFirstDeploy: true } : {}) });
   }
   return { builtAt: metadata.builtAt, cors, warnings, errors, keys: missing.length ? "missing" : "existing" };
@@ -40,7 +54,7 @@ export function formatR2Uploads(uploads) {
     `  Upload policies from build ${uploads.builtAt}; source edits since that build are not inspected. Deploy always builds fresh.`,
     `  R2 upload keys: ${keys}`,
     ...(uploads.cors.length ? uploads.cors.map((entry) =>
-      `  ${entry.action === "none" ? "existing" : entry.action} CORS  goribu-uploads -> ${entry.bucket} (${entry.jurisdiction}); origins: ${entry.origins.map((origin) => origin + (origin === entry.enabledByDeploy ? " (enabled by this deploy)" : "")).join(", ") || "none"}${entry.expectedAfterFirstDeploy ? " (expected after first deploy)" : ""}`)
+      `  ${entry.action === "none" ? "existing" : entry.action} CORS  goribu-uploads -> ${entry.bucket} (${entry.jurisdiction}); origins: ${entry.origins.map((origin) => origin + (origin === entry.enabledByDeploy ? " (enabled by this deploy)" : origin === entry.connectedByDeploy ? " (connected by this deploy)" : "")).join(", ") || "none"}${entry.expectedAfterFirstDeploy ? " (expected after first deploy)" : ""}`)
       : ["  Upload CORS: not required (no direct fields); existing rules are preserved."]),
   ];
 }

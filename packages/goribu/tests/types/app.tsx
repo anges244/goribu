@@ -11,6 +11,7 @@ interface Props { name: string }
 
 const config = defineConfig<Env>({
   name: "typed-app",
+  domain: "app.example.com",
   compatibilityDate: "2026-08-31",
   database: { type: "d1", name: "typed-app-db" },
   kv: { name: "typed-app-kv" },
@@ -22,6 +23,11 @@ const config = defineConfig<Env>({
   }),
 });
 defineConfig(config);
+const applicationDomain: string | undefined = config.domain;
+// @ts-expect-error Defined application configuration is immutable.
+config.domain = "other.example.com";
+// @ts-expect-error Only one hostname string is accepted.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", domain: ["app.example.com"] });
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-files" } });
 // @ts-expect-error R2 names are required.
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { domain: "media.example.com" } });

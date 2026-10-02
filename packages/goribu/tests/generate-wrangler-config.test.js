@@ -24,10 +24,11 @@ afterEach(() => {
 });
 
 describe("writeWranglerConfig", () => {
-  it("synthesizes goribu.wrangler.jsonc from the application config", () => {
+  it("synthesizes goribu.wrangler.jsonc without changing routes or workers.dev for a custom domain", () => {
     const root = makeProject();
     const appConfig = defineConfig({
       name: "goribu-basic-app",
+      domain: "app.example.com",
       compatibilityDate: "2026-08-31",
     });
 

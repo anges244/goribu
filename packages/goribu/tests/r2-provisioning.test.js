@@ -401,6 +401,39 @@ describe("R2 bucket planning and provisioning", () => {
     expect(remote.calls.slice(after).some((call) => call.path.endsWith("/cors") || call.path.endsWith("/subdomain"))).toBe(false);
   });
 
+  it("includes a planned app domain in upload CORS before attachment and requires its verified account", async () => {
+    const remote = cloudflare({ bindings: [], domains: [
+      { service: "test-app", environment: "production", hostname: "old.example.com" },
+    ] });
+    const appConfig = config({ name: "app-files" }, { domain: "new.example.com" });
+    const { options, check, output } = setup(appConfig, remote);
+    const appDomain = { name: appConfig.domain, worker: appConfig.name, accountId: access.accountId,
+      zoneId: "b".repeat(32), action: "connect", otherDomains: [], warnings: [] };
+    options.inspectAppDomain = async () => appDomain;
+    options.listSecrets = async () => ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
+    writeUploadBuild(options.projectRoot, appConfig, { file: { accept: ["application/pdf"], maxBytes: 10, private: false, direct: true } });
+    const plan = await check();
+    const origins = ["https://new.example.com", "https://old.example.com", "https://test-app.test-account.workers.dev"];
+    expect(plan.r2.uploads.cors[0]).toMatchObject({ origins, connectedByDeploy: "https://new.example.com" });
+    expect(output()).toContain("https://new.example.com (connected by this deploy)");
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+
+    for (const unchecked of [undefined, { ...appDomain, accountId: "c".repeat(32) }]) {
+      await expect(provisionR2({ ...options, appDomain: unchecked })).rejects.toThrow("application domain has not been inspected");
+    }
+    expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
+    await provisionR2({ ...options, appDomain: plan.appDomain });
+    expect(remote.state.get("default/app-files").cors[0].allowed.origins).toEqual(origins);
+
+    // An already attached domain also appears in discovery. Keep one origin.
+    const connected = cloudflare({ bindings: [], domains: [
+      { service: "test-app", environment: "production", hostname: "new.example.com" },
+    ] });
+    const repeat = await inspectR2({ ...options, fetch: connected.fetch, appDomain: { ...appDomain, action: "none" } });
+    expect(repeat.uploads.cors[0].origins).toEqual(["https://new.example.com", "https://test-app.test-account.workers.dev"]);
+    expect(repeat.uploads.cors[0].connectedByDeploy).toBeUndefined();
+  });
+
   it.each(["keys", "origins", "first deploy"])("blocks direct uploads before any provisioning write when missing %s", async (reason) => {
     const remote = cloudflare({ bindings: reason === "first deploy" ? null : [], enabled: false,
       override: (call) => reason === "origins" && call.path === "/workers/subdomain" ? failure(404, 10007) : undefined,

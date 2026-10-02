@@ -1,9 +1,11 @@
 import { assertOptionalResponseHeaders } from "./response-headers.js";
 import { assertR2Config } from "./r2-config.js";
+import { assertHostname } from "./hostname-config.js";
 
 const CONFIG_BRAND = new WeakSet();
 const CONFIG_FIELDS = new Set([
   "name",
+  "domain",
   "compatibilityDate",
   "compatibilityFlags",
   "responseHeaders",
@@ -44,7 +46,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2 fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, domain, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2 fields.",
     );
   }
 
@@ -61,7 +63,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, domain, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -88,6 +90,16 @@ export function defineConfig(config) {
   }
 
   normalized.compatibilityFlags = assertCompatibilityFlags(normalized.compatibilityFlags);
+  if (normalized.domain !== undefined) {
+    normalized.domain = assertHostname(normalized.domain, "domain", "app.example.com");
+    for (const managedHost of ["workers.dev", "r2.dev"]) {
+      if (normalized.domain === managedHost || normalized.domain.endsWith(`.${managedHost}`)) {
+        throw new TypeError(
+          `[Goribu] Application configuration field domain cannot use Cloudflare-managed ${managedHost} hosts. Set domain to your custom hostname, such as "app.example.com", or omit it to keep the default workers.dev address.`,
+        );
+      }
+    }
+  }
   assertOptionalResponseHeaders(
     normalized.responseHeaders,
     "Application configuration field responseHeaders",
@@ -100,6 +112,11 @@ export function defineConfig(config) {
   }
   if (normalized.r2 !== undefined) {
     normalized.r2 = assertR2Config(normalized.r2);
+    if (normalized.domain !== undefined && normalized.domain === normalized.r2.domain) {
+      throw new TypeError(
+        '[Goribu] Application configuration field domain must differ from r2.domain. Use separate hostnames for your app and bucket, such as "app.example.com" and "media.example.com".',
+      );
+    }
   }
 
   const result = Object.freeze(normalized);

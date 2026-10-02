@@ -11,6 +11,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Optional application `domain` connects a custom hostname during deployment.
+  Check previews same-account zone and hostname ownership; deploy attaches only
+  after a successful Worker upload and verifies the result. Existing app domains
+  and workers.dev remain available. R2 direct-upload CORS includes the planned
+  hostname before attachment. Public types and validation cover the new field.
+
 - Request-scoped `req.cache` provides JSON get/set/delete with no binding setup,
   literal path-shaped keys isolated by origin in a named Cloudflare cache, and
   positive integer TTLs (60 seconds by default). Invalid input rejects while

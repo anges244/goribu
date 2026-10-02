@@ -148,12 +148,21 @@ provisioning. After migrations, it creates `GORIBU_SECRET` through Wrangler if
 missing, then uploads the Worker. On first deployment, secret setup creates a
 draft Worker before the final upload.
 
+An application [`domain`](./deploy.md#custom-domain) is inspected before resource
+changes and connected after the Worker upload succeeds. Existing domains and
+workers.dev remain available. A domain failure after upload reports that the
+Worker is already deployed and exits non-zero so the connection can be repaired
+and retried.
+
 ## `goribu check`
 
 Inspect the production deployment plan without changing resources. Check reports
 the Worker target, declared D1/KV resources and bindings, cost warnings, and real
 production applied, pending, and drifted migration state. It also reports the
 production secrets file and intended action, without values or key counts.
+When application `domain` is configured, it also checks the zone and hostname
+ownership and reports an existing connection or the attachment planned for deploy.
+Other connected app domains are listed as information and remain attached.
 
 For the unreleased [R2 feature](./r2.md), check also reports bucket creation,
 bindings, domain connection, signing-secret existence, jurisdiction changes,

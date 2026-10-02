@@ -13,6 +13,8 @@ import { assertR2PlanSafe, formatR2Plan, inspectR2 } from "./inspect-r2.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 import { BUILD_OUTPUT_DIRECTORY } from "./build-output.js";
 import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
+import { getCloudflareAccess } from "./cloudflare-access.js";
+import { inspectAppDomain, formatAppDomainPlan } from "./inspect-app-domain.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -41,12 +43,18 @@ export async function runCheck(options) {
   const inspectD1 = options?.inspectD1 ?? listRemoteD1Databases;
   const inspectMigrations = options?.inspectMigrations ?? inspectRemoteMigrations;
   const appConfig = await loadConfig({ projectRoot });
+  const access = appConfig.domain === undefined ? undefined
+    : await (options?.getAccess ?? getCloudflareAccess)({ projectRoot });
+  const appDomain = appConfig.domain === undefined ? null
+    : await (options?.inspectAppDomain ?? inspectAppDomain)({ projectRoot, appConfig, access });
 
   const hasDatabase = appConfig.database !== undefined;
   const remoteDatabases = hasDatabase ? await inspectD1({ projectRoot }) : [];
   const inspectKV = options?.inspectKV ?? listRemoteKVNamespaces;
   const remoteNamespaces = appConfig.kv === undefined ? [] : await inspectKV({ projectRoot });
-  const r2 = appConfig.r2 === undefined ? null : await (options?.inspectR2 ?? inspectR2)({ projectRoot, appConfig });
+  const r2 = appConfig.r2 === undefined ? null : await (options?.inspectR2 ?? inspectR2)({
+    projectRoot, appConfig, ...(appDomain ? { appDomain, access } : {}),
+  });
 
   // Read the local migration files whenever a database is declared, so the plan can
   // report pending work even before the database exists. A malformed file fails closed
@@ -65,7 +73,7 @@ export async function runCheck(options) {
     existing === undefined ? [] : await inspectMigrations({ projectRoot, appConfig });
 
   const secretsFile = findProductionSecretsFile(projectRoot);
-  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2, migrations, appliedRows, secretsFile });
+  const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2, appDomain, migrations, appliedRows, secretsFile });
 
   stdout.write(formatCheckPlan(plan));
   assertR2PlanSafe(plan.r2);
@@ -201,7 +209,7 @@ export function findDeclaredDatabase({ appConfig, remoteDatabases } = {}) {
 }
 
 /** Compare declared resources with the read-only remote inventories. */
-export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2 = null, migrations = [], appliedRows = [], secretsFile } = {}) {
+export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2 = null, appDomain = null, migrations = [], appliedRows = [], secretsFile } = {}) {
   if (!isApplicationConfig(appConfig)) {
     throw new TypeError(
       "[Goribu] createCheckPlan({ appConfig }) requires the defineConfig() result loaded from goribu.config.js.",
@@ -212,6 +220,10 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
   let bindings = [];
   let costWarnings = [];
   let migrationsPlan = Object.freeze({ declared: false });
+
+  if (appConfig.domain !== undefined && appDomain === null) {
+    throw new Error("[Goribu] The application domain plan is missing. Rerun `goribu check` with domain inspection enabled before planning deployment.");
+  }
 
   if (declaration !== undefined) {
     const existing = findDeclaredDatabase({ appConfig, remoteDatabases });
@@ -280,6 +292,7 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
   return Object.freeze({
     readOnly: true,
     r2,
+    appDomain,
     secretsFile,
     deployTarget: Object.freeze({
       worker: appConfig.name,
@@ -312,6 +325,7 @@ export function formatCheckPlan(plan) {
     `  Compatibility flags: ${flags.length === 0 ? "none" : flags.join(", ")}`,
     `  ${formatSecretsPlan(plan.secretsFile)}`,
     "",
+    ...(plan.appDomain ? [formatAppDomainPlan(plan.appDomain)] : []),
     "Resources",
     `  Existing: ${formatResources(existing)}`,
     `  Missing: ${formatResources(missing)}`,
