@@ -2,11 +2,23 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare `0.9.0`, including R2 storage and uploads, request caching, application
-custom domains, live Worker logs, and deployment/client fixes;
+prepare `0.9.1`, adding immutable signed R2 links for browser caching;
 substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.9.0 to 0.9.1
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.9.1`, then rebuild and deploy. Existing signed
+links retain their behavior. For fixed image contents that may be cached
+privately until link expiry, pass `immutable: true` to `signedUrl`; replacing
+contents must create a new key. See [signed downloads](r2.md#signed-downloads).
+
+Release preparation is complete only after local validation; publication still
+requires live R2 verification of response cache/expiry overrides, backdated
+signatures and browser reuse. The pending checkpoint is recorded in
+[decisions](decisions.md).
 
 ## Upgrading apps from 0.8.1 to 0.9.0
 
@@ -86,6 +98,9 @@ fixes and minor increments for features or breaking changes, recording breaking
 changes explicitly in the changelog. Reaching `1.0.0` is a separate decision
 about API stability.
 
+At the maintainer's request, `0.9.1` treats the opt-in immutable signed-link
+addition as a compatible caching fix and uses a patch increment.
+
 At the maintainer's request, `0.8.1` is an exception to that increment policy:
 it includes the breaking changes documented in the upgrade notes and changelog.
 
@@ -129,7 +144,7 @@ or deploys the site.
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.9.0
+pnpm release prepare 0.9.1
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -145,7 +160,7 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.0
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.1
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
@@ -164,8 +179,8 @@ framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.9.0.tgz`
-- `create-goribu-0.9.0.tgz`
+- `goribu-0.9.1.tgz`
+- `create-goribu-0.9.1.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -192,7 +207,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.9.0
+pnpm release publish ../goribu-release-0.9.1
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command

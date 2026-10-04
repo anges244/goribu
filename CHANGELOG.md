@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-05
+
 ### Added
 
 - R2 signed URLs accept opt-in `immutable: true` for fixed object contents:
