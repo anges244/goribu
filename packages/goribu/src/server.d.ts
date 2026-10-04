@@ -120,7 +120,10 @@ interface R2WebMultipartUpload extends R2MultipartUpload {
   uploadPart(partNumber: number, value: Parameters<R2MultipartUpload["uploadPart"]>[1] | Blob | ReadableStream, options?: Parameters<R2MultipartUpload["uploadPart"]>[2]): ReturnType<R2MultipartUpload["uploadPart"]>;
 }
 export interface GoribuR2Bucket extends R2Bucket {
-  signedUrl(key: string, options?: { expiresIn?: number; download?: string }): Promise<string>;
+  /** Immutable links reuse half-lifetime windows and allow private caching until expiry.
+   * Use only for fixed contents; remaining validity at issuance is at least half of expiresIn.
+   */
+  signedUrl(key: string, options?: { expiresIn?: number; download?: string; immutable?: boolean }): Promise<string>;
   get(key: string, options: R2WebOptions<R2GetOptions> & { onlyIf: NonNullable<R2WebOptions<R2GetOptions>["onlyIf"]> }): Promise<R2ObjectBody | R2Object | null>;
   get(key: string, options?: R2WebOptions<R2GetOptions>): Promise<R2ObjectBody | null>;
   put(key: string, value: R2PutValue, options?: R2WebOptions<R2PutOptions> & { onlyIf: NonNullable<R2WebOptions<R2PutOptions>["onlyIf"]> }): Promise<R2Object | null>;

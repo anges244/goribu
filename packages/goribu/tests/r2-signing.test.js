@@ -67,12 +67,58 @@ describe("R2 signing", () => {
     expect(defaultUrl.hostname).toBe(`${"a".repeat(32)}.r2.cloudflarestorage.com`);
   });
 
+  it("reuses immutable URLs within windows and keeps short links valid on both transports", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const direct of [false, true]) {
+        const env = direct
+          ? { R2_ACCESS_KEY_ID: "test-id", R2_SECRET_ACCESS_KEY: "test-secret", GORIBU_R2_ACCOUNT_ID: "a".repeat(32) }
+          : { GORIBU_SECRET: secret };
+        const api = createR2(env, config, "production", context).private;
+        for (const expiresIn of [1, 2, 10, 119, 120, 900, 604800]) {
+          const window = Math.max(1, Math.floor(expiresIn / 2));
+          const start = Math.floor(1800000000 / window) * window;
+          vi.setSystemTime(start * 1000);
+          const first = await api.signedUrl("image", { expiresIn, immutable: true });
+          vi.setSystemTime((start + window - 1) * 1000);
+          expect(await api.signedUrl("image", { expiresIn, immutable: true })).toBe(first);
+          const url = new URL(first);
+          if (direct) {
+            expect(url.searchParams.get("response-cache-control")).toBe("private, immutable");
+            expect(url.searchParams.get("response-expires")).toBe(new Date((start + expiresIn) * 1000).toUTCString());
+            // Both response overrides participate in the canonical signature.
+            const args = { method: "GET", accountId: env.GORIBU_R2_ACCOUNT_ID, bucket: config.private.name,
+              key: "image", accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+              expiresIn, jurisdiction: "eu", now: new Date(start * 1000) };
+            for (const removed of ["response-cache-control", "response-expires"]) {
+              const queryParams = [...url.searchParams].filter(([name]) => !name.startsWith("X-Amz-") && name !== removed);
+              expect(new URL(await presignS3Url({ ...args, queryParams })).searchParams.get("X-Amz-Signature"))
+                .not.toBe(url.searchParams.get("X-Amz-Signature"));
+            }
+          } else {
+            const payload = await verifyToken(url.searchParams.get("t"), secret, DOWNLOAD_PURPOSE);
+            expect(payload).toMatchObject({ immutable: true, exp: start + expiresIn });
+            expect(payload.exp - Math.floor(Date.now() / 1000)).toBeGreaterThanOrEqual(Math.ceil(expiresIn / 2));
+          }
+          vi.setSystemTime((start + window) * 1000);
+          expect(await api.signedUrl("image", { expiresIn, immutable: true })).not.toBe(first);
+        }
+        vi.setSystemTime(1800000000000);
+        const plain = await api.signedUrl("image");
+        expect(await api.signedUrl("image", { immutable: false })).toBe(plain);
+        vi.setSystemTime(1800000001000);
+        expect(await api.signedUrl("image")).not.toBe(plain);
+      }
+    } finally { vi.useRealTimers(); }
+  });
+
   it("rejects invalid options, partial credentials and prerendering without exposing secret values", async () => {
     const r2 = createR2({ GORIBU_SECRET: secret }, config, "production", context);
     for (const expiresIn of [0, -1, 604801, NaN, Infinity, 1.5, "60"]) await expect(r2.signedUrl("key", { expiresIn })).rejects.toThrow(/expiresIn/);
+    for (const immutable of [null, 1, "yes"]) await expect(r2.signedUrl("key", { immutable })).rejects.toThrow(/immutable must be true or false/);
     for (const download of ["", "../file", "bad\r\nheader", "\ud800"]) await expect(r2.signedUrl("key", { download })).rejects.toThrow(/filename/);
     for (const key of ["", "a/../b", "\ud800", "é".repeat(513)]) await expect(r2.signedUrl(key)).rejects.toThrow(/stored object key/);
-    await expect(r2.signedUrl("key", { extra: true })).rejects.toThrow(/only expiresIn and download/);
+    await expect(r2.signedUrl("key", { extra: true })).rejects.toThrow(/only expiresIn, download and immutable/);
     await expect(createR2({}, undefined, "production", context).signedUrl("key")).rejects.toThrow(/no R2 bucket/);
     await expect(createR2({ R2_ACCESS_KEY_ID: "never-echo-this" }, config, "production", context).signedUrl("key")).rejects.toThrow(/Configure both Worker secrets/);
     const credentials = { R2_ACCESS_KEY_ID: "fake", R2_SECRET_ACCESS_KEY: "fake" };

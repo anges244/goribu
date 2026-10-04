@@ -89,6 +89,10 @@ const GET: Handler<Props, Env, { id: string }> = async (req, res) => {
   const downloadUrl: string = await req.r2.private.signedUrl(id, { expiresIn: 600, download: "invoice.pdf" });
   // @ts-expect-error Signed link expiry is expressed in seconds as a number.
   req.r2.signedUrl(id, { expiresIn: "600" });
+  const imageUrl: string = await req.r2.signedUrl(id, { expiresIn: 604800, immutable: true });
+  await req.r2.private.signedUrl(id, { immutable: true });
+  // @ts-expect-error Immutable caching is an explicit boolean promise.
+  req.r2.signedUrl(id, { immutable: "yes" });
   const object = await req.r2.get(id);
   if (object) { const bytes: ArrayBuffer = await object.arrayBuffer(); }
   const conditional = await req.r2.get(id, { onlyIf: { etagDoesNotMatch: "etag" }, range: { offset: 0, length: 4 } });

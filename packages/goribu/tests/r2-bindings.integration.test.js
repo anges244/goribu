@@ -44,12 +44,12 @@ it.each([
     writeFileSync(join(root, "src/routes/r2-download.js"), `
 export async function GET(req, res) {
   const bucket = req.query.has("private") ? req.r2.private : req.r2;
-  return res.json({ url: await bucket.signedUrl(req.query.get("key") ?? ${JSON.stringify(key)}, req.query.has("inline") ? {} : { download: "résumé.txt" }), rootValue: req.env.ROOT_VALUE, localValue: req.env.LOCAL_VALUE });
+  return res.json({ url: await bucket.signedUrl(req.query.get("key") ?? ${JSON.stringify(key)}, { ...(req.query.has("inline") ? {} : { download: "résumé.txt" }), ...(req.query.has("immutable") ? { immutable: true } : {}) }), rootValue: req.env.ROOT_VALUE, localValue: req.env.LOCAL_VALUE });
 }
 `);
     writeFileSync(join(root, "src/routes/r2-binding.js"), `
 export async function PUT(req, res) {
-  await req.r2.put(${JSON.stringify(key)}, new File(["default bucket"], "example.txt", { type: "text/plain" }));
+  await req.r2.put(${JSON.stringify(key)}, new File(["default bucket"], "example.txt", { type: "text/plain" }), { httpMetadata: { contentType: "text/plain", expires: new Date("2099-01-01T00:00:00Z") } });
   await req.r2.put("unsafe.html", new Blob([${JSON.stringify(html)}], { type: "text/html" }));
   ${r2.private ? 'await req.r2.private.put("proof", "private bucket");' : ''}
   return res.json({ stored: true });
@@ -104,6 +104,19 @@ export default function Page({ url }) { return <a href={url}>Static R2 URL</a>; 
       expect(downloaded.headers.get("content-type")).toBe("text/plain");
       expect(downloaded.headers.get("content-disposition")).toContain("filename*=UTF-8''r%C3%A9sum%C3%A9.txt");
       expect(downloaded.headers.get("cache-control")).toBe("private, max-age=0");
+      const immutableLink = await (await fetch(new URL("/r2-download?immutable", base))).json();
+      const immutablePayload = await verifyToken(new URL(immutableLink.url).searchParams.get("t"), signingSecret, DOWNLOAD_PURPOSE);
+      for (const init of [{}, { method: "HEAD" }, { headers: { range: "bytes=1-3" } }, { headers: { "if-none-match": downloaded.headers.get("etag") } }]) {
+        const before = Math.floor(Date.now() / 1000);
+        const response = await fetchFile(immutableLink.url, init);
+        const after = Math.ceil(Date.now() / 1000);
+        const cache = /^private, max-age=(\d+), immutable$/.exec(response.headers.get("cache-control"));
+        expect(cache).not.toBeNull();
+        expect(Number(cache[1])).toBeGreaterThanOrEqual(Math.max(0, immutablePayload.exp - after));
+        expect(Number(cache[1])).toBeLessThanOrEqual(immutablePayload.exp - before);
+        expect(response.headers.get("expires")).toBeNull();
+        await response.arrayBuffer();
+      }
       const etag = downloaded.headers.get("etag");
       expect((await fetchFile(signedUrl, { headers: { "if-none-match": etag } })).status).toBe(304);
       expect((await fetchFile(signedUrl, { headers: { "if-match": '"not-the-etag"' } })).status).toBe(412);

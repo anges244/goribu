@@ -10,6 +10,7 @@ export async function serveR2Download(request, env, r2, config) {
   const payload = await verifyToken(tokens[0], env.GORIBU_SECRET, DOWNLOAD_PURPOSE);
   if (!payload || (payload.bucket !== "default" && payload.bucket !== "private") ||
     !validDownloadKey(payload.key) || (payload.download !== undefined && !validDownloadName(payload.download)) ||
+    (payload.immutable !== undefined && typeof payload.immutable !== "boolean") ||
     (payload.bucket === "private" && !config.private)) return empty(403);
 
   const bucket = payload.bucket === "private" ? r2.private : r2;
@@ -30,7 +31,11 @@ export async function serveR2Download(request, env, r2, config) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
-  headers.set("cache-control", "private, max-age=0");
+  // Keep download freshness policy explicit; discard the stored expiry header.
+  headers.delete("expires");
+  headers.set("cache-control", payload.immutable === true
+    ? `private, max-age=${Math.max(0, payload.exp - Math.ceil(Date.now() / 1000))}, immutable`
+    : "private, max-age=0");
   headers.set("accept-ranges", "bytes");
   if (payload.download !== undefined) headers.set("content-disposition", contentDisposition(payload.download));
   if (object.body === undefined) {

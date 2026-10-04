@@ -72,6 +72,8 @@ export default {
       });
     },
   }],
+  // node_modules is shared by fixture symlinks; optimizer output must be session-local.
+  cacheDir: ${JSON.stringify(join(root, ".vite-cache"))},
   server: ${serverOptions},
 };
 `);

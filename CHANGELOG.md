@@ -9,6 +9,14 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- R2 signed URLs accept opt-in `immutable: true` for fixed object contents:
+  half-lifetime windows reuse URLs and request private browser freshness bounded
+  by link expiry. Worker downloads enforce remaining-validity cache headers;
+  S3 URLs sign cache-control and absolute expiry overrides. Existing defaults
+  remain unchanged.
+
 ## [0.9.0] - 2026-10-02
 
 ### Added
