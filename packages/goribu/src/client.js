@@ -18,13 +18,6 @@ async function startClient() {
     return null;
   }
   const root = await hydrateInitialPage({ pageLoaders });
-  // The entry and page imports have now installed Vite's live CSS. Remove the
-  // first-paint stylesheet so old rules cannot survive a CSS hot update.
-  if (import.meta.env.DEV) {
-    for (const link of document.querySelectorAll("link[data-goribu-dev-styles]")) {
-      link.remove();
-    }
-  }
   if (root === null) return null;
 
   const navigation = createNavigationController({ root, pageLoaders, navigationBuildId });

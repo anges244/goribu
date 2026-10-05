@@ -1,6 +1,23 @@
 import { parse } from "@babel/parser";
+import { CLIENT_PAGE_MANIFEST_ID } from "./create-client-page-manifest-plugin.js";
 
 const STYLE_PATH = "/_goribu/dev-styles.css";
+const RESOLVED_CLIENT_PAGE_MANIFEST_ID = `\0${CLIENT_PAGE_MANIFEST_ID}`;
+
+// Until the first hot update the first-paint link holds the same CSS Vite has
+// injected, so keep it: removing it at hydration discards fonts its @font-face
+// rules already loaded, and swap fonts flash back to their fallback. Any edit
+// can change or drop a stylesheet, so remove it before the first update applies
+// and leave stylesheets to Vite from then on. The bootstrap loads the page
+// manifest before hydration, and unlike the prebundled bootstrap, Vite gives
+// this module import.meta.hot.
+const STYLE_HANDOFF = `
+if (import.meta.hot) {
+  import.meta.hot.on("vite:beforeUpdate", () => {
+    for (const link of document.querySelectorAll("link[data-goribu-dev-styles]")) link.remove();
+  });
+}
+`;
 const CSS = /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:\?|$)/;
 const NON_STYLE_IMPORT = /[?&](?:inline|raw|url|worker|sharedworker)(?:[=&]|$)/;
 
@@ -9,6 +26,11 @@ export function createDevelopmentStylesPlugin(pageIds) {
   return {
     name: "goribu:development-styles",
     apply: "serve",
+
+    transform(code, id) {
+      if (this.environment?.name !== "client" || id !== RESOLVED_CLIENT_PAGE_MANIFEST_ID) return null;
+      return { code: code + STYLE_HANDOFF, map: null };
+    },
 
     configureServer(server) {
       // Weak keys let Vite release obsolete transforms after edits/restarts.

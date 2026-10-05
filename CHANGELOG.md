@@ -50,6 +50,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- In development, web fonts no longer flash back to their fallback when the
+  page hydrates. The first-paint stylesheet now stays until the first hot
+  update instead of being removed at hydration, which discarded fonts it had
+  already loaded. A brief fallback on reload remains in development only, while
+  the browser rechecks the font with Vite.
 - Routes can use nested `.server.*` helpers in development and production.
   Browser transforms remove handler, metadata, prerender and upload exports and
   their exclusive dependencies before resolving imports, including server-only

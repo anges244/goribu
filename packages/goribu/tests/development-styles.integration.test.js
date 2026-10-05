@@ -60,6 +60,34 @@ it("styles cold full-page renders without executing any browser JavaScript", asy
   }
 }, 30000);
 
+// Removing the link at hydration discarded fonts it had loaded, so swap fonts
+// flashed back to their fallback. Run the page manifest exactly as the dev server
+// serves it, against a recording Vite client, to see when the link goes.
+it("keeps the first-paint stylesheet until the first hot update", async () => {
+  const served = await (await fetch(new URL("/@id/__x00__virtual:goribu/client-pages", origin))).text();
+  const listeners = new Map();
+  globalThis.goribuTestHot = {
+    on: (event, listener) => listeners.set(event, [...(listeners.get(event) ?? []), listener]),
+  };
+  const viteClient = "data:text/javascript,export const createHotContext = () => globalThis.goribuTestHot;";
+  expect(served).toContain('from "/@vite/client"');
+
+  const dom = await JSDOM.fromURL(new URL("/", origin).href);
+  const previousDocument = globalThis.document;
+  globalThis.document = dom.window.document;
+  try {
+    await import(`data:text/javascript,${encodeURIComponent(served.replace('"/@vite/client"', JSON.stringify(viteClient)))}`);
+    expect(dom.window.document.querySelectorAll("link[data-goribu-dev-styles]")).toHaveLength(1);
+
+    for (const listener of listeners.get("vite:beforeUpdate") ?? []) listener({ type: "update", updates: [] });
+    expect(dom.window.document.querySelectorAll("link[data-goribu-dev-styles]")).toHaveLength(0);
+  } finally {
+    globalThis.document = previousDocument;
+    delete globalThis.goribuTestHot;
+    dom.window.close();
+  }
+}, 30000);
+
 it("uses the current Vite graph after a stylesheet import changes and rejects unknown routes", async () => {
   const url = new URL("/_goribu/dev-styles.css?route=src%2Froutes%2Findex.jsx", origin);
   expect(await (await fetch(url)).text()).toContain("/src/styles.css?direct");

@@ -79,7 +79,15 @@ the package with the rest.
 Development styles load before hydration through `/_goribu/dev-styles.css`.
 Repeated requests reuse discovered imports from unchanged Vite transforms;
 edited imports are inspected again. Stylesheet contents and hot updates remain
-owned by Vite, so this optimization needs no application configuration.
+owned by Vite, so this optimization needs no application configuration. The
+first-paint stylesheet stays in place until the first hot update, so web fonts
+it has loaded are not dropped when the page hydrates.
+
+On a development reload, text in a `font-display: swap` web font can briefly
+show its fallback font. Vite serves development files with `Cache-Control:
+no-cache`, so the browser checks the font with the server before using it.
+Production builds serve hashed fonts with an immutable cache policy and do not
+have this delay.
 
 Local Worker values come from root `.env` plus `.env.local`, or from `.dev.vars`
 which suppresses both. Edits reload the session. See
