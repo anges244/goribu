@@ -11,14 +11,18 @@ export async function getCloudflareAccess(options) {
       "[Goribu] getCloudflareAccess({ projectRoot }) requires the application project root.",
     );
   }
+  // Repair messages tell the user to rerun the command that needed the account.
+  const command = options?.command ?? "goribu deploy";
   const runJson = options?.runJson ?? runWranglerJson;
   const token = await runJson({
     projectRoot,
+    command,
     args: ["auth", "token", "--json"],
     description: "read Wrangler's authenticated Cloudflare credentials",
   });
   const identity = await runJson({
     projectRoot,
+    command,
     args: ["whoami", "--json"],
     description: "resolve Wrangler's Cloudflare account",
   });
@@ -26,7 +30,7 @@ export async function getCloudflareAccess(options) {
   const accounts = identity?.accounts;
   if (!Array.isArray(accounts) || accounts.length === 0) {
     throw new Error(
-      "[Goribu] Wrangler returned no Cloudflare accounts for deployment. Run `pnpm exec goribu cloudflare-login`, confirm account access, then rerun `goribu deploy`.",
+      `[Goribu] Wrangler returned no Cloudflare accounts. Run \`pnpm exec goribu cloudflare-login\`, confirm account access, then rerun \`${command}\`.`,
     );
   }
   const requestedAccountId = Object.prototype.hasOwnProperty.call(
@@ -41,24 +45,24 @@ export async function getCloudflareAccess(options) {
     if (account === undefined) {
       throw new Error(
         `[Goribu] CLOUDFLARE_ACCOUNT_ID ${JSON.stringify(requestedAccountId)} is not available to Wrangler's current credentials. ` +
-          "Select an accessible account or run `pnpm exec goribu cloudflare-login` to log in again, then rerun `goribu deploy`.",
+          `Select an accessible account or run \`pnpm exec goribu cloudflare-login\` to log in again, then rerun \`${command}\`.`,
       );
     }
   } else if (accounts.length === 1) {
     [account] = accounts;
   } else {
     throw new Error(
-      "[Goribu] Wrangler's credentials can access more than one Cloudflare account, so Goribu cannot safely choose where to deploy. " +
-        "Set CLOUDFLARE_ACCOUNT_ID to the intended account and rerun `goribu deploy`.",
+      "[Goribu] Wrangler's credentials can access more than one Cloudflare account, so Goribu cannot safely choose one. " +
+        `Set CLOUDFLARE_ACCOUNT_ID to the intended account and rerun \`${command}\`.`,
     );
   }
   if (typeof account?.id !== "string" || account.id.length === 0) {
     throw new Error(
-      "[Goribu] Wrangler returned an invalid Cloudflare account for deployment. Update Goribu to update its Wrangler dependency, run `pnpm exec goribu cloudflare-login` to log in again, and rerun `goribu deploy`.",
+      `[Goribu] Wrangler returned an invalid Cloudflare account. Update Goribu to update its Wrangler dependency, run \`pnpm exec goribu cloudflare-login\` to log in again, and rerun \`${command}\`.`,
     );
   }
 
-  return Object.freeze({ accountId: account.id, headers: authHeaders(token) });
+  return Object.freeze({ accountId: account.id, headers: authHeaders(token, command) });
 }
 
 async function runWranglerJson(options) {
@@ -69,7 +73,7 @@ async function runWranglerJson(options) {
     wranglerBin = resolveBin();
   } catch (cause) {
     throw new Error(
-      "[Goribu] Could not find Wrangler for deployment. Install dependencies (for example `pnpm install`) and rerun `goribu deploy`.",
+      `[Goribu] Could not find Wrangler. Install dependencies (for example \`pnpm install\`) and rerun \`${options.command}\`.`,
       { cause },
     );
   }
@@ -82,7 +86,7 @@ async function runWranglerJson(options) {
     });
     forwardWranglerDiagnostics(child.stderr);
   } catch (cause) {
-    throw wranglerAccessError(options.description, cause);
+    throw wranglerAccessError(options, cause);
   }
   let output = "";
   child.stdout?.on("data", (chunk) => {
@@ -90,30 +94,30 @@ async function runWranglerJson(options) {
   });
   const { code, signal } = await new Promise((resolvePromise, rejectPromise) => {
     child.on("error", (cause) =>
-      rejectPromise(wranglerAccessError(options.description, cause)),
+      rejectPromise(wranglerAccessError(options, cause)),
     );
     child.on("close", (exitCode, terminatingSignal) =>
       resolvePromise({ code: exitCode, signal: terminatingSignal }),
     );
   });
   if (signal !== null || code !== 0) {
-    throw wranglerAccessError(options.description);
+    throw wranglerAccessError(options);
   }
   try {
     return JSON.parse(output);
   } catch (cause) {
-    throw wranglerAccessError(options.description, cause);
+    throw wranglerAccessError(options, cause);
   }
 }
 
-function wranglerAccessError(description, cause) {
+function wranglerAccessError({ description, command }, cause) {
   return new Error(
-    `[Goribu] Could not ${description} for deployment. Read the Wrangler error above; run \`pnpm exec goribu cloudflare-login\` locally or configure CLOUDFLARE_API_TOKEN for non-interactive use, confirm account access and network connectivity, then rerun \`goribu deploy\`.`,
+    `[Goribu] Could not ${description}. Read the Wrangler error above; run \`pnpm exec goribu cloudflare-login\` locally or configure CLOUDFLARE_API_TOKEN for non-interactive use, confirm account access and network connectivity, then rerun \`${command}\`.`,
     { cause },
   );
 }
 
-function authHeaders(credentials) {
+function authHeaders(credentials, command) {
   if (
     (credentials?.type === "api_token" || credentials?.type === "oauth") &&
     typeof credentials.token === "string" &&
@@ -134,6 +138,6 @@ function authHeaders(credentials) {
     });
   }
   throw new Error(
-    "[Goribu] Wrangler returned unsupported Cloudflare credentials for deployment. Update Goribu to update its Wrangler dependency, run `pnpm exec goribu cloudflare-login` to log in again, and rerun `goribu deploy`.",
+    `[Goribu] Wrangler returned unsupported Cloudflare credentials. Update Goribu to update its Wrangler dependency, run \`pnpm exec goribu cloudflare-login\` to log in again, and rerun \`${command}\`.`,
   );
 }

@@ -142,7 +142,7 @@ describe("R2 bucket planning and provisioning", () => {
     const { options, output } = setup(config({ name: "app-files", domain: "new.example.com", jurisdiction: "eu" }), remote);
     await provisionR2(options);
     expect(output()).toContain("Bucket app-files remains public at media.example.com");
-    expect(output()).toContain("wrangler r2 bucket domain remove app-files --domain media.example.com -J eu");
+    expect(output()).toContain("`pnpm exec goribu wrangler r2 bucket domain remove app-files --domain media.example.com -J eu`");
     expect(output()).toContain("R2_PRIVATE is removed from the Worker; bucket old-private (eu) and all its objects remain unchanged.");
     expect(output()).not.toContain("off.example.com");
     expect(remote.calls.filter((call) => call.method !== "GET")).toMatchObject([{ method: "POST", path: "/r2/buckets/app-files/domains/custom", body: { domain: "new.example.com" } }]);
@@ -160,8 +160,8 @@ describe("R2 bucket planning and provisioning", () => {
     const { options, check, output } = setup(appConfig, remote);
     // A blocked check is a plan result that states each reason once, not a thrown failure.
     const repair = custom
-      ? "wrangler r2 bucket domain remove app-files --domain media.example.com -J eu"
-      : "wrangler r2 bucket dev-url disable app-files -J eu";
+      ? "`pnpm exec goribu wrangler r2 bucket domain remove app-files --domain media.example.com -J eu`"
+      : "`pnpm exec goribu wrangler r2 bucket dev-url disable app-files -J eu`";
     expect((await check()).r2.errors.join(" ")).toContain(repair);
     expect(output().split(repair)).toHaveLength(2);
     expect(output()).toContain("Blocked: Private bucket app-files (eu) has public");
@@ -242,7 +242,7 @@ describe("R2 bucket planning and provisioning", () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain(`The deployed Worker has a ${type} binding named ${name}`);
     expect(error.message).toContain(`Remove or rename ${name} in .env.production if present`);
-    expect(error.message).toContain(`CLOUDFLARE_ACCOUNT_ID=${access.accountId} wrangler secret delete ${name} --name test-app`);
+    expect(error.message).toContain(`\`pnpm exec goribu wrangler secret delete ${name} --name test-app\``);
     expect(error.message).not.toContain("-J");
     expect(`${error.message}${output()}`).not.toMatch(/binding-value-must-not-appear|Update Goribu/);
     expect(remote.calls).toHaveLength(1);

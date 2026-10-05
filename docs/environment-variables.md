@@ -74,7 +74,7 @@ The error provides a command to reproduce the failure using Goribu's bundled
 Wrangler. Run it from the app directory when you need the underlying diagnostic:
 
 ```sh
-pnpm --dir node_modules/goribu exec wrangler deploy --cwd "$PWD" --dry-run --secrets-file=.env.production
+pnpm exec goribu wrangler deploy --dry-run --secrets-file=.env.production
 ```
 
 This does not deploy. Its output may include text from the secrets file, so run

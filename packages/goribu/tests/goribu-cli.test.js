@@ -24,6 +24,7 @@ describe("goribu CLI", () => {
     expect(stdout).toContain("migrate:seed");
     expect(stdout).toMatch(/cloudflare-login\s+Log in to Cloudflare through Wrangler\./);
     expect(stdout).toMatch(/tail\s+.*logs/);
+    expect(stdout).toMatch(/wrangler\s+Run Goribu's Wrangler with the deploy account/);
   });
 
   it("prints the version", () => {

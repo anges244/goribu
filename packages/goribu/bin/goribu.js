@@ -10,6 +10,7 @@ import { relative } from "node:path";
 import { runCheck } from "../src/build/run-check.js";
 import { runCloudflareLogin } from "../src/build/run-cloudflare-login.js";
 import { runTail } from "../src/build/run-tail.js";
+import { runWrangler } from "../src/build/run-wrangler.js";
 import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
@@ -26,6 +27,7 @@ const COMMANDS = {
   deploy: "Build, apply production migrations, and deploy to Cloudflare.",
   tail: "Stream live logs from the deployed Worker.",
   "cloudflare-login": "Log in to Cloudflare through Wrangler.",
+  wrangler: "Run Goribu's Wrangler with the deploy account: goribu wrangler <args>.",
   migrate: "Apply pending D1 migrations (default local; --remote for production).",
   "migrate:down": "Roll back the last applied migration (default local; --remote supported).",
   "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
@@ -252,6 +254,13 @@ function main(argv) {
   if (command === "cloudflare-login") {
     if (!assertNoArguments("cloudflare-login", rest)) return;
     runCloudflareLogin({ projectRoot: process.cwd() }).then((code) => {
+      process.exitCode = code;
+    }).catch(fail);
+    return;
+  }
+
+  if (command === "wrangler") {
+    runWrangler({ projectRoot: process.cwd(), args: rest }).then((code) => {
       process.exitCode = code;
     }).catch(fail);
     return;

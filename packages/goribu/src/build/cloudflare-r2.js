@@ -65,7 +65,7 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
         if (seen.has(binding.name)) throw invalidMetadata("managed Worker R2 bindings");
         seen.add(binding.name);
         if (binding.type === "secret_text" || binding.type === "secret_key") {
-          throw new Error(`[Goribu] The deployed Worker has a ${binding.type} binding named ${binding.name}, which Goribu reserves for a managed R2 bucket. Wrangler preserves deployed secrets. Remove or rename ${binding.name} in .env.production if present, then run \`CLOUDFLARE_ACCOUNT_ID=${access.accountId} wrangler secret delete ${binding.name} --name ${workerName}\` and retry \`goribu deploy\`. Goribu does not read or delete the secret itself.`);
+          throw new Error(`[Goribu] The deployed Worker has a ${binding.type} binding named ${binding.name}, which Goribu reserves for a managed R2 bucket. Wrangler preserves deployed secrets. Remove or rename ${binding.name} in .env.production if present, then run \`pnpm exec goribu wrangler secret delete ${binding.name} --name ${workerName}\` and retry \`goribu deploy\`. Goribu does not read or delete the secret itself.`);
         }
         if (binding.type !== "r2_bucket") {
           bindings.push(Object.freeze({ binding: binding.name, type: binding.type }));

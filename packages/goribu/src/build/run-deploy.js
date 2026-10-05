@@ -152,7 +152,7 @@ export async function validateProductionSecrets(options) {
     throw new Error(
       `[Goribu] Wrangler could not validate .env.production and the built Worker (exit code ${code}). ` +
         "Ensure .env.production is readable and contains valid KEY=value entries or a JSON object of string values. " +
-        "To see Wrangler's diagnostic, run `pnpm --dir node_modules/goribu exec wrangler deploy --cwd \"$PWD\" --dry-run --secrets-file=.env.production` from the app directory " +
+        "To see Wrangler's diagnostic, run `pnpm exec goribu wrangler deploy --dry-run --secrets-file=.env.production` from the app directory " +
         "(its output may include text from the file). Fix the reported problem, then retry `goribu deploy`. No resources or migrations were changed.",
     );
   }

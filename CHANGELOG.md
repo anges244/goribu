@@ -9,6 +9,15 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `goribu wrangler <args>` runs the Wrangler installed with Goribu in the app
+  directory, with the account `goribu deploy` uses. Wrangler is not usually on
+  the app's PATH, so repair messages now print `pnpm exec goribu wrangler …`
+  instead of bare `wrangler` commands, and the secret-delete repair no longer
+  needs a `CLOUDFLARE_ACCOUNT_ID=…` prefix. A real `deploy` is refused in favor of
+  `goribu deploy`.
+
 ### Changed
 
 - Client navigation to a different path now remounts the page, even when both

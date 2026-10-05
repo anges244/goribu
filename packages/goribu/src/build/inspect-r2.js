@@ -53,11 +53,11 @@ export function createR2Plan(buckets, previous = []) {
       warnings.push(`${bucket.binding} changes from ${old.name} (${old.jurisdiction}) to ${bucket.name} (${bucket.jurisdiction}). ${bucket.state === "missing" ? "A new empty bucket will be created." : "The target bucket already exists."} Existing stored keys still refer to the old bucket's objects. Goribu does not move data; restore the previous configuration or migrate the data before switching.`);
     }
     if (bucket.remote?.devUrlEnabled && bucket.domain === undefined) {
-      errors.push(`Private bucket ${bucket.name} (${bucket.jurisdiction}) has public r2.dev access enabled. Disable it with \`wrangler r2 bucket dev-url disable ${bucket.name}${jurisdictionFlag(bucket.jurisdiction)}\`, then rerun \`goribu check\`.`);
+      errors.push(`Private bucket ${bucket.name} (${bucket.jurisdiction}) has public r2.dev access enabled. Disable it with \`pnpm exec goribu wrangler r2 bucket dev-url disable ${bucket.name}${jurisdictionFlag(bucket.jurisdiction)}\`, then rerun \`goribu check\`.`);
     }
     for (const domain of bucket.remote?.domains ?? []) {
       if (!domain.enabled) continue;
-      const repair = `Goribu never disconnects domains. To remove it yourself, run \`wrangler r2 bucket domain remove ${bucket.name} --domain ${domain.domain}${jurisdictionFlag(bucket.jurisdiction)}\`.`;
+      const repair = `Goribu never disconnects domains. To remove it yourself, run \`pnpm exec goribu wrangler r2 bucket domain remove ${bucket.name} --domain ${domain.domain}${jurisdictionFlag(bucket.jurisdiction)}\`.`;
       if (bucket.domain === undefined) {
         errors.push(`Private bucket ${bucket.name} (${bucket.jurisdiction}) has public access through the enabled custom domain ${domain.domain}. ${repair} Then rerun \`goribu check\`.`);
       } else if (domain.domain !== bucket.domain) {

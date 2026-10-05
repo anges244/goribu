@@ -130,7 +130,29 @@ When deploy, resource inspection in `goribu check`, or a remote migration needs
 authentication, use `pnpm exec goribu cloudflare-login` and retry the command.
 Goribu displays Wrangler's error details with ordinary login suggestions pointing
 to that command. Wrangler-specific login flags and other diagnostic commands stay
-as Wrangler commands; `goribu cloudflare-login` accepts no arguments.
+as Wrangler commands, run through [`goribu wrangler`](#goribu-wrangler);
+`goribu cloudflare-login` accepts no arguments.
+
+## `goribu wrangler`
+
+Run the Wrangler installed with Goribu. Wrangler is a dependency of `goribu`,
+not of your app, so a bare `wrangler` command is usually not on your PATH.
+Repair messages from check and deploy print their Wrangler commands in this
+form, for example:
+
+```sh
+pnpm exec goribu wrangler r2 bucket dev-url disable my-files
+```
+
+Every argument goes to Wrangler unchanged. It runs in the app directory with
+`CLOUDFLARE_ACCOUNT_ID` set to the account `goribu deploy` would use: the
+variable you set, or your only account. With several accounts and no variable,
+it stops and asks you to set one. It needs a login, like deploy. Goribu passes
+through Wrangler's terminal interaction and exit status.
+
+`goribu wrangler deploy` is refused, because it would skip Goribu's build,
+provisioning and migrations; use `goribu deploy`. `goribu wrangler deploy
+--dry-run` is allowed for diagnostics.
 
 ## `goribu deploy`
 

@@ -51,7 +51,7 @@ describe("runWranglerDeploy", () => {
     ]);
     await expect(validateProductionSecrets({
       ...options, spawn: fakeSpawn((child) => child.emit("close", 1, null)),
-    })).rejects.toThrow(/\[Goribu\].*pnpm --dir node_modules\/goribu exec wrangler deploy --cwd "\$PWD" --dry-run --secrets-file=\.env\.production.*output may include text from the file.*No resources or migrations were changed/);
+    })).rejects.toThrow(/\[Goribu\].*pnpm exec goribu wrangler deploy --dry-run --secrets-file=\.env\.production.*output may include text from the file.*No resources or migrations were changed/);
   });
   it("launches the resolved Wrangler binary with deploy in the project root", async () => {
     const spawn = fakeSpawn((child) => child.emit("close", 0, null));
