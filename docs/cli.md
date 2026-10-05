@@ -54,6 +54,15 @@ inside the watched project retries the affected server modules and reloads the
 browser. You do not need to edit the importing file again or restart the server.
 Resolution still follows Vite, including aliases and omitted extensions.
 
+Vite prebundles the packages your pages import for the browser. Its own startup
+scan cannot follow Goribu's lazy page loaders, so Goribu transforms every page at
+startup and their packages are optimized before the first page request. A
+package that a page first imports while the session is running is still
+discovered when that page loads. If it changes chunks Vite already optimized,
+Vite reloads the browser once; until that reload the page can briefly fail with a
+duplicate-React error such as "Invalid hook call". The next startup optimizes
+the package with the rest.
+
 Development styles load before hydration through `/_goribu/dev-styles.css`.
 Repeated requests reuse discovered imports from unchanged Vite transforms;
 edited imports are inspected again. Stylesheet contents and hot updates remain

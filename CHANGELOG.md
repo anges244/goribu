@@ -32,6 +32,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Worker-rendered development documents explicitly load Vite's overlay client,
   so module failures show the original diagnostic even when application imports
   fail. Page-load errors give development-specific advice and preserve their cause.
+- Development startup optimizes the packages imported by pages before the first
+  page request. Previously, after a dependency install or cache reset, opening a
+  page could discover packages such as editors late, briefly fail with two React
+  copies ("Invalid hook call"), and reload the browser.
 
 ## [0.9.1] - 2026-10-05
 

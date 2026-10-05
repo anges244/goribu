@@ -7,6 +7,7 @@ import { generateManifest } from "../routing/generate-manifest.js";
 import { createClientAssetManifestPlugin } from "./create-client-asset-manifest-plugin.js";
 import {
   createClientBoundaryPlugin,
+  createClientRouteModuleId,
   routeFilePathFromClientModuleId,
 } from "./create-client-boundary-plugin.js";
 import { createClientPageManifestPlugin } from "./create-client-page-manifest-plugin.js";
@@ -358,6 +359,7 @@ function requireClientBoundary(boundary) {
 function createConfiguredClientPageManifestPlugin(navigationBuildId, developmentPageIds) {
   let pageManifest;
   let production = false;
+  let developmentPageFiles = [];
 
   return {
     name: "goribu:client-page-manifest",
@@ -372,12 +374,32 @@ function createConfiguredClientPageManifestPlugin(navigationBuildId, development
         routesDir: resolve(root, "src/routes"),
       });
       developmentPageIds.clear();
+      developmentPageFiles = [];
       if (!production) {
         for (const route of manifest) {
-          if (route.hasDefaultExport) developmentPageIds.add(route.id);
+          if (!route.hasDefaultExport) continue;
+          developmentPageIds.add(route.id);
+          developmentPageFiles.push(route.filePath);
         }
       }
       pageManifest = createClientPageManifestPlugin(manifest);
+    },
+
+    configureServer(server) {
+      // Pages sit behind this module's dynamic imports, which Vite's dependency
+      // scan cannot follow, so their packages would be discovered on the first
+      // page load. A package that reshapes already optimized chunks (React DOM
+      // via an editor, for example) then reloads a browser that has started
+      // running the previous chunks. Transforming every page through the client
+      // pipeline at startup finds the same packages before a page is requested.
+      // Listening is the first point after Vite loads its dependency cache;
+      // discoveries made earlier are overwritten by that load.
+      const client = server.environments.client;
+      server.httpServer?.once("listening", () => {
+        for (const filePath of developmentPageFiles) {
+          client.warmupRequest(createClientRouteModuleId(filePath));
+        }
+      });
     },
 
     resolveId(source, importer, options) {
