@@ -2,7 +2,7 @@ import { basename, extname, join } from "node:path";
 import { readScanRoot } from "./read-scan-directory.js";
 import { isRouteFile } from "./scan-routes.js";
 
-const ERROR_PAGE_KINDS = new Map([
+export const ERROR_PAGE_KINDS = new Map([
   ["_404", "notFound"],
   ["_500", "serverError"],
 ]);

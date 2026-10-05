@@ -36,8 +36,11 @@ export async function loadClientPage(options) {
   try {
     pageModule = await loader();
   } catch (cause) {
+    const repair = import.meta.env?.DEV
+      ? "Fix the module error shown in the development overlay or browser console, then reload."
+      : "Check that the current client build emitted and can serve every generated page chunk.";
     throw new Error(
-      `[Goribu] Could not load the client page module for route ${JSON.stringify(routeId)}. Check that the current client build emitted and can serve every generated page chunk.`,
+      `[Goribu] Could not load the client page module for route ${JSON.stringify(routeId)}. ${repair}`,
       { cause },
     );
   }

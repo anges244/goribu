@@ -323,6 +323,10 @@ function createConfiguredClientBoundaryPlugin() {
       return requireClientBoundary(boundary).load.call(this, id);
     },
 
+    transform(source, id) {
+      return requireClientBoundary(boundary).transform.call(this, source, id);
+    },
+
     outputOptions(options) {
       return requireClientBoundary(boundary).outputOptions.call(this, options);
     },

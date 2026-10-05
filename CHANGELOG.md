@@ -9,6 +9,30 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Browser-reachable route modules now reject wildcard `export *`. Use explicit
+  named re-exports for handlers and browser helpers instead. This restriction
+  does not apply to helper barrels under `_`-prefixed folders.
+- Bare side-effect imports of `.server.*` modules in browser-reachable routes now
+  fail the boundary check; production builds previously dropped them. Move the
+  side-effect import into a `.server.*` helper used only by a handler.
+- Direct `eval` in browser-reachable route code is rejected when separating
+  server declarations. Use explicit references, or move server-only evaluation
+  into a handler's `.server.*` helper.
+
+### Fixed
+
+- Routes can use nested `.server.*` helpers in development and production.
+  Browser transforms remove handler, metadata, prerender and upload exports and
+  their exclusive dependencies before resolving imports, including server-only
+  initializer calls. Shared page dependencies remain checked; real server leaks
+  fail with the importing module. Only route modules and the root `_404`/`_500`
+  pages are transformed; ignored helpers retain their exports and barrels.
+- Worker-rendered development documents explicitly load Vite's overlay client,
+  so module failures show the original diagnostic even when application imports
+  fail. Page-load errors give development-specific advice and preserve their cause.
+
 ## [0.9.1] - 2026-10-05
 
 ### Added

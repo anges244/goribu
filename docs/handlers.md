@@ -189,9 +189,31 @@ export function GET(req, res) {
 
 Code that must never reach the browser — secrets, database drivers, admin SDKs —
 goes in a file named `*.server.js` (`.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`, and
-their variants). A handler may import it freely; the client build **fails closed**
-if a `.server.*` module ever reaches browser code, and it's tree-shaken out of the
-client bundle when only handlers use it.
+their variants). Handlers may import these modules, and server modules may import
+other server modules. Both development and production reject a `.server.*`
+import that remains in browser code.
+
+Before following browser imports, Goribu removes the route's HTTP handler,
+`meta`, `prerender`, and `uploads` exports and dependencies used exclusively by
+them. This includes server-only initializer calls, such as a function that creates
+upload policies; no `@__PURE__` annotation is required. The Worker receives the
+complete original route. Helpers shared with the page remain in its browser
+module, as do unrelated top-level statements and side-effect imports. A shared
+helper therefore cannot depend on a `.server.*` module.
+
+This separation applies to route files and the top-level `_404`/`_500` pages.
+Helpers in `_`-prefixed files or folders, such as `src/routes/_lib/` and
+`src/routes/_components/`, are not rewritten: their `GET`, `meta`, `uploads`,
+and `prerender` exports remain ordinary exports, and their barrels may use
+`export *`. Their browser imports still undergo the server-only boundary check.
+
+A class used exclusively by server exports is removed as a whole, including its
+static blocks and evaluation of its `extends` expression; keep effects needed by
+the page in explicitly shared code.
+
+Bare side-effect imports such as `import "../instrument.server.js"` are rejected
+in browser-reachable code. Move that import into a `.server.*` helper used only
+by a handler so its initialization runs on the Worker.
 
 ```js
 // src/lib/secret.server.js
@@ -203,6 +225,17 @@ export const API_TOKEN = "…";        // never shipped to the browser
 import { API_TOKEN } from "../lib/secret.server.js";
 export function GET(req, res) { /* use API_TOKEN server-side */ }
 ```
+
+For example, `report.js → body.server.js → images.server.js` is valid when only
+the handler uses that chain. The browser receives the page and its dependencies,
+not the server helpers. Development source maps omit removed server code too.
+
+Use explicit named re-exports in browser-reachable route modules, such as
+`export { load as GET } from "../body.server.js"`. Wildcard `export *` cannot
+prove which exports belong to the server and is rejected there. Direct `eval`
+in retained browser code is also rejected when separating server declarations:
+use explicit references, or move server-only evaluation into a handler's
+`.server.*` helper. These restrictions do not apply to Worker-only modules.
 
 For now, keep `.server.*` modules **outside** `src/routes/` (import them from a
 `src/lib/` or similar) — a `.server.*` file placed under `src/routes/` is treated

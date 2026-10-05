@@ -88,6 +88,20 @@ no valid export, misconfigured middleware — surface at build or startup, loudl
 where they belong. The request boundary is for failures that happen while
 *serving* a request, not for a broken build.
 
+## Browser module errors in development
+
+Development documents load Vite's error overlay independently of the application
+entry. If a page import fails, the overlay shows the original module error and
+importer, including Goribu's server-only boundary diagnostic. With Vite's overlay
+disabled, Vite reports that diagnostic in the browser console instead. The page
+loader names the failed route and points to the development diagnostic; it keeps
+the original import exception as its cause. Fix the import and Vite can reload
+the page without restarting `goribu dev`.
+
+Production documents do not include the development client or expose dev-server
+diagnostics. A production page-chunk load failure retains the instruction to
+check that the matching build's generated chunks are available.
+
 ## Verifying both boundaries
 
 Because the deployed Worker always runs in production mode, you confirm each half

@@ -24,6 +24,21 @@ function CustomDocument({ children }) {
 }
 
 describe("renderPage hydration data", () => {
+  it("starts the Vite overlay independently of app imports only in development, with base and nonce", async () => {
+    for (const mode of ["development", "production"]) {
+      const response = await renderPage({
+        Page: () => h("h1", null, "Page"), Document: CustomDocument,
+        routeId: "src/routes/index.jsx", mode, clientAssetBase: "/app/", nonce: "test-nonce",
+      });
+      const html = await response.text();
+      const script = '<script type="module" src="/app/@vite/client" nonce="test-nonce"></script>';
+      if (mode === "development") {
+        expect(html).toContain(script);
+        expect(html.indexOf(script)).toBeLessThan(html.indexOf('src="/src/setup/client-entry.js"'));
+      } else expect(html).not.toContain("/@vite/client");
+    }
+  });
+
   it("streams a custom Document with escaped inert data and its module entry", async () => {
     const props = {
       title: "Hydrated",

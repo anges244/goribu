@@ -1,7 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadClientPage } from "../src/browser/load-client-page.js";
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("loadClientPage", () => {
+  it("gives mode-specific recovery advice without losing the original import failure", async () => {
+    const cause = new TypeError("Failed to fetch dynamically imported module");
+    for (const development of [true, false]) {
+      vi.stubEnv("DEV", development);
+      const error = await loadClientPage({
+        routeId: "src/routes/index.jsx",
+        pageLoaders: { "src/routes/index.jsx": async () => { throw cause; } },
+      }).catch((error) => error);
+      expect(error.cause).toBe(cause);
+      expect(error.message).toContain(development ? "development overlay" : "generated page chunk");
+      if (development) expect(error.message).not.toContain("current client build");
+    }
+  });
+
   it("loads only the page keyed by the canonical route ID", async () => {
     function Page() {}
     const selected = vi.fn(async () => ({ default: Page }));

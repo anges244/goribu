@@ -32,6 +32,14 @@ export function ClientEntry(props) {
   }
 
   const children = [];
+  // Worker-rendered HTML does not pass through Vite's transformIndexHtml.
+  // Start its error overlay/HMR connection independently of application imports,
+  // which may fail before CSS or import.meta.hot can load the Vite client.
+  if (renderData?.developmentClientHref) {
+    children.push(h("script", {
+      key: "dev-client", type: "module", src: renderData.developmentClientHref, nonce,
+    }));
+  }
   if (resolved !== null) {
     for (const href of resolved.modulePreloads) {
       children.push(

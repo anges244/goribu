@@ -33,6 +33,7 @@ export default function Page() { return <h1>Source map check</h1>; }
       if (!file.isFile()) continue;
       const source = readFileSync(join(file.parentPath, file.name), "utf8");
       expect(source).not.toContain(marker);
+      expect(source).not.toContain("NESTED_SERVER_SOURCE_MUST_NOT_REACH_BROWSER");
       if (file.name.endsWith(".map")) {
         const map = JSON.parse(source);
         if (map.sources.some((path) => path.endsWith("/source-check.jsx"))) routeMap = map;

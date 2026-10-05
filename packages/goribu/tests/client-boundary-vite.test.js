@@ -57,7 +57,7 @@ describe("Vite client server-only boundary", () => {
     });
 
     await expect(buildClient(root, "src/setup/client-entry.js")).rejects.toThrow(
-      /\[Goribu\].*database\.server\.js.*reached client code.*browser\.js.*Move the import into a route handler/s,
+      /\[Goribu\].*database\.server\.js.*reached client code.*browser\.js.*Keep server dependencies in handler-only code/s,
     );
   });
 
@@ -85,7 +85,7 @@ describe("Vite client server-only boundary", () => {
     );
   });
 
-  it("audits a used route import through a symlinked project root", async () => {
+  it("rejects a used route import through a symlinked project root", async () => {
     const root = makeProject(
       {
         "src/routes/index.js":
@@ -97,7 +97,7 @@ describe("Vite client server-only boundary", () => {
     );
 
     await expect(buildClient(root, "src/routes/index.js")).rejects.toThrow(
-      /\[Goribu\].*handler\.server\.js.*reached client code.*generated client bundle/s,
+      /\[Goribu\].*handler\.server\.js.*reached client code.*routes\/index\.js/s,
     );
   });
 
@@ -148,6 +148,76 @@ describe("virtual client-route module ID", () => {
 });
 
 describe("Vite client route boundary", () => {
+  it("keeps rejecting leaks through ignored helpers and explains bare server imports", async () => {
+    const root = makeProject({
+      "src/routes/index.js": 'import { GET } from "./_lib/api.js"; export default () => GET();',
+      "src/routes/_lib/api.js": 'import { secret } from "../../instrument.server.js"; export function GET() { return secret; }',
+      "src/instrument.server.js": 'export const secret = "SERVER_SECRET";',
+    });
+    await expect(buildClient(root, createClientRouteModuleId(join(root, "src/routes/index.js")))).rejects.toThrow(
+      /instrument\.server\.js.*reached client code.*_lib\/api\.js/s,
+    );
+    writeFileSync(join(root, "src/routes/index.js"), 'import "../instrument.server.js"; export default function Page() { return null; }');
+    await expect(buildClient(root, createClientRouteModuleId(join(root, "src/routes/index.js")))).rejects.toThrow(
+      /For a bare side-effect import, move it into a \.server helper used only by a handler/,
+    );
+  });
+
+  it.each([
+    {
+      name: "reserved-name exports in ignored helper files",
+      files: {
+        "src/routes/index.js": 'import { GET, meta, uploads, prerender } from "./nested/_lib/api.js"; import { POST } from "./_helper.js"; export default () => GET() + meta + uploads + prerender + POST();',
+        "src/routes/nested/_lib/api.js": 'export function GET() { return "HELPER_GET"; } export const meta = "HELPER_META", uploads = "HELPER_UPLOADS", prerender = "HELPER_PRERENDER";',
+        "src/routes/_helper.js": 'export function POST() { return "HELPER_POST"; }',
+      },
+      markers: ["HELPER_GET", "HELPER_META", "HELPER_UPLOADS", "HELPER_PRERENDER", "HELPER_POST"],
+    },
+    {
+      name: "barrels in ignored component folders",
+      files: {
+        "src/routes/index.js": 'import { Button } from "./_components/index.js"; export default Button;',
+        "src/routes/_components/index.js": 'export * from "./Button.jsx";',
+        "src/routes/_components/Button.jsx": 'export function Button() { return "HELPER_BUTTON"; }',
+      },
+      markers: ["HELPER_BUTTON"],
+    },
+  ])("preserves $name through a real client build", async ({ files, markers }) => {
+    const root = makeProject(files, { symlinked: true });
+    const chunks = await buildClient(root, createClientRouteModuleId(join(root, "src/routes/index.js")));
+    const source = chunks.map((chunk) => chunk.code).join("\n");
+    for (const marker of markers) expect(source).toContain(marker);
+  });
+
+  it("still separates server metadata in top-level error pages", async () => {
+    for (const page of ["_404", "_500"]) {
+      const root = makeProject({
+        [`src/routes/${page}.jsx`]: 'import { title } from "../metadata.server.js"; export const meta = () => ({ title }); export default function Page() { return "ERROR_PAGE"; }',
+        "src/metadata.server.js": 'export const title = "SERVER_METADATA";',
+      });
+      const chunks = await buildClient(root, createClientRouteModuleId(join(root, `src/routes/${page}.jsx`)));
+      const source = chunks.map((chunk) => chunk.code).join("\n");
+      expect(source).toContain("ERROR_PAGE");
+      expect(source).not.toContain("SERVER_METADATA");
+    }
+  });
+
+  it("never resolves nested server helpers or server-only initializer calls in the browser build", async () => {
+    const root = makeProject({
+      "src/routes/index.js": `
+        import { body, policy } from "../body.server.js";
+        export function GET(req, res) { return res.render(body()); }
+        export const uploads = policy();
+        export default function Page() { return "CLIENT_PAGE"; }
+      `,
+      "src/body.server.js": 'import { image } from "./images.server.js"; export function body() { return image; } export function policy() { return {}; }',
+      "src/images.server.js": 'throw new Error("SERVER_MODULE_EXECUTED"); export const image = "SERVER_SECRET";',
+    });
+    const chunks = await buildClient(root, createClientRouteModuleId(join(root, "src/routes/index.js")));
+    expect(chunks.map((chunk) => chunk.code).join("\n")).toContain("CLIENT_PAGE");
+    expect(chunks.flatMap((chunk) => Object.keys(chunk.modules)).some((id) => id.includes(".server."))).toBe(false);
+  });
+
   it("exposes only the page default, stripping named handlers and their server deps", async () => {
     const root = makeProject({
       "src/routes/index.js":

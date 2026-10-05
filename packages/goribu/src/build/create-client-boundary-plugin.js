@@ -1,5 +1,8 @@
 import { realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { ERROR_PAGE_KINDS } from "../routing/scan-error-pages.js";
+import { isRouteFile } from "../routing/scan-routes.js";
+import { transformClientRoute } from "./transform-client-route.js";
 
 const CLIENT_ROUTE_PREFIX = "virtual:goribu/client-route:";
 const RESOLVED_CLIENT_ROUTE_PREFIX = `\0${CLIENT_ROUTE_PREFIX}`;
@@ -50,11 +53,9 @@ export function routeFilePathFromClientModuleId(moduleId) {
 /**
  * Keep server-only modules out of Goribu's browser bundle.
  *
- * Virtual route entries expose only the route's default page export, so named
- * handlers are not retained as client entry exports. `.server.*` imports resolved
- * from route modules are marked side-effect-free so Rollup can remove handler-only
- * dependencies. Browser-reachable non-route imports fail immediately, and the
- * final bundle audit fails closed if a server-only module survives tree-shaking.
+ * Route transforms remove server exports and their exclusive dependencies in
+ * both dev and build. Any remaining server import is browser-reachable and fails
+ * immediately. The final bundle audit also checks modules introduced by plugins.
  *
  * @param {{ routesDir: string }} options
  * @returns {import("vite").Plugin}
@@ -78,17 +79,21 @@ export function createClientBoundaryPlugin(options) {
       });
       if (
         resolved === null ||
-        resolved.external === true ||
         !isServerModule(resolved.id)
       ) {
         return null;
       }
 
-      if (isWithinDirectory(routesDir, importer)) {
-        return { ...resolved, moduleSideEffects: false };
-      }
-
       throw createServerLeakError(resolved.id, importer);
+    },
+
+    transform(source, id) {
+      if (this.environment?.name !== "client") return null;
+      const filePath = id.replace(/[?#].*$/, "");
+      if (!isClientRouteFile(routesDir, filePath)) return null;
+      // Asset queries deliberately request source bytes, not a route module.
+      if (/[?&](?:raw|url)(?:[=&]|$)/.test(id)) return null;
+      return transformClientRoute(source, filePath);
     },
 
     load(id) {
@@ -108,8 +113,8 @@ export function createClientBoundaryPlugin(options) {
 
     outputOptions(options) {
       if (this.environment?.name !== "client") return null;
-      // Tree-shaking removes handlers and upload key functions from executable
-      // chunks, but source maps otherwise republish the original route module.
+      // The route transform removes server declarations from executable chunks,
+      // but other transforms' source maps may still embed original route source.
       // Keep mappings for local debugging without embedding server source text.
       return { ...options, sourcemapExcludeSources: true };
     },
@@ -161,6 +166,15 @@ function isServerModule(moduleId) {
   return SERVER_MODULE_PATTERN.test(moduleId);
 }
 
+function isClientRouteFile(routesDir, filePath) {
+  if (!isWithinDirectory(routesDir, filePath) || !isRouteFile(filePath)) return false;
+  const parts = relative(routesDir, realpathOrFallback(resolve(filePath))).split(sep);
+  // Match scanRoutes' reserved-segment rule. Only scanErrorPages' root pages
+  // are exceptions; helpers and barrels under _ folders are ordinary JS.
+  if (parts.length === 1 && ERROR_PAGE_KINDS.has(basename(filePath, extname(filePath)))) return true;
+  return parts.every((part) => !part.startsWith("_"));
+}
+
 function isWithinDirectory(directory, candidate) {
   if (typeof candidate !== "string" || candidate.startsWith("\0")) return false;
 
@@ -193,6 +207,6 @@ function createServerLeakError(moduleId, importer) {
       : "";
 
   return new Error(
-    `[Goribu] Server-only module ${JSON.stringify(cleanModuleId)} reached client code.${importedBy} Files named *.server.{js,jsx,mjs,cjs,ts,tsx,mts,cts} may be imported by route handlers, but page components and their browser dependencies must use client-safe modules. Move the import into a route handler or split the browser-safe code into a separate module.`,
+    `[Goribu] Server-only module ${JSON.stringify(cleanModuleId)} reached client code.${importedBy} Files named *.server.{js,jsx,mjs,cjs,ts,tsx,mts,cts} may be imported by route handlers, but page components and their browser dependencies must use client-safe modules. Keep server dependencies in handler-only code or split the browser-safe code into a separate module. For a bare side-effect import, move it into a .server helper used only by a handler.`,
   );
 }
