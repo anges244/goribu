@@ -11,7 +11,8 @@ export async function provisionR2(options) {
   const client = createR2ManagementClient({ access, fetch: options.fetch });
   const plan = await inspectR2({ projectRoot, appConfig, client, access, appDomain: options.appDomain, listSecrets: options.listSecrets, requireUploads: true });
   stdout.write(formatR2Plan(plan));
-  assertR2PlanSafe(plan);
+  // The plan just printed each Blocked reason; point at it rather than repeat it.
+  if (plan.errors.length) throw new Error("[Goribu] R2 cannot proceed. Resolve the Blocked items above, then rerun `goribu deploy`. No Cloudflare resources were changed.");
   for (const bucket of plan.buckets) {
     if (bucket.state === "existing") continue;
     await client.createBucket(bucket.name, bucket.jurisdiction);

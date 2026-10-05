@@ -158,16 +158,20 @@ describe("R2 bucket planning and provisioning", () => {
     const remote = cloudflare({ buckets: [{ name: "app-files", jurisdiction: "eu",
       ...(custom ? { domains: [{ domain: "media.example.com", enabled: true }] } : { devUrlEnabled: true }) }] });
     const { options, check, output } = setup(appConfig, remote);
-    await expect(check()).rejects.toThrow(custom
+    // A blocked check is a plan result that states each reason once, not a thrown failure.
+    const repair = custom
       ? "wrangler r2 bucket domain remove app-files --domain media.example.com -J eu"
-      : "wrangler r2 bucket dev-url disable app-files -J eu");
+      : "wrangler r2 bucket dev-url disable app-files -J eu";
+    expect((await check()).r2.errors.join(" ")).toContain(repair);
+    expect(output().split(repair)).toHaveLength(2);
     expect(output()).toContain("Blocked: Private bucket app-files (eu) has public");
+    expect(output()).toContain("Blocked: `goribu deploy` will not proceed until the Blocked items above are resolved.");
     expect(output()).toContain("No changes were made.");
     const later = { provision: vi.fn(), provisionKV: vi.fn(), migrate: vi.fn(), deploy: vi.fn() };
     await expect(runDeploy({ ...options, ...later, loadConfig: async () => appConfig,
       build: async () => {}, finalizeR2Account() {},
       provisionR2: (input) => provisionR2({ ...input, fetch: remote.fetch }),
-    })).rejects.toThrow("[Goribu] R2 cannot proceed.");
+    })).rejects.toThrow("[Goribu] R2 cannot proceed. Resolve the Blocked items above, then rerun `goribu deploy`.");
     for (const fn of Object.values(later)) expect(fn).not.toHaveBeenCalled();
     expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
     // Even a missing first bucket must not be created before inspecting the second.
@@ -443,7 +447,8 @@ describe("R2 bucket planning and provisioning", () => {
     options.listSecrets = vi.fn(async () => reason === "keys" ? ["R2_ACCESS_KEY_ID"] : ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]);
     writeUploadBuild(options.projectRoot, appConfig, { file: { accept: ["application/pdf"], maxBytes: 10, private: false, direct: true } });
     writeFileSync(join(options.projectRoot, ".env.production"), "R2_ACCESS_KEY_ID=test-only\nR2_SECRET_ACCESS_KEY=not-a-real-secret\n");
-    await expect(check()).rejects.toThrow(reason === "origins" ? "account has no workers.dev subdomain" : "R2 direct uploads need Worker secrets");
+    if (reason === "origins") await expect(check()).rejects.toThrow("account has no workers.dev subdomain");
+    else expect((await check()).r2.errors.join(" ")).toContain("R2 direct uploads need Worker secrets");
     const later = { provision: vi.fn(), provisionKV: vi.fn(), migrate: vi.fn(), deploy: vi.fn(), ensureR2SigningSecret: vi.fn() };
     await expect(runDeploy({ ...options, ...later, loadConfig: async () => appConfig, build: async () => {},
       finalizeR2Account() {}, validateSecrets() {},

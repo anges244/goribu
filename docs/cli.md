@@ -220,9 +220,11 @@ Other connected app domains are listed as information and remain attached.
 
 For the unreleased [R2 feature](./r2.md), check also reports bucket creation,
 bindings, domain connection, signing-secret existence, jurisdiction changes,
-and continued public access. Public `r2.dev`
-access or an enabled custom domain on a private bucket makes the check fail
-without changing anything.
+and continued public access. Problems that would stop deploy, such as public
+`r2.dev` access or an enabled custom domain on a private bucket, or missing
+direct-upload secrets, appear once in the plan as `Blocked:` items with their
+repair. The check then exits non-zero without changing anything; it is a plan
+result, not a crash.
 
 ```sh
 goribu check
@@ -256,3 +258,8 @@ migration should land before the corresponding Worker deploy.
 
 Every command exits non-zero on failure. A deploy that is interrupted or killed
 by a signal is reported as a failure, never as a successful deploy.
+
+A failure Goribu recognizes prints its `[Goribu]` message, which says how to
+repair it, followed by a `Caused by:` line for any underlying reason the message
+does not already state. It prints no stack trace. Any other error is unexpected
+and prints in full, with its stack.

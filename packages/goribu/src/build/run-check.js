@@ -9,7 +9,7 @@ import { readAppliedMigrations } from "./migrations/inspect-applied.js";
 import { planMigrations } from "./migrations/plan-migrations.js";
 import { executeD1 } from "./migrations/wrangler-d1.js";
 import { findDeclaredKVNamespace, listRemoteKVNamespaces } from "./inspect-kv.js";
-import { assertR2PlanSafe, formatR2Plan, inspectR2 } from "./inspect-r2.js";
+import { formatR2Plan, inspectR2 } from "./inspect-r2.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 import { BUILD_OUTPUT_DIRECTORY } from "./build-output.js";
 import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
@@ -75,8 +75,9 @@ export async function runCheck(options) {
   const secretsFile = findProductionSecretsFile(projectRoot);
   const plan = createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, r2, appDomain, migrations, appliedRows, secretsFile });
 
+  // A blocked plan is a result, not a failure: the plan lists each reason once and
+  // the CLI turns it into a non-zero exit.
   stdout.write(formatCheckPlan(plan));
-  assertR2PlanSafe(plan.r2);
   return plan;
 }
 
@@ -345,6 +346,9 @@ export function formatCheckPlan(plan) {
       ? ["  none"]
       : plan.costWarnings.map((warning) => `  - ${warning}`)),
     "",
+    ...(plan.r2?.errors.length
+      ? ["Blocked: `goribu deploy` will not proceed until the Blocked items above are resolved.", ""]
+      : []),
     "No changes were made.",
   ];
 

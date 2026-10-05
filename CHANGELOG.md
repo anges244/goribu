@@ -36,6 +36,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   page request. Previously, after a dependency install or cache reset, opening a
   page could discover packages such as editors late, briefly fail with two React
   copies ("Invalid hook call"), and reload the browser.
+- CLI failures that Goribu recognizes print their repair message and underlying
+  causes without stack traces. A blocked `goribu check` lists each reason once
+  and exits non-zero. A blocked R2 deploy points to the plan it printed instead
+  of repeating it.
 
 ## [0.9.1] - 2026-10-05
 

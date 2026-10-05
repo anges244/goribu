@@ -87,7 +87,7 @@ async function runDev() {
     // Vite drops a server whose setup threw without closing it, and it may
     // already hold a watcher and a Worker runtime. Report before ending the
     // session, because ending it may take the process with it.
-    console.error(error);
+    fail(error);
     await endFailedSession();
     return;
   }
@@ -119,6 +119,29 @@ async function runDeploy() {
   if (exitCode !== 0) {
     process.exitCode = exitCode;
   }
+}
+
+// A `[Goribu]` error is an expected failure whose message already says how to
+// repair it, so it prints as that message plus the reasons it wraps, without
+// stacks of framework or Node internals. An unexpected error prints in full,
+// because its stack is how it gets fixed.
+function fail(error) {
+  process.exitCode = 1;
+  if (!isGoribuError(error)) {
+    console.error(error);
+    return;
+  }
+  const lines = [error.message];
+  for (let cause = error.cause; cause !== undefined && cause !== null; cause = cause.cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (lines.some((line) => line.includes(message))) continue;
+    lines.push(`Caused by: ${isGoribuError(cause) ? message : String(cause)}`);
+  }
+  console.error(lines.join("\n"));
+}
+
+function isGoribuError(error) {
+  return error instanceof Error && error.message.startsWith("[Goribu]");
 }
 
 function assertNoArguments(command, rest) {
@@ -194,37 +217,27 @@ function main(argv) {
 
   if (command === "dev") {
     if (!assertNoArguments("dev", rest)) return;
-    runDev().catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    runDev().catch(fail);
     return;
   }
 
   if (command === "build") {
     if (!assertNoArguments("build", rest)) return;
-    runBuild().catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    runBuild().catch(fail);
     return;
   }
 
   if (command === "check") {
     if (!assertNoArguments("check", rest)) return;
-    runCheck({ projectRoot: process.cwd() }).catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    runCheck({ projectRoot: process.cwd() }).then((plan) => {
+      if (plan.r2?.errors.length) process.exitCode = 1;
+    }).catch(fail);
     return;
   }
 
   if (command === "deploy") {
     if (!assertNoArguments("deploy", rest)) return;
-    runDeploy().catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    runDeploy().catch(fail);
     return;
   }
 
@@ -232,10 +245,7 @@ function main(argv) {
     if (!assertNoArguments("tail", rest)) return;
     runTail({ projectRoot: process.cwd() }).then((code) => {
       process.exitCode = code;
-    }).catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    }).catch(fail);
     return;
   }
 
@@ -243,10 +253,7 @@ function main(argv) {
     if (!assertNoArguments("cloudflare-login", rest)) return;
     runCloudflareLogin({ projectRoot: process.cwd() }).then((code) => {
       process.exitCode = code;
-    }).catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    }).catch(fail);
     return;
   }
 
@@ -259,20 +266,14 @@ function main(argv) {
         : command === "migrate:down"
           ? runMigrateDown
           : runMigrateStatus;
-    run({ projectRoot: process.cwd(), target }).catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    run({ projectRoot: process.cwd(), target }).catch(fail);
     return;
   }
 
   if (command === "migrate:seed") {
     const target = resolveSeedTarget(rest);
     if (target === null) return;
-    runMigrateSeed({ projectRoot: process.cwd(), target }).catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    runMigrateSeed({ projectRoot: process.cwd(), target }).catch(fail);
     return;
   }
 
@@ -288,8 +289,7 @@ function main(argv) {
     try {
       runMigrateNew({ projectRoot: process.cwd(), name });
     } catch (error) {
-      console.error(error);
-      process.exitCode = 1;
+      fail(error);
     }
     return;
   }

@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -71,6 +74,22 @@ describe("goribu CLI", () => {
     const { status, stderr } = runCli(["tail"]);
     expect(status).toBe(1);
     expect(stderr).toMatch(/\[Goribu\].*goribu\.config\.js.*is missing/);
+    // An expected failure says how to repair it and why; stacks would only add noise.
+    expect(stderr).toMatch(/^Caused by: Error: ENOENT: no such file or directory/m);
+    expect(stderr).not.toMatch(/^\s+at /m);
+  });
+
+  it("does not repeat a cause the Goribu error message already states", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goribu-cli-"));
+    try {
+      writeFileSync(join(projectRoot, "goribu.config.js"), 'throw new Error("config exploded");\n');
+      const preload = `process.chdir(${JSON.stringify(projectRoot)});`;
+      const { status, stderr } = runCli(["migrate:status"], ["--import", `data:text/javascript,${encodeURIComponent(preload)}`]);
+      expect(status).toBe(1);
+      expect(stderr).toMatch(/^\[Goribu\] Could not load .*goribu\.config\.js.*config exploded\n$/);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it("dispatches tail for the configured production Worker and forwards its exit status", () => {
