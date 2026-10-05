@@ -86,14 +86,15 @@ production. Routes use `req.d1` and `req.kv` in handlers, never in page componen
 
 D1 schema belongs in numbered migrations. From the app directory, scaffold one
 with `pnpm exec goribu migrate:new create notes`, edit its SQL, then apply it
-locally with `pnpm exec goribu migrate`. Deploy applies pending production
+locally with `pnpm exec goribu migrate`. Inspect local data with
+`pnpm exec goribu d1 "SELECT * FROM notes"`. Deploy applies pending production
 migrations before uploading the Worker. Keep schema changes compatible with the
 previously deployed code; deployment and migrations are not one transaction.
 
 KV is eventually consistent. Do not use an immediate reread to confirm a write
 or make correctness-sensitive decisions. See the site's
 [D1](https://goribu.dev/docs/d1),
-[migrations](https://goribu.dev/docs/migrations), and
+[migrations](https://goribu.dev/docs/d1#migrations), and
 [KV](https://goribu.dev/docs/kv) guides.
 
 ## Deploy deliberately

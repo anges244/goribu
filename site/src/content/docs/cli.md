@@ -144,6 +144,18 @@ credentials itself. For non-interactive authentication, configure
 Login is explicit: `goribu deploy` checks credentials before building and asks
 you to repair authentication if needed.
 
+## `goribu wrangler`
+
+Run the Wrangler installed with Goribu, which is usually not on your PATH:
+
+```sh
+pnpm exec goribu wrangler r2 bucket list
+```
+
+Arguments go to Wrangler unchanged, with the account `goribu deploy` would use.
+Repair messages print their Wrangler commands in this form. `goribu wrangler
+deploy` is refused in favor of `goribu deploy`; `--dry-run` is allowed.
+
 ## `goribu deploy`
 
 Check Wrangler credentials and account selection before building, provision

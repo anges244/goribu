@@ -90,6 +90,21 @@ empty, non-HTTP, and non-browser calls fail with a `[Goribu]` repair message.
 Prefer `<Link>` for navigation users may open in another tab, copy, or reach
 without JavaScript.
 
+### Refresh after a mutation
+
+After changing data with your own `fetch` call, navigate to the current URL to
+run the page's GET handler and `meta` again with the new data:
+
+```js
+await fetch(`/posts/${id}/like`, { method: "POST" });
+await navigate(location.href);
+```
+
+On a Worker-rendered page this fetches fresh route data and updates the page in
+place: component state is kept, and no history entry is added, so `replace` is
+not needed. A prerendered page has fixed build-time data, so this only scrolls to
+the top. A `<Form>` does not need this; its result already updates the page.
+
 ## Page state across navigation
 
 Navigating to a different path starts the page fresh, as a document load

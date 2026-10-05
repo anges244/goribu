@@ -2,10 +2,37 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare `0.9.1`, adding immutable signed R2 links for browser caching;
+prepare `0.9.2`, adding `goribu d1`, `goribu wrangler`, `res.stream`, `req.url`,
+`AppRequestFields`, `workersDev: false`, and development and boundary fixes;
 substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.9.1 to 0.9.2
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.9.2`, then rebuild and deploy. New APIs and
+commands are opt-in. Check these changes before rebuilding:
+
+- Browser-reachable route files reject `export *`, bare side-effect imports of
+  `.server.*` modules, and direct `eval`. Use explicit named re-exports and move
+  side-effect imports into a `.server.*` helper used only by a handler. See
+  [server-only modules](handlers.md#server-only-modules-server).
+- Client navigation to a different path now remounts the page, even within the
+  same route. Remove `key` workarounds added to reset state between entries. See
+  [page state across navigation](navigation.md#page-state-across-navigation).
+- Deploys turn off Cloudflare's per-version preview URLs. An existing Worker may
+  print a one-time Wrangler warning on the next deploy.
+- Builds no longer copy local `.env`, `.env.local`, or `.dev.vars` values into
+  `.goribu/dist/<worker>/.dev.vars`.
+- Static pages rendered by the Worker now receive the nonce from a
+  `responseHeaders` CSP. Prerendered HTML still has none; see
+  [inline scripts and prerendered pages](metadata.md#inline-scripts-and-prerendered-pages).
+- R2 direct-upload keys no longer need setup before deploying: run
+  `pnpm run deploy` from a terminal and it asks for missing keys.
+
+Repair commands now print as `pnpm exec goribu wrangler …`, because Wrangler is
+not on the app's PATH.
 
 ## Upgrading apps from 0.9.0 to 0.9.1
 
@@ -98,6 +125,10 @@ fixes and minor increments for features or breaking changes, recording breaking
 changes explicitly in the changelog. Reaching `1.0.0` is a separate decision
 about API stability.
 
+At the maintainer's request, `0.9.2` uses a patch increment although it adds
+features and the route-module restrictions and page remount listed in its
+upgrade notes and changelog.
+
 At the maintainer's request, `0.9.1` treats the opt-in immutable signed-link
 addition as a compatible caching fix and uses a patch increment.
 
@@ -144,7 +175,7 @@ or deploys the site.
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.9.1
+pnpm release prepare 0.9.2
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -160,7 +191,7 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.1
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.2
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
@@ -179,8 +210,8 @@ framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.9.1.tgz`
-- `create-goribu-0.9.1.tgz`
+- `goribu-0.9.2.tgz`
+- `create-goribu-0.9.2.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -207,7 +238,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.9.1
+pnpm release publish ../goribu-release-0.9.2
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command

@@ -37,6 +37,8 @@ Run these from the generated app directory:
 | `pnpm check` | Inspect the production resource and migration plan read-only. |
 | `pnpm exec goribu cloudflare-login` | Log in to Cloudflare through Wrangler. |
 | `pnpm exec goribu tail` | Stream live production Worker logs. |
+| `pnpm exec goribu d1 "<sql>"` | Run SQL against local D1; `--remote` reads production. |
+| `pnpm exec goribu wrangler <args>` | Run Goribu's Wrangler with the deploy account. |
 | `pnpm run deploy` | Check credentials, build, provision resources, apply migrations, and deploy. |
 
 Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.
@@ -54,7 +56,7 @@ Interactive forms and client navigation require JavaScript. Static output means
 document loads, client navigation, and prefetch use Static Assets without
 invoking the Worker; the page can still hydrate and be interactive.
 
-[Documentation](https://goribu.dev/docs/introduction)
+[Documentation](https://goribu.dev/docs)
 · [Source](https://github.com/anges244/goribu)
 
 MIT licensed. Copyright (c) 2026 Aggelos Gesoulis.

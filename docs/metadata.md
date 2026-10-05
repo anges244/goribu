@@ -60,6 +60,20 @@ form render receives the verified Referer URL, including its query. `_404`
 receives the missing URL and its props. Production `_500` receives the safe
 `{ url, errorId }` props, while its metadata URL omits query and hash.
 
+`res.notFound(props)` renders `_404` with that page's own `meta`, not the route's.
+The same `_404` also renders unmatched URLs, where its props are `{}`, so a
+`meta` function there must handle missing fields:
+
+```jsx
+// src/routes/_404.jsx
+export function meta({ props }) {
+  return {
+    title: props.post ? `${props.post.title} was removed` : "Page not found",
+    robots: "noindex",
+  };
+}
+```
+
 ### Supported fields
 
 | Field | Element |

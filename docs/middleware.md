@@ -144,6 +144,14 @@ Middleware runs for a **matched** route — a page or a handler. It does not run
 the framework's own mechanical answers: the `_404` for an unmatched URL, an
 automatic `OPTIONS`, or a `405`. Those aren't a route's request to intercept.
 
+It also does not run for Goribu's file endpoints under `/_goribu/`: signed R2
+downloads at `/_goribu/r2/file` and, in development, public R2 files. A signed
+link is a bearer token, so authorize in the handler **before** you create it
+(see [r2.md](./r2.md#signed-downloads)). Two framework requests do run app
+middleware, for the route they target: client navigation to a route, and the
+start of an R2 upload, which runs the action route's middleware before any bytes
+are transferred, so the same authorization protects the upload.
+
 ## See also
 
 - [handlers.md](./handlers.md) — the `req`/`res` surface middleware shares with a

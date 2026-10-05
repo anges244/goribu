@@ -102,6 +102,13 @@ exact-current-URL navigation), preserves application fields in
 `history.state`, restores scroll on back/forward, and scrolls new routes to a
 fragment or the top. Same-document hash links remain native.
 
+Navigating to a different path starts the page fresh, as a document load would:
+going from `/e/a` to `/e/b` remounts the `src/routes/e/[id]` page, so state
+seeded from props belongs to the entry it was created for. Navigation that keeps
+the path, such as a query change, revisiting the current URL, or an in-place Form
+render, updates the page in place and keeps its component state. Keep state that
+must survive a path change in the URL or browser storage.
+
 Page transitions apply scrolling after React commits the destination and
 finishes synchronous layout updates, before the browser paints it. The new page
 does not briefly appear at the previous page's scroll position. In-place Form

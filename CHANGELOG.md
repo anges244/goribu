@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-05
+
 ### Added
 
 - `goribu d1 "<sql>"` runs SQL against local D1, the same database

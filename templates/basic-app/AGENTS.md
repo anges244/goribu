@@ -26,8 +26,10 @@ add routes and dependencies only for actual application needs.
 - Routes live in `src/routes/`: `index.tsx` maps to `/`, `[id].tsx` to one dynamic
   segment. A default page without a handler has an implicit GET.
 - Named handlers receive `(req, res)`. Return `res.render(props)` for the same
-  route's page, or `res.json`, `res.text`, `res.redirect`, or `res.notFound`.
-  Read input through `req.params`, `req.query`, and `await req.body()`.
+  route's page, or `res.json`, `res.text`, `res.stream` (binary or streamed
+  bytes), `res.redirect`, or `res.notFound`. Read input through `req.params`,
+  `req.query`, and `await req.body()`; `req.url` is the absolute request URL.
+  Middleware passes data on by attaching it to `req`, such as `req.user`.
   Form bodies are objects: uploads are `File` values and repeated fields are
   arrays. Validate field values; do not branch on `FormData`.
 - Put server-only helpers outside the routes directory in `.server.ts` files.
@@ -48,11 +50,18 @@ add routes and dependencies only for actual application needs.
   a page component and target it with `<Form action="/action-path">`. Adding a
   mutation handler to the page makes that route dynamic; forcing
   `prerender = true` is invalid.
+- A page with no HTTP handler and no middleware is prerendered. Any HTTP
+  handler, including `GET`, or middleware keeps it on the Worker for every
+  request, so request-dependent pages need no extra setting. `prerender = false`
+  keeps an otherwise static page on the Worker; `prerender = true` opts a `GET`
+  page into build-time rendering.
 - In production, prerendered pages use Static Assets for document loads, client
   navigation, and prefetch. Their props and metadata stay fixed at build time,
-  including explicitly prerendered GET handlers; query changes do not rerun
-  them. Use `prerender = false` for request-dependent output. Development uses
-  the Worker.
+  and query changes do not rerun them. Development uses the Worker.
+- After a `fetch` mutation, `await navigate(location.href)` reruns the current
+  page's GET handler and updates it in place.
+- `import.meta.env.DEV` works in server code and is compiled out of production
+  builds; use it to guard development-only routes.
 - For Form mutations, prefer `res.json(data)` for an in-place result,
   `res.invalid(errors)` for field errors, or `res.redirect(url)` for navigation.
   Use `res.render(props)` only for intentional rendering of the handler's own
@@ -79,7 +88,9 @@ add routes and dependencies only for actual application needs.
 <!-- typescript-only:start -->
 Run `pnpm typecheck` as well as `pnpm build`. Use type-only imports for
 `Handler` and `Middleware` from `goribu/server`, and `DocumentProps` and `Meta`
-from `goribu`. Validate request bodies at runtime before accessing their fields.
+from `goribu`. Declare fields middleware attaches to `req` by augmenting
+`AppRequestFields` in `goribu/server`. Validate request bodies at runtime before
+accessing their fields.
 
 <!-- typescript-only:end -->
 
@@ -87,6 +98,10 @@ from `goribu`. Validate request bodies at runtime before accessing their fields.
   Use request-scoped `req.d1` and `req.kv` in server handlers.
 - Use migrations for D1 schema and compatible expand/contract changes for live
   apps. Never imply a schema migration and Worker deployment are atomic.
+- Inspect local D1 with `pnpm exec goribu d1 "SELECT …"`. Use `--remote` only
+  to read production; change production data with a migration.
+- Run Wrangler commands as `pnpm exec goribu wrangler <args>`; Wrangler is not on
+  this app's PATH.
 - KV is eventually consistent, including cached misses. Use D1 when correctness
   requires fresh reads; never promise KV read-your-writes.
 - Test the actual affected behavior. Before handing off, run the relevant checks

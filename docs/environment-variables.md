@@ -114,6 +114,25 @@ copy before the output is written, so these values are never uploaded. Goribu's
 generated `.goribu/dev-secret` is used only during serve and is excluded from
 build output.
 
+## Development and production checks
+
+Vite's `import.meta.env.DEV`, `import.meta.env.PROD`, and `import.meta.env.MODE`
+work in handlers and server modules as well as in browser code. Vite replaces
+them with constants, so a production build drops code that only runs when
+`import.meta.env.DEV` is true. Use this for development-only routes, such as a
+local sign-in shortcut:
+
+```js
+// src/routes/dev-login.js
+export async function POST(req, res) {
+  if (import.meta.env.DEV) {
+    req.cookies.set("session", await createDevSession(req), { path: "/", httpOnly: true });
+    return res.redirect("/");
+  }
+  return res.notFound();
+}
+```
+
 ## Migrating from the older env loader
 
 The older Goribu loader included `.env.development` and

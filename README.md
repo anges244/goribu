@@ -28,7 +28,7 @@ For JavaScript, use `pnpm create goribu@latest my-app --js` and skip
 not install dependencies or deploy. A Cloudflare account is needed for deployment,
 not local development.
 
-See the [documentation](https://goribu.dev/docs/introduction) for the published
+See the [documentation](https://goribu.dev/docs) for the published
 guides. This repository can contain changes ahead of npm; check the
 [changelog](CHANGELOG.md) and [upgrade notes](docs/releasing.md) when working
 from source.
