@@ -11,6 +11,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `goribu dev --port <number>` listens on that port for this run, and
+  `goribu dev --host` listens on every network interface so another device can
+  open the printed Network URL. A port named this way fails when it is occupied
+  instead of moving to the next free port. Both override `vite.config.js` and
+  stay in effect across restarts; `pnpm dev --port 5199` passes them through.
 - `goribu wrangler <args>` runs the Wrangler installed with Goribu in the app
   directory, with the account `goribu deploy` uses. Wrangler is not usually on
   the app's PATH, so repair messages now print `pnpm exec goribu wrangler …`

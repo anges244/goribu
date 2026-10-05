@@ -119,7 +119,8 @@ the `PUBLIC_` prefix; see [metadata.md](./metadata.md#public-browser-environment
 
 Install dependencies with your package manager, then use the CLI:
 
-- `goribu dev` — start the local development server.
+- `goribu dev` — start the local development server (`--port <number>` for a
+  fixed port, `--host` for local network access).
 - `goribu build` — produce the production bundles.
 - `goribu deploy` — deploy to Cloudflare.
 

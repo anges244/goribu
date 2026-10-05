@@ -21,7 +21,7 @@ import { runMigrateSeed } from "../src/build/migrations/run-migrate-seed.js";
 import { runMigrateStatus } from "../src/build/migrations/run-migrate-status.js";
 
 const COMMANDS = {
-  dev: "Start the local development server.",
+  dev: "Start the local development server: goribu dev [--port <number>] [--host].",
   build: "Produce the production Worker and client bundles.",
   check: "Preview production resources without changing them.",
   deploy: "Build, apply production migrations, and deploy to Cloudflare.",
@@ -79,12 +79,14 @@ async function runBuild() {
 
 // Start the local development server for the app in the current directory. Vite
 // serves the generated Worker through workerd (via the Cloudflare plugin) with
-// HMR; the server keeps the process alive until it is interrupted.
-async function runDev() {
+// HMR; the server keeps the process alive until it is interrupted. Command-line
+// server settings are Vite inline config, which overrides vite.config.js and is
+// reused by every restart of the session.
+async function runDev(serverOptions) {
   const { createServer } = await import("vite");
   let server;
   try {
-    server = await createServer({ root: process.cwd() });
+    server = await createServer({ root: process.cwd(), server: serverOptions });
   } catch (error) {
     // Vite drops a server whose setup threw without closing it, and it may
     // already hold a watcher and a Worker runtime. Report before ending the
@@ -104,7 +106,12 @@ async function runDev() {
     } catch {
       // Report why the server never started, not why the wreckage resisted.
     }
-    throw error;
+    if (serverOptions.port === undefined) throw error;
+    throw new Error(
+      `[Goribu] \`goribu dev --port ${serverOptions.port}\` could not listen on port ${serverOptions.port}. ` +
+        "If another program is using it, stop that program or choose another port.",
+      { cause: error },
+    );
   }
   server.printUrls();
 }
@@ -153,6 +160,50 @@ function assertNoArguments(command, rest) {
   );
   process.exitCode = 1;
   return false;
+}
+
+// Resolve per-run dev server settings. A port named on the command line is the
+// one this run listens on, so an occupied port fails instead of moving the URL.
+// `--host` listens on every network interface; a specific address and allowed
+// hostnames stay in vite.config.js.
+function resolveDevServerOptions(rest) {
+  const options = {};
+  const reject = (message) => {
+    console.error(`[Goribu] ${message}`);
+    process.exitCode = 1;
+    return null;
+  };
+  for (let index = 0; index < rest.length; index += 1) {
+    const argument = rest[index];
+    if (argument === "--host") {
+      if (options.host !== undefined) return reject("`goribu dev` received --host more than once.");
+      const next = rest[index + 1];
+      if (next !== undefined && !next.startsWith("-")) {
+        return reject(
+          `\`goribu dev --host\` takes no address, but received ${JSON.stringify(next)}. ` +
+            "It listens on every network interface. To listen on one address, set `server.host` in vite.config.js.",
+        );
+      }
+      options.host = true;
+    } else if (argument === "--port" || argument.startsWith("--port=")) {
+      if (options.port !== undefined) return reject("`goribu dev` received --port more than once.");
+      const value = argument === "--port" ? rest[(index += 1)] : argument.slice("--port=".length);
+      const port = /^\d+$/.test(value ?? "") ? Number(value) : NaN;
+      if (!(port >= 1 && port <= 65535)) {
+        return reject(
+          `\`goribu dev --port\` needs a port number from 1 to 65535, but received ${value === undefined ? "nothing" : JSON.stringify(value)}. ` +
+            "Example: `goribu dev --port 5199`.",
+        );
+      }
+      options.port = port;
+      options.strictPort = true;
+    } else {
+      return reject(
+        `\`goribu dev\` accepts only --port <number> and --host, but received ${JSON.stringify(argument)}.`,
+      );
+    }
+  }
+  return options;
 }
 
 // Resolve the migration target. It is always explicit in intent: no flag means
@@ -218,8 +269,9 @@ function main(argv) {
   }
 
   if (command === "dev") {
-    if (!assertNoArguments("dev", rest)) return;
-    runDev().catch(fail);
+    const serverOptions = resolveDevServerOptions(rest);
+    if (serverOptions === null) return;
+    runDev(serverOptions).catch(fail);
     return;
   }
 

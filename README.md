@@ -39,7 +39,7 @@ Run these from the generated app directory:
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Start Vite and workerd with hot updates. |
+| `pnpm dev` | Start Vite and workerd with hot updates. Add `--port <number>` for a fixed port or `--host` for local network access. |
 | `pnpm build` | Build the Worker, browser assets, and static HTML. |
 | `pnpm typecheck` | Check a TypeScript app without emitting files. |
 | `pnpm check` | Inspect the production resource and migration plan. |

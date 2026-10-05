@@ -7,6 +7,8 @@ add routes and dependencies only for actual application needs.
 
 - Use Node.js 22+ and pnpm. Run app commands from this directory.
 - `pnpm dev` starts local development; `pnpm build` produces production output.
+  `pnpm dev --port <number>` listens on exactly that port for one run and fails
+  if it is taken; `pnpm dev --host` opens the dev server to the local network.
 - Production HTML/assets live in `.goribu/dist/client/`; the Worker and its
   deploy configuration live in `.goribu/dist/<worker-environment>/`.
 - `pnpm check` reads the production plan without changing resources.

@@ -46,10 +46,16 @@ describe("goribu CLI", () => {
     expect(stderr).toMatch(/\[Goribu\] `goribu build` does not accept arguments/);
   });
 
-  it("rejects trailing arguments to dev without starting the server", () => {
-    const { status, stderr } = runCli(["dev", "--definitely-not-a-real-option"]);
+  it.each([
+    [["--definitely-not-a-real-option"], /`goribu dev` accepts only --port <number> and --host/],
+    [["--port"], /needs a port number from 1 to 65535, but received nothing/],
+    [["--port=70000"], /needs a port number from 1 to 65535, but received "70000"/],
+    [["--port", "5199", "--port", "5200"], /received --port more than once/],
+    [["--host", "0.0.0.0"], /takes no address, but received "0.0.0.0".*`server.host` in vite.config.js/],
+  ])("rejects dev arguments %j without starting the server", (args, message) => {
+    const { status, stderr } = runCli(["dev", ...args]);
     expect(status).toBe(1);
-    expect(stderr).toMatch(/\[Goribu\] `goribu dev` does not accept arguments/);
+    expect(stderr).toMatch(message);
   });
 
   it("rejects trailing arguments to check without inspecting Cloudflare", () => {

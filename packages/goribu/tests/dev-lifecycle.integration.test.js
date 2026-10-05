@@ -79,7 +79,7 @@ export default {
 `);
   session.configure(0, initialOptions);
 
-  const child = fork(cli, ["dev"], {
+  const child = fork(cli, ["dev", ...(initialOptions?.args ?? [])], {
     cwd: root,
     env: { ...process.env, CI: "true", WRANGLER_SEND_METRICS: "false" },
     stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -511,6 +511,48 @@ it("cleans up and reports when the replacement server cannot start", async () =>
       expect(session.child.exitCode).toBe(1);
     });
     await expect(session.get("/", port)).rejects.toThrow();
+  } finally {
+    await new Promise((closed) => occupied.close(closed));
+  }
+}, 120000);
+
+async function freePort() {
+  const probe = createServer();
+  await new Promise((ready) => probe.listen(0, "127.0.0.1", ready));
+  const { port } = probe.address();
+  await new Promise((closed) => probe.close(closed));
+  return port;
+}
+
+it("keeps the --port port across restarts over the vite.config.js port", async () => {
+  const requested = await freePort();
+  const session = startDevSession({ args: ["--port", String(requested)] });
+  expect(await session.awaitGeneration(1)).toMatchObject({ port: requested });
+
+  // The restart reuses the command-line port, and closing the old server first
+  // means the strict port does not collide with the session's own listener.
+  session.configure(1, { server: '{ host: "127.0.0.1", port: 0 }' });
+  expect(await session.awaitGeneration(2)).toMatchObject({ revision: 1, port: requested, listeners: 1 });
+  expect((await session.get("/greet?name=Port", requested)).status).toBe(200);
+}, 120000);
+
+it("fails instead of moving when the --port port is occupied", async () => {
+  const occupied = createServer();
+  await new Promise((ready) => occupied.listen(0, "127.0.0.1", ready));
+  const occupiedPort = occupied.address().port;
+
+  try {
+    const session = startDevSession({ args: [`--port=${occupiedPort}`] });
+    await session.exited;
+    session.check(() => {
+      expect(session.output).toContain(
+        `[Goribu] \`goribu dev --port ${occupiedPort}\` could not listen on port ${occupiedPort}.`,
+      );
+      expect(session.output).toContain(`Caused by: Error: Port ${occupiedPort} is already in use`);
+      expect(session.events).toEqual([]);
+      expect(workerPids(session.child.pid)).toEqual([]);
+      expect(session.child.exitCode).toBe(1);
+    });
   } finally {
     await new Promise((closed) => occupied.close(closed));
   }

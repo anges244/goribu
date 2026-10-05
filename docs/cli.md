@@ -16,11 +16,24 @@ commands never silently ignore input.
 
 Start the local development server. Vite serves the real Worker through workerd
 (the Workers runtime) with hot module replacement, so what you see locally
-matches production. The server runs until you stop it. Takes no arguments.
+matches production. The server runs until you stop it.
 
 ```
-goribu dev
+goribu dev [--port <number>] [--host]
 ```
+
+- `--port <number>` (or `--port=<number>`) listens on that port. A port you name
+  is strict: if another program is using it, `goribu dev` exits with an error
+  instead of moving to the next free port, so the URL you asked for is the URL
+  you get.
+- `--host` listens on every network interface, so another device on your network,
+  such as a phone, can open the Network URL Vite prints. Anyone on that network
+  can then reach your development server and whatever your routes return from
+  local D1, KV, and R2. It takes no address.
+
+Both apply to this run only. They override the `server` settings in
+`vite.config.js` and stay in effect when the session restarts. Through a package
+script, `pnpm dev --port 5199` passes the flag on.
 
 Configuration restarts close the previous server and its local Worker runtime
 before starting their replacements, so a long dev session keeps one listening
@@ -73,9 +86,12 @@ which suppresses both. Edits reload the session. See
 [Environment variables](./environment-variables.md) for precedence and how
 browser values differ from Worker bindings.
 
-Vite's `server.port` and `server.strictPort` settings remain available in
-`vite.config.js`. Set `strictPort: true` to fail when your chosen port is occupied;
-otherwise Vite may choose another port at initial startup.
+To change the defaults for every run, set Vite's `server.port`,
+`server.strictPort`, and `server.host` in `vite.config.js`. Without
+`strictPort: true`, a port set there moves to the next free port when it is
+occupied at startup. A specific listening address and `server.allowedHosts`
+(needed when you open the server through a hostname, such as a tunnel) are set
+only there.
 
 ## `goribu build`
 
