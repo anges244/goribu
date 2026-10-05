@@ -438,7 +438,7 @@ describe("R2 bucket planning and provisioning", () => {
     expect(repeat.uploads.cors[0].connectedByDeploy).toBeUndefined();
   });
 
-  it.each(["keys", "origins", "first deploy"])("blocks direct uploads before any provisioning write when missing %s", async (reason) => {
+  it.each(["keys", "origins", "first deploy"])("stops direct uploads before any provisioning write when missing %s", async (reason) => {
     const remote = cloudflare({ bindings: reason === "first deploy" ? null : [], enabled: false,
       override: (call) => reason === "origins" && call.path === "/workers/subdomain" ? failure(404, 10007) : undefined,
       routes: reason === "keys" ? [{ script: "test-app", pattern: "app.example.com/*" }] : [{ script: "test-app", pattern: "*.example.com/*" }] });
@@ -448,12 +448,17 @@ describe("R2 bucket planning and provisioning", () => {
     writeUploadBuild(options.projectRoot, appConfig, { file: { accept: ["application/pdf"], maxBytes: 10, private: false, direct: true } });
     writeFileSync(join(options.projectRoot, ".env.production"), "R2_ACCESS_KEY_ID=test-only\nR2_SECRET_ACCESS_KEY=not-a-real-secret\n");
     if (reason === "origins") await expect(check()).rejects.toThrow("account has no workers.dev subdomain");
-    else expect((await check()).r2.errors.join(" ")).toContain("R2 direct uploads need Worker secrets");
+    else {
+      // Missing keys are a deploy step, so check reports them without blocking.
+      const plan = await check();
+      expect(plan.r2.errors).toEqual([]);
+      expect(plan.r2.uploads.missingKeys).toEqual(reason === "keys" ? ["R2_SECRET_ACCESS_KEY"] : ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]);
+    }
     const later = { provision: vi.fn(), provisionKV: vi.fn(), migrate: vi.fn(), deploy: vi.fn(), ensureR2SigningSecret: vi.fn() };
     await expect(runDeploy({ ...options, ...later, loadConfig: async () => appConfig, build: async () => {},
-      finalizeR2Account() {}, validateSecrets() {},
+      finalizeR2Account() {}, validateSecrets() {}, canPrompt: false,
       provisionR2: (input) => provisionR2({ ...input, fetch: remote.fetch, listSecrets: options.listSecrets }),
-    })).rejects.toThrow(reason === "origins" ? "account has no workers.dev subdomain" : "[Goribu] R2 cannot proceed");
+    })).rejects.toThrow(reason === "origins" ? "account has no workers.dev subdomain" : "goribu deploy can only ask for them in a terminal");
     Object.values(later).forEach((fn) => expect(fn).not.toHaveBeenCalled());
     expect(remote.calls.every((call) => call.method === "GET")).toBe(true);
     if (reason === "first deploy") {
@@ -470,10 +475,13 @@ describe("R2 bucket planning and provisioning", () => {
       expect(draft.calls.some((call) => call.method === "PUT" && call.path.endsWith("/cors"))).toBe(true);
     }
     if (reason === "keys") {
-      expect(output()).toContain(`CLOUDFLARE_ACCOUNT_ID=${access.accountId} wrangler secret put R2_SECRET_ACCESS_KEY --name test-app`);
-      expect(output()).toContain("app-files (eu)");
-      expect(output()).not.toContain("wrangler secret put R2_ACCESS_KEY_ID");
+      expect(output()).toContain("R2 upload keys: missing R2_SECRET_ACCESS_KEY. goribu deploy creates the upload buckets, then asks for the keys");
+      expect(output()).not.toContain("Blocked:");
       expect(output()).not.toContain("not-a-real-secret");
+      // With a terminal, provisioning goes ahead so the token can be scoped
+      // to the new bucket; deploy asks for the key before the Worker upload.
+      await expect(provisionR2({ ...options, canPrompt: true })).resolves.toMatchObject({ uploads: { keys: "missing" } });
+      expect(remote.state.has("eu/app-files")).toBe(true);
     }
   });
 });

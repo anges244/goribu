@@ -26,6 +26,13 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Direct `eval` in browser-reachable route code is rejected when separating
   server declarations. Use explicit references, or move server-only evaluation
   into a handler's `.server.*` helper.
+- Missing R2 upload keys no longer block `goribu check` or require setup before
+  the first deploy. `goribu deploy` run from a terminal creates the upload
+  buckets, links to the R2 API tokens page, and asks for `R2_ACCESS_KEY_ID` and
+  `R2_SECRET_ACCESS_KEY` through Wrangler's hidden prompt before uploading the
+  Worker. Previously the setup told you to scope a token to buckets that did not
+  exist yet, and printed `wrangler secret put` commands that fail when Wrangler
+  is not on PATH. A deploy without a terminal still stops before any change.
 
 ### Fixed
 

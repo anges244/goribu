@@ -10,7 +10,7 @@ import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { provisionKV } from "./provision-kv.js";
 import { provisionR2 } from "./provision-r2.js";
-import { ensureR2SigningSecret } from "./r2-secrets.js";
+import { canPromptForSecrets, ensureR2SigningSecret, ensureR2UploadKeys } from "./r2-secrets.js";
 import { finalizeKVBinding } from "./finalize-kv-binding.js";
 import { finalizeR2Account } from "./finalize-r2-account.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
@@ -75,11 +75,12 @@ export async function runDeploy(options) {
 
   // Inspect both R2 buckets and reject unsafe public access before D1/KV writes
   // or migrations. R2 itself only creates buckets after its full inspection.
-  await (options?.provisionR2 ?? provisionR2)({
+  const r2 = await (options?.provisionR2 ?? provisionR2)({
     projectRoot,
     appConfig,
     getAccess,
     stdout: options?.stdout ?? process.stdout,
+    canPrompt: options?.canPrompt ?? canPromptForSecrets(),
     ...(appDomain ? { appDomain } : {}),
   });
 
@@ -121,6 +122,10 @@ export async function runDeploy(options) {
   // Finish provisioning and migrations before that first Worker mutation.
   if (appConfig.r2 !== undefined) {
     await (options?.ensureR2SigningSecret ?? ensureR2SigningSecret)({ projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout });
+    // The buckets exist now, so the person can scope a token to them.
+    if (r2?.uploads.keys === "missing") {
+      await (options?.ensureR2UploadKeys ?? ensureR2UploadKeys)({ projectRoot, appConfig, access, uploads: r2.uploads, stdout: options?.stdout ?? process.stdout });
+    }
   }
   const code = await deploy({ projectRoot, secretsFile, accountId: access.accountId });
   if (code !== 0) return code;

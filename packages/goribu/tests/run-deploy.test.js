@@ -451,6 +451,22 @@ it("creates the R2 secret after migrations and stops the upload if secret setup 
   await runDeploy(options);
   expect(events).toEqual(["r2", "migrate", "secret", "deploy"]);
   expect(ensureR2SigningSecret.mock.calls[0][0].access).toBe(access);
+
+  // Missing upload keys are asked for after the buckets, migrations and the
+  // signing secret, and an unconfirmed key stops the upload.
+  events.length = 0;
+  const uploads = { keys: "missing", missingKeys: ["R2_ACCESS_KEY_ID"], cors: [] };
+  options.provisionR2 = vi.fn(async () => { events.push("r2"); return { uploads }; });
+  options.ensureR2UploadKeys = vi.fn(async () => { events.push("keys"); });
+  options.canPrompt = true;
+  await runDeploy(options);
+  expect(events).toEqual(["r2", "migrate", "secret", "keys", "deploy"]);
+  expect(options.provisionR2.mock.calls[0][0].canPrompt).toBe(true);
+  expect(options.ensureR2UploadKeys.mock.calls[0][0]).toMatchObject({ access, uploads });
+  options.deploy.mockClear();
+  options.ensureR2UploadKeys.mockImplementation(async () => { throw new Error("key setup failed"); });
+  await expect(runDeploy(options)).rejects.toThrow("key setup failed");
+  expect(options.deploy).not.toHaveBeenCalled();
   options.deploy.mockClear();
   ensureR2SigningSecret.mockImplementation(async () => { throw new Error("secret setup failed"); });
   await expect(runDeploy(options)).rejects.toThrow("secret setup failed");

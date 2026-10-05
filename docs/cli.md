@@ -154,8 +154,10 @@ existing platform secrets are used. Local `.env` is never uploaded as fallback.
 The unreleased [R2 feature](./r2.md) also inspects both declared buckets and
 creates missing ones and connects the declared public domain before D1/KV
 provisioning. After migrations, it creates `GORIBU_SECRET` through Wrangler if
-missing, then uploads the Worker. On first deployment, secret setup creates a
-draft Worker before the final upload.
+missing. When direct uploads need R2 API keys that are missing, it then asks for
+them in the terminal (see [direct-upload deployment](./r2.md#direct-upload-deployment)), then uploads the
+Worker. On first deployment, secret setup creates a draft Worker before the final
+upload.
 
 An application [`domain`](./deploy.md#custom-domain) is inspected before resource
 changes and connected after the Worker upload succeeds. Existing domains and

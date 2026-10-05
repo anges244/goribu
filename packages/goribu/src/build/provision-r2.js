@@ -13,6 +13,11 @@ export async function provisionR2(options) {
   stdout.write(formatR2Plan(plan));
   // The plan just printed each Blocked reason; point at it rather than repeat it.
   if (plan.errors.length) throw new Error("[Goribu] R2 cannot proceed. Resolve the Blocked items above, then rerun `goribu deploy`. No Cloudflare resources were changed.");
+  // Never upload direct-upload code that cannot sign. Deploy asks for missing
+  // keys before the Worker upload; without a terminal, stop before the first write.
+  if (plan.uploads.keys === "missing" && !options.canPrompt) {
+    throw new Error(`[Goribu] R2 direct uploads need the Worker secrets ${plan.uploads.missingKeys.join(" and ")}, and goribu deploy can only ask for them in a terminal. Run \`goribu deploy\` once from a terminal: it creates the upload buckets, then asks for the keys of an R2 API token scoped to them. Later deploys, including CI, reuse the stored secrets. No Cloudflare resources were changed.`);
+  }
   for (const bucket of plan.buckets) {
     if (bucket.state === "existing") continue;
     await client.createBucket(bucket.name, bucket.jurisdiction);
