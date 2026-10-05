@@ -128,8 +128,10 @@ explicit source is the development fallback, while production substitutes the
 hashed audited entry and adds route-specific module preloads.
 
 `nonce` is available for application-owned inline elements on Worker-rendered
-documents. Framework scripts read the same value from render context, so it does
-not need to be forwarded to `ClientEntry`.
+documents and is `undefined` on prerendered pages; see
+[Inline scripts and prerendered pages](#inline-scripts-and-prerendered-pages).
+Framework scripts read the same value from render context, so it does not need
+to be forwarded to `ClientEntry`.
 
 ### Graph-owned styles
 
@@ -138,9 +140,9 @@ graph. In production, `<Stylesheet />` emits the hashed CSS resolved for the
 entry and current page. In development it emits a render-blocking stylesheet
 that follows the entry and current page's static CSS imports through Vite's
 live transforms. The first HTML render is styled before browser JavaScript
-loads. After the entry and page modules load, Vite's injected styles take over
-and Goribu removes the initial stylesheet so removed rules do not survive hot
-updates. Client navigation loads the next page's CSS with its module before
+loads. Vite's injected styles take over as the client modules load, and Goribu
+removes the initial stylesheet before the first hot update, so removed rules do
+not survive an edit. Client navigation loads the next page's CSS with its module before
 rendering it. A source path is not a public prop; the graph is the source of
 truth. CSS imported with `?inline`, `?raw`, or `?url` is not automatically applied.
 
@@ -155,8 +157,10 @@ Worker-owned document render, that value is shared by:
 - the external client module script;
 - React's executable streaming instructions.
 
-Static candidates omit HTML nonces so their generated HTML is deterministic and
-does not pretend to have a per-request value.
+Prerendered HTML omits nonces so it is deterministic and does not pretend to
+have a per-request value. A static candidate the Worker renders at request time,
+in development or after the build could not output it statically, receives the
+CSP header and keeps the nonce.
 
 Define Worker response defaults in `goribu.config.js`:
 
@@ -200,6 +204,25 @@ navigation index. App-authored `public/_headers` is rejected to
 protect that generated file, so application-defined static CSP and other static
 header rules are not supported yet. Do not describe a Worker nonce policy as
 covering static pages.
+
+### Inline scripts and prerendered pages
+
+On a prerendered page `nonce` is `undefined`, and no CSP header reaches the
+page. Pass `nonce={nonce}` to your inline scripts anyway. React leaves the
+attribute out when the value is `undefined`, so one Document works for both kinds
+of page: Worker-rendered pages, including static pages in development, carry the
+nonce their CSP allows, and prerendered pages have no CSP to satisfy.
+
+```jsx
+<script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
+```
+
+Send a CSP through `responseHeaders`. Do not build a
+`<meta http-equiv="Content-Security-Policy">` from `nonce` in the Document: on a
+prerendered page it would allow only `'nonce-undefined'` and block the page's
+inline scripts. A nonce has to be new for every response, and a static file is
+the same for everyone, so prerendered pages cannot use one. Until static header
+rules exist, set `prerender = false` on a page that must have a CSP.
 
 ## Public browser environment
 

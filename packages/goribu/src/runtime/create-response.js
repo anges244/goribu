@@ -66,6 +66,25 @@ export function createResponse(options) {
       });
     },
 
+    stream(body) {
+      assertNoExtraArguments(arguments, "res.stream(body)");
+      if (!(body instanceof ReadableStream || body instanceof ArrayBuffer ||
+          ArrayBuffer.isView(body) || body instanceof Blob)) {
+        throw new TypeError(
+          "[Goribu] res.stream(body) requires a ReadableStream, ArrayBuffer, typed array, or Blob, such as an R2 object's body. " +
+            "Use res.text(body) for strings or res.json(data) for data.",
+        );
+      }
+      return terminal({
+        kind: "stream",
+        status,
+        headers: snapshotHeaders(pendingHeaders, {
+          "content-type": "application/octet-stream",
+        }),
+        body,
+      });
+    },
+
     invalid(errors, invalidStatus = 422) {
       if (arguments.length > 2) {
         throw new TypeError(

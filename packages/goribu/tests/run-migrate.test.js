@@ -131,6 +131,6 @@ describe("runMigrate", () => {
     const noDb = defineConfig({ name: "app", compatibilityDate: "2026-09-03" });
     await expect(
       runMigrate({ projectRoot: root, loadConfig: async () => noDb, execute: fakeExecute(), stdout: capture() }),
-    ).rejects.toThrow(/No database is declared/);
+    ).rejects.toThrow(/No D1 database is declared/);
   });
 });

@@ -14,6 +14,7 @@ describe("defineConfig", () => {
       name: "goribu-basic-app",
       compatibilityDate: "2026-08-31",
       compatibilityFlags: ["nodejs_compat"],
+      workersDev: true,
     });
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.compatibilityFlags)).toBe(true);
@@ -49,6 +50,15 @@ describe("defineConfig", () => {
       expect(() => defineConfig({ ...base, domain }))
         .toThrow(/\[Goribu\].*field domain cannot use Cloudflare-managed .* hosts.*custom hostname/);
     }
+  });
+
+  it("disables workers.dev only for an app that has a domain", () => {
+    const base = { name: "app", compatibilityDate: "2024-01-01" };
+    expect(defineConfig({ ...base, domain: "app.example.com", workersDev: false }).workersDev).toBe(false);
+    expect(() => defineConfig({ ...base, workersDev: false }))
+      .toThrow(/\[Goribu\].*workersDev: false requires domain.*remove workersDev/);
+    expect(() => defineConfig({ ...base, domain: "app.example.com", workersDev: "false" }))
+      .toThrow(/\[Goribu\].*workersDev must be true, false, or omitted/);
   });
 
   it("requires separate application and R2 hostnames after normalization", () => {

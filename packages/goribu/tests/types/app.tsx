@@ -24,6 +24,10 @@ const config = defineConfig<Env>({
 });
 defineConfig(config);
 const applicationDomain: string | undefined = config.domain;
+const workersDev: boolean = config.workersDev;
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", domain: "app.example.com", workersDev: false });
+// @ts-expect-error workersDev is a boolean.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", domain: "app.example.com", workersDev: "false" });
 // @ts-expect-error Defined application configuration is immutable.
 config.domain = "other.example.com";
 // @ts-expect-error Only one hostname string is accepted.
@@ -51,11 +55,22 @@ const middleware: Middleware<Env> = (req, res) => {
   req.cookies.delete("old", { path: "/" });
 };
 const continuingMiddleware: Middleware = (req) => { req.cookies.set("visited", "yes"); };
+declare module "goribu/server" {
+  interface AppRequestFields { user?: { id: string } }
+}
+const loadUser: Middleware<Env> = (req) => { req.user = { id: "u1" }; };
+const userHandler: Handler<Props, Env, { id: string }> = (req, res) => res.json({ id: req.user?.id });
+const fileHandler: Handler = (req, res) => res.headers({ "content-type": "image/png" }).stream(new Uint8Array([1]));
+// @ts-expect-error Strings belong in res.text(body).
+const textStream: Handler = (req, res) => res.stream("text");
+// @ts-expect-error Request fields must be declared on AppRequestFields.
+const undeclaredField: Middleware = (req) => { req.team = "core"; };
 // @ts-expect-error Matched URL parameters are strings.
 type InvalidParams = Handler<Props, Env, { id: number }>;
 
 const GET: Handler<Props, Env, { id: string }> = async (req, res) => {
   const id: string = req.params.id;
+  const callbackUrl: string = new URL("/auth/callback", req.url.origin).href;
   const row = await req.d1<Props>`SELECT name FROM names WHERE id = ${id}`.get();
   const count = await req.d1.public`SELECT count(*) FROM names`.value<number>();
   const rows: Props[] = await req.d1.fresh.unsafe<Props>("SELECT name FROM names").all();

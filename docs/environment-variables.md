@@ -107,11 +107,12 @@ The production secrets upload includes `PUBLIC_*` keys if they are in
 `.env.production`. Storing a value as a Worker secret does not make it private
 in the browser bundle. Never give a private API key a `PUBLIC_` prefix.
 
-Cloudflare may also write local values into
-`.goribu/dist/<worker>/.dev.vars` for local preview. Wrangler does not deploy
-that preview file. Build output can therefore contain local secrets. Cloudflare
-owns this preview copy. Goribu's generated `.goribu/dev-secret` is used only
-during serve and is excluded from build output.
+Build output never contains local secrets. During a build, Cloudflare's Vite
+plugin reads `.env`, `.env.local`, or `.dev.vars` for `vite preview` and prints
+"Using secrets defined in .env". Goribu has no preview command and removes that
+copy before the output is written, so these values are never uploaded. Goribu's
+generated `.goribu/dev-secret` is used only during serve and is excluded from
+build output.
 
 ## Migrating from the older env loader
 

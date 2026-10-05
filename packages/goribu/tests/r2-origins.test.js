@@ -40,7 +40,7 @@ describe("R2 application origin discovery", () => {
         { pattern: "other.example.com/*", script: "other-app" },
         { pattern: "excluded.example.com/*" },
       ] });
-    const found = await remote.client.origins("my-app", true);
+    const found = await remote.client.origins("my-app", true, true);
     expect(found.origins).toEqual(["http://app.example.com", "http://legacy.example.com", "https://app.example.com", "https://forms.example.com", "https://my-app.account-name.workers.dev"]);
     expect(found.warnings).toHaveLength(2);
     expect(found.warnings.every((warning) => warning.includes("Skipped wildcard-host"))).toBe(true);
@@ -48,19 +48,27 @@ describe("R2 application origin discovery", () => {
 
   it("predicts workers.dev for both missing Workers and existing disabled Workers", async () => {
     const remote = fixture();
-    expect(await remote.client.origins("my-app", false)).toEqual({ origins: ["https://my-app.account-name.workers.dev"], warnings: [], expectedAfterFirstDeploy: true });
+    expect(await remote.client.origins("my-app", false, true)).toEqual({ origins: ["https://my-app.account-name.workers.dev"], warnings: [], expectedAfterFirstDeploy: true });
     expect(remote.calls).toEqual(["/workers/subdomain"]);
     remote.calls.length = 0;
-    expect(await remote.client.origins("my-app", true)).toEqual({ origins: ["https://my-app.account-name.workers.dev"], warnings: [], enabledByDeploy: "https://my-app.account-name.workers.dev" });
+    expect(await remote.client.origins("my-app", true, true)).toEqual({ origins: ["https://my-app.account-name.workers.dev"], warnings: [], enabledByDeploy: "https://my-app.account-name.workers.dev" });
     expect(remote.calls).toContain("/workers/subdomain");
+  });
+
+  it("leaves out workers.dev and its account subdomain when the app disables it", async () => {
+    const remote = fixture({ enabled: true, domains: [{ hostname: "app.example.com", service: "my-app", environment: "production" }],
+      override: (path) => path === "/workers/subdomain" ? Response.json({ success: false, errors: [{ code: 10007 }] }, { status: 404 }) : undefined });
+    expect(await remote.client.origins("my-app", false, false)).toEqual({ origins: [], warnings: [] });
+    expect(await remote.client.origins("my-app", true, false)).toEqual({ origins: ["https://app.example.com"], warnings: [] });
+    expect(remote.calls.filter((path) => path.includes("subdomain"))).toEqual([]);
   });
 
   it("blocks a missing account subdomain and never mistakes a generic 404 for absence", async () => {
     const missing = fixture({ override: (path) => path === "/workers/subdomain" ? Response.json({ success: false, errors: [{ code: 10007 }] }, { status: 404 }) : undefined });
-    await expect(missing.client.origins("my-app", false)).rejects.toThrow("Register one in Cloudflare Workers & Pages");
-    await expect(missing.client.origins("my-app", true)).rejects.toThrow("Register one in Cloudflare Workers & Pages");
+    await expect(missing.client.origins("my-app", false, true)).rejects.toThrow("Register one in Cloudflare Workers & Pages");
+    await expect(missing.client.origins("my-app", true, true)).rejects.toThrow("Register one in Cloudflare Workers & Pages");
     const unknown = fixture({ override: (path) => path === "/workers/subdomain" ? Response.json({ success: false, errors: [{ code: 99999 }] }, { status: 404 }) : undefined });
-    await expect(unknown.client.origins("my-app", false)).rejects.toThrow("HTTP 404");
+    await expect(unknown.client.origins("my-app", false, true)).rejects.toThrow("HTTP 404");
   });
 
   it("follows domain, zone and route pages beyond 50 entries while keeping filters and account scope", async () => {
@@ -80,7 +88,7 @@ describe("R2 application origin discovery", () => {
       const result = items.slice((page - 1) * 50, page * 50);
       return Response.json({ success: true, result, result_info: { page, per_page: 50, count: result.length, total_count: items.length, total_pages: Math.ceil(items.length / 50) } });
     } });
-    const found = await remote.client.origins("my-app", true);
+    const found = await remote.client.origins("my-app", true, true);
     expect(found.origins).toHaveLength(103);
     expect(found.origins).toContain("https://r50.zone50.example.com");
     expect(found.origins).toContain("https://d50.example.com");
@@ -94,7 +102,7 @@ describe("R2 application origin discovery", () => {
       const result = page === 2 && fault === "missing page" ? [] : [{ id: page === 2 && fault !== "repeat" ? "second" : "first", hostname: "app.example.com", service: "my-app", environment: "production" }];
       return Response.json({ success: true, result, result_info: { page: fault === "wrong page" ? 1 : page, count: result.length, total_count: page === 2 && fault === "changed totals" ? 3 : 2, total_pages: 2 } });
     } });
-    await expect(remote.client.origins("my-app", true)).rejects.toThrow("partial inventory");
+    await expect(remote.client.origins("my-app", true, true)).rejects.toThrow("partial inventory");
   });
 
   it.each([
@@ -106,13 +114,13 @@ describe("R2 application origin discovery", () => {
     [`/zones/${zoneId}/workers/routes`, [{ script: "my-app", pattern: "https://app.other.com/*" }]],
   ])("rejects invalid ownership or metadata at %s %#", async (path, result) => {
     const remote = fixture({ override: (current) => current === path ? Response.json({ success: true, result }) : undefined });
-    await expect(remote.client.origins("my-app", true)).rejects.toThrow("Could not verify a complete inventory");
+    await expect(remote.client.origins("my-app", true, true)).rejects.toThrow("Could not verify a complete inventory");
   });
 
   it("fails closed on a partial inventory or denied route permission", async () => {
     const partial = fixture({ override: (path) => path === "/workers/domains" ? Response.json({ success: true, result: [], result_info: { total_pages: 2 } }) : undefined });
-    await expect(partial.client.origins("my-app", true)).rejects.toThrow("partial inventory");
+    await expect(partial.client.origins("my-app", true, true)).rejects.toThrow("partial inventory");
     const denied = fixture({ override: (path) => path.endsWith("/routes") ? Response.json({ success: false, errors: [{ code: 10000 }] }, { status: 403 }) : undefined });
-    await expect(denied.client.origins("my-app", true)).rejects.toThrow("Workers Routes Read");
+    await expect(denied.client.origins("my-app", true, true)).rejects.toThrow("Workers Routes Read");
   });
 });

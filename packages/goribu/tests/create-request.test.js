@@ -25,6 +25,8 @@ describe("createRequest", () => {
     const wrapped = createRequest(request, params, { env, waitUntil, d1, cache });
 
     expect(wrapped.method).toBe("GET");
+    expect(wrapped.url.href).toBe("https://example.com/teams/member?tag=one&tag=two");
+    expect(wrapped.query).toBe(wrapped.url.searchParams);
     expect(wrapped.path).toBe("/teams/member");
     expect(wrapped.query).toBeInstanceOf(URLSearchParams);
     expect(wrapped.query.getAll("tag")).toEqual(["one", "two"]);
@@ -54,6 +56,7 @@ describe("createRequest", () => {
       "query",
       "r2",
       "rawBody",
+      "url",
       "waitUntil",
     ]);
   });

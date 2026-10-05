@@ -128,6 +128,15 @@ describe("executeD1", () => {
     ).rejects.toThrow(/unreadable JSON while `goribu check`[\s\S]*No resources were changed\./);
   });
 
+  it("lets Wrangler print ad-hoc results and claims nothing about a failed ad-hoc run", async () => {
+    const spawn = fakeSpawn();
+    await executeD1({ ...base, command: "SELECT 1", adHoc: true, spawn });
+    expect(spawn.calls[0].options.stdio).toEqual(["ignore", "inherit", "pipe"]);
+
+    const failure = executeD1({ ...base, command: "DELETE FROM t", adHoc: true, errorLabel: "goribu d1", spawn: fakeSpawn({ code: 1 }) });
+    await expect(failure).rejects.toThrow(/for `goribu d1`[\s\S]*Then rerun the command\.$/);
+  });
+
   it("requires exactly one of file or command", async () => {
     await expect(executeD1({ ...base, spawn: fakeSpawn() })).rejects.toThrow(
       /exactly one of file or command/,

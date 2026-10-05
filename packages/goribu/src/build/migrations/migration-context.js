@@ -9,9 +9,9 @@ const MIGRATE_CONFIG_FILENAME = "migrate.wrangler.json";
 const LOCAL_STATE = join(".wrangler", "state");
 
 /**
- * Resolve everything a migration command needs to reach the declared D1 database.
+ * Resolve everything a migration command or `goribu d1` needs to reach the declared D1 database.
  *
- * A database declaration is required — migrations have nowhere to run without one.
+ * A database declaration is required — SQL has nowhere to run without one.
  * The emitted config is intentionally minimal (just the D1 binding, no Worker entry
  * or assets) so `wrangler d1 execute` validates nothing that belongs to a build, and
  * carries the same local id fields as the dev binding so migrate and dev share one
@@ -30,7 +30,7 @@ export async function resolveMigrationContext({ projectRoot, loadConfig } = {}) 
   const appConfig = await load({ projectRoot: root });
   if (appConfig.database === undefined) {
     throw new Error(
-      "[Goribu] No database is declared, so there is nothing to migrate. " +
+      "[Goribu] No D1 database is declared, so there is nothing to run SQL against. " +
         'Add `database: { type: "d1", name: "your-db-name" }` to goribu.config.js first.',
     );
   }

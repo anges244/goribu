@@ -48,6 +48,7 @@ export async function POST(req, res) {
 | Property | What it is |
 |---|---|
 | `req.method` | the HTTP method string |
+| `req.url` | the absolute request `URL` — `req.url.origin`, `req.url.href` |
 | `req.path` | the URL pathname |
 | `req.params` | captured dynamic segments, e.g. `{ id: "42" }` for `posts/[id].jsx` |
 | `req.query` | a `URLSearchParams` — `req.query.get("name")`, `req.query.getAll(...)` |
@@ -59,6 +60,18 @@ export async function POST(req, res) {
 | `req.waitUntil(promise)` | keep the Worker alive for background work |
 | `req.rawBody()` | the raw body bytes as a `Uint8Array` |
 | `req.body()` | the parsed body, by content type — see [Reading the body](#reading-the-body) |
+
+`req.url` is the absolute URL of the route being handled, as a `URL`. Use its
+`origin` for links that must name the current host, such as an OAuth callback:
+
+```js
+const callback = new URL("/auth/callback", req.url.origin).href;
+```
+
+On client navigation it is the target page's URL, not Goribu's internal
+endpoint. `req.path` and `req.query` are its pathname and search parameters. A
+handler that runs while a page is prerendered sees the build's local origin, so
+build absolute links on static pages from your public origin instead.
 
 `req.params` values are always strings, and the object is safe against prototype
 keys — a param literally named `__proto__` is an own property, not a mutation of
@@ -118,6 +131,7 @@ along the way.
 |---|---|
 | `res.text(body)` | `text/plain` |
 | `res.json(data)` | `application/json` |
+| `res.stream(body)` | bytes from a `ReadableStream`, `ArrayBuffer`, typed array, or `Blob` — `application/octet-stream` unless you set `content-type` |
 | `res.redirect(location)` | a redirect — **`303`** by default |
 | `res.render(props)` | the route's own page, streamed as HTML, with `props` |
 | `res.notFound(props)` | the app's `_404` page at `404` |
@@ -140,6 +154,25 @@ export function POST(req, res) {
   data (and any status/headers) it carries. There is no `res.html(string)` — HTML
   from a handler is a rendered page. (See the decision in
   [decisions.md](./decisions.md).)
+- **`res.stream(body)`** sends binary or streamed bytes, such as a file from R2
+  or a proxied `fetch` response, without buffering them. Set the content type and
+  caching with `res.headers()`:
+
+  ```js
+  export async function GET(req, res) {
+    const file = await req.r2.private.get(`avatars/${req.params.id}`);
+    if (!file) return res.notFound();
+    return res
+      .headers({ "content-type": file.httpMetadata?.contentType ?? "application/octet-stream" })
+      .stream(file.body);
+  }
+  ```
+
+  Status, headers and cookies apply as for any other result, and a `HEAD` request
+  gets the headers without the body. Goribu does not add range or `ETag`
+  handling; set those headers yourself if you need them. Client navigation to a
+  streamed route falls back to a full page load, and a route that streams is
+  never prerendered.
 - Bodyless statuses (`204`, `205`, `304`) reject a body — Goribu tells you rather
   than shipping an invalid response.
 

@@ -8,6 +8,7 @@ import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
 import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
 import { runMigrateSeed } from "../src/build/migrations/run-migrate-seed.js";
 import { runMigrateStatus } from "../src/build/migrations/run-migrate-status.js";
+import { runD1 } from "../src/build/run-d1.js";
 import { resolveMigrationContext } from "../src/build/migrations/migration-context.js";
 import { executeD1, lastResultRows } from "../src/build/migrations/wrangler-d1.js";
 
@@ -167,5 +168,12 @@ describe("goribu migrate (local, real Wrangler)", () => {
     expect(
       lastResultRows(await query("SELECT name FROM _goribu_migrations WHERE name = '0003_broken'")),
     ).toEqual([{ name: "0003_broken" }]);
+  });
+
+  it("runs `goribu d1` SQL against the same local database", { timeout: 120000 }, async () => {
+    await runD1({ projectRoot: root, loadConfig, sql: "INSERT INTO widgets (name) VALUES ('ad-hoc')" });
+    expect(lastResultRows(await query("SELECT name FROM widgets WHERE name = 'ad-hoc'"))).toEqual([
+      { name: "ad-hoc" },
+    ]);
   });
 });

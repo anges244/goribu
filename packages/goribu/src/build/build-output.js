@@ -82,5 +82,12 @@ export function createBuildOutputGuardPlugin() {
         assertBundlerOutput(output, config.root, resolve(config.root, BUILD_OUTPUT_DIRECTORY, name));
       },
     },
+
+    // Cloudflare copies local .env/.dev.vars values into the Worker output for
+    // `vite preview`, which Goribu does not use. Keep local secrets out of it.
+    generateBundle: {
+      order: "post",
+      handler(_, bundle) { delete bundle[".dev.vars"]; },
+    },
   };
 }

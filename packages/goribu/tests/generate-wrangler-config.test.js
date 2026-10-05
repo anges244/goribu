@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe("writeWranglerConfig", () => {
-  it("synthesizes goribu.wrangler.jsonc without changing routes or workers.dev for a custom domain", () => {
+  it("synthesizes goribu.wrangler.jsonc with explicit workers.dev and no preview URLs or routes for a custom domain", () => {
     const root = makeProject();
     const appConfig = defineConfig({
       name: "goribu-basic-app",
@@ -41,7 +41,12 @@ describe("writeWranglerConfig", () => {
       main: ".goribu/worker.js",
       compatibility_date: "2026-08-31",
       assets: { binding: "ASSETS", html_handling: "drop-trailing-slash" },
+      workers_dev: true,
+      preview_urls: false,
     });
+
+    const { config: domainOnly } = writeWranglerConfig({ projectRoot: root, appConfig: defineConfig({ ...appConfig, workersDev: false }) });
+    expect(domainOnly).toMatchObject({ workers_dev: false, preview_urls: false });
   });
 
   it("omits compatibility_flags when the app declares none", () => {

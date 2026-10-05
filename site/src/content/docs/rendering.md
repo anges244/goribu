@@ -58,7 +58,8 @@ pointing you here.
 
 Keep `children` inside `#root`, render the route-owned `head` in `<head>`, and
 place one of each helper. Worker-rendered documents also receive `nonce` for
-application-owned inline elements. See [Metadata & Document](/docs/metadata).
+application-owned inline elements; on prerendered pages it is `undefined`. See
+[Metadata & Document](/docs/metadata#inline-scripts-and-prerendered-pages).
 
 ## What a page receives
 

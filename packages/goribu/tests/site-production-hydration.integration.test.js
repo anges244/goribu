@@ -65,7 +65,7 @@ describe("site production hydration", () => {
     );
     expect(html).toContain('rel="modulepreload"');
     expect(html).not.toContain('/src/setup/client-entry.js');
-    expect(html).not.toContain(' nonce=');
+    expect(html).not.toMatch(/<[a-z][^>]*\snonce=/i);
     expect(html).toContain('aria-controls="why-goribu-details"');
     expect(html).toContain('aria-expanded="false"');
 
@@ -98,7 +98,7 @@ describe("site production hydration", () => {
       );
       expect(html).toMatch(productionEntry);
       expect(html).toMatch(productionStyle);
-      expect(html).not.toContain(' nonce=');
+      expect(html).not.toMatch(/<[a-z][^>]*\snonce=/i);
     }
   });
 

@@ -36,8 +36,9 @@ goribu deploy
 
 This validates configuration, checks Wrangler credentials and account selection,
 builds the app, prepares declared resources, then runs `wrangler deploy`.
-The app is served from its `workers.dev` URL (and any custom domain you have
-configured), under the `name` from `goribu.config.js`. Re-running `goribu deploy`
+The app is served from its `workers.dev` URL (unless you
+[turn it off](#workersdev-address)) and any custom domain you have configured,
+under the `name` from `goribu.config.js`. Re-running `goribu deploy`
 replaces what production serves.
 
 To watch live Worker requests, console output, and errors after deployment, run
@@ -97,8 +98,9 @@ verification fails after upload, the command reports that the Worker is already
 deployed and exits with an error. Inspect the reported conflict or connection,
 then retry deployment; Goribu never rolls back by disconnecting a domain.
 
-The `workers.dev` address and existing dashboard-managed domains stay available.
-Changing or removing `domain` does not disconnect the old hostname. With a domain
+The `workers.dev` address and existing dashboard-managed domains stay available
+unless you [turn workers.dev off](#workersdev-address). Changing or removing
+`domain` does not disconnect the old hostname. With a domain
 configured, check and deploy list other connected app domains as information.
 Manage those connections in the Worker's **Settings > Domains & Routes**. When the
 field is omitted, Goribu skips domain management entirely. The field connects
@@ -108,6 +110,34 @@ Cloudflare.
 Development and standalone builds validate the hostname without contacting
 Cloudflare. For [R2 direct uploads](r2.md#direct-upload-deployment), the planned
 application domain's HTTPS origin enters the CORS plan before attachment.
+
+### workers.dev address
+
+Every app is also served at `https://<name>.<account-subdomain>.workers.dev`.
+Once the app has its own domain, that second address may be unwanted: OAuth
+callbacks, cookies and CORS are tied to one host. Turn it off with
+`workersDev: false`:
+
+```js
+export default defineConfig({
+  name: "my-app",
+  compatibilityDate: "2026-10-02",
+  domain: "app.example.com",
+  workersDev: false,
+});
+```
+
+`workersDev: false` requires `domain`; without one the app would have no
+address. Each deploy applies the setting, so turn workers.dev back on by removing
+the field, not in the Cloudflare dashboard. Keep the default until the domain is
+connected and serving. A new custom domain may need a few minutes before DNS and
+TLS are ready, and workers.dev is the address that works immediately.
+
+Goribu always turns off Cloudflare's per-version
+[preview URLs](https://developers.cloudflare.com/workers/configuration/previews/).
+Goribu deploys production only, so it has no use for them, and each one would be
+another public address for the app. The first deploy that turns them off on an existing Worker
+may print a one-time Wrangler warning about Preview URLs; it needs no action.
 
 ## Deploying with D1 and KV
 

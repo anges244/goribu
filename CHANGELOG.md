@@ -11,6 +11,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `goribu d1 "<sql>"` runs SQL against local D1, the same database
+  `goribu dev` and `goribu migrate` use, without a Cloudflare login. Wrangler
+  prints the results. `--remote` runs a single `SELECT` against production
+  directly; any other remote SQL runs only after the database name is typed in an
+  interactive terminal, and is refused in CI, scripts, and coding agents.
 - `goribu dev --port <number>` listens on that port for this run, and
   `goribu dev --host` listens on every network interface so another device can
   open the printed Network URL. A port named this way fails when it is occupied
@@ -22,9 +27,31 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   instead of bare `wrangler` commands, and the secret-delete repair no longer
   needs a `CLOUDFLARE_ACCOUNT_ID=…` prefix. A real `deploy` is refused in favor of
   `goribu deploy`.
+- `res.stream(body)` sends binary or streamed bytes from a `ReadableStream`,
+  `ArrayBuffer`, typed array, or `Blob`, such as an R2 object's body. The content
+  type defaults to `application/octet-stream`; set it with `res.headers()`.
+  Status, headers, cookies and `HEAD` behave as for other results.
+- `req.url` is the absolute URL of the handled route, as a `URL`. Use
+  `req.url.origin` to build absolute links such as OAuth callbacks instead of
+  reading the `Host` header. On client navigation it is the target page's URL.
+- `AppRequestFields` in `goribu/server` types the fields middleware attaches to
+  `req`, such as `req.user`, for later middleware and handlers. Declare them
+  once with `declare module "goribu/server"`. Attaching data to `req` already
+  worked at runtime; the middleware guide now documents it.
+- `workersDev: false` in `defineConfig` stops serving an app with a `domain` at
+  its `workers.dev` address. Previously every deploy turned workers.dev back on,
+  even after it was disabled in the Cloudflare dashboard. R2 direct-upload CORS
+  drops the workers.dev origin to match. `workersDev: false` requires `domain`.
 
 ### Changed
 
+- Builds no longer write local `.env`, `.env.local`, or `.dev.vars` values to
+  `.goribu/dist/<worker>/.dev.vars`. Cloudflare's Vite plugin copied them there
+  for `vite preview`, which Goribu does not use; they were never uploaded.
+  Cloudflare still prints "Using secrets defined in .env" during builds.
+- Deploys now turn off Cloudflare's per-version preview URLs. Goribu deploys
+  production only, so they were only extra public addresses. Existing Workers
+  may show a one-time Wrangler warning about Preview URLs on the next deploy.
 - Client navigation to a different path now remounts the page, even when both
   paths match the same route, such as `/e/a` and `/e/b`. Previously the page kept
   its component state, so state seeded from props could carry over to another
@@ -50,6 +77,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Static pages rendered by the Worker now receive the nonce from their
+  `responseHeaders` CSP. Previously a page eligible for prerendering always
+  rendered without one, so a nonce CSP blocked its inline scripts on every static
+  page in development and on pages that could not be prerendered in production.
+  Prerendered HTML still has no nonce.
 - In development, web fonts no longer flash back to their fallback when the
   page hydrates. The first-paint stylesheet now stays until the first hot
   update instead of being removed at hydration, which discarded fonts it had

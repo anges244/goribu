@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { runCheck } from "../src/build/run-check.js";
 import { runCloudflareLogin } from "../src/build/run-cloudflare-login.js";
+import { runD1 } from "../src/build/run-d1.js";
 import { runTail } from "../src/build/run-tail.js";
 import { runWrangler } from "../src/build/run-wrangler.js";
 import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
@@ -33,6 +34,7 @@ const COMMANDS = {
   "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
   "migrate:seed": "Run migrations/seed.sql against local D1 only.",
   "migrate:status": "Show applied and pending migrations without changing anything.",
+  d1: 'Run SQL against D1 (default local; --remote for production): goribu d1 "<sql>".',
 };
 
 function readVersion() {
@@ -255,6 +257,25 @@ function resolveSeedTarget(rest) {
   return "local";
 }
 
+// `goribu d1` takes one quoted SQL argument plus the migration target flags. A
+// word that looks like an option is rejected as one, but SQL that merely starts
+// with a `--` comment is still SQL.
+function resolveD1Arguments(rest) {
+  const flags = rest.filter((argument) => /^--?[a-z][\w-]*$/i.test(argument));
+  const sql = rest.filter((argument) => !flags.includes(argument));
+  const target = resolveTarget("d1", flags);
+  if (target === null) return null;
+  if (sql.length !== 1 || sql[0].trim().length === 0) {
+    console.error(
+      `[Goribu] \`goribu d1\` takes the SQL as one quoted argument, but received ${sql.length === 0 ? "none" : sql.length === 1 ? "empty SQL" : `${sql.length} arguments`}. ` +
+        'Example: `goribu d1 "SELECT * FROM posts LIMIT 5"`.',
+    );
+    process.exitCode = 1;
+    return null;
+  }
+  return { target, sql: sql[0] };
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
 
@@ -335,6 +356,13 @@ function main(argv) {
     const target = resolveSeedTarget(rest);
     if (target === null) return;
     runMigrateSeed({ projectRoot: process.cwd(), target }).catch(fail);
+    return;
+  }
+
+  if (command === "d1") {
+    const d1 = resolveD1Arguments(rest);
+    if (d1 === null) return;
+    runD1({ projectRoot: process.cwd(), ...d1 }).catch(fail);
     return;
   }
 

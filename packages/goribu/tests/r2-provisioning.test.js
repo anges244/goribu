@@ -436,6 +436,11 @@ describe("R2 bucket planning and provisioning", () => {
     const repeat = await inspectR2({ ...options, fetch: connected.fetch, appDomain: { ...appDomain, action: "none" } });
     expect(repeat.uploads.cors[0].origins).toEqual(["https://new.example.com", "https://test-app.test-account.workers.dev"]);
     expect(repeat.uploads.cors[0].connectedByDeploy).toBeUndefined();
+
+    // Disabling workers.dev drops its origin from the managed rule on the next deploy.
+    const domainOnly = config({ name: "app-files" }, { domain: "new.example.com", workersDev: false });
+    await provisionR2({ ...options, appConfig: domainOnly, appDomain: plan.appDomain });
+    expect(remote.state.get("default/app-files").cors[0].allowed.origins).toEqual(["https://new.example.com", "https://old.example.com"]);
   });
 
   it.each(["keys", "origins", "first deploy"])("stops direct uploads before any provisioning write when missing %s", async (reason) => {

@@ -54,6 +54,11 @@ function synthesizeWranglerConfig(appConfig) {
     // drop-trailing-slash matches the Worker's own canonicalization, so a static
     // asset and a dynamically rendered route answer the same URL the same way.
     assets: { binding: ASSETS_BINDING, html_handling: "drop-trailing-slash" },
+    // Wrangler re-enables workers.dev on every deploy unless this is explicit.
+    workers_dev: appConfig.workersDev,
+    // Goribu deploys production only; per-version preview URLs would just be
+    // more public addresses.
+    preview_urls: false,
   };
 
   const flags = appConfig.compatibilityFlags;

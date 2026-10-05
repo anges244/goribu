@@ -192,6 +192,21 @@ upload; `goribu migrate --remote` can advance a compatible schema earlier. See
 [Migrations](/docs/migrations) for the file format, drift behavior, and safe
 production order.
 
+## `goribu d1`
+
+Run SQL against D1 and print the result, local by default:
+
+```sh
+goribu d1 "SELECT * FROM posts LIMIT 5"
+goribu d1 --remote "SELECT count(*) FROM posts"
+```
+
+Local is the database `goribu dev` and `goribu migrate` use. With `--remote`, a
+single `SELECT` runs directly; any other SQL runs only after you type the
+database name in an interactive terminal, and is refused in scripts, CI, and
+coding agents. Make repeatable production data changes with a
+[migration](/docs/migrations) instead.
+
 ## Exit codes
 
 Every command exits non-zero on failure. A deploy that is interrupted or killed

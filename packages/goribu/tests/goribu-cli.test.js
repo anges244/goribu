@@ -196,6 +196,16 @@ describe("goribu CLI", () => {
     expect(stderr).not.toMatch(/never runs against production/);
   });
 
+  it("takes goribu d1 SQL as one quoted argument with migration target flags", () => {
+    expect(runCli(["d1"]).stderr).toMatch(/takes the SQL as one quoted argument, but received none/);
+    expect(runCli(["d1", "SELECT", "1"]).stderr).toMatch(/received 2 arguments/);
+    expect(runCli(["d1", "--bogus", "SELECT 1"]).stderr).toMatch(/`goribu d1` accepts only --local \(default\) or --remote/);
+    // SQL that starts with a comment is SQL, not an option; it reaches config loading.
+    const { status, stderr } = runCli(["d1", "-- inspect\nSELECT 1"]);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(/goribu\.config\.js.*is missing/);
+  });
+
   it("requires a name for migrate:new", () => {
     const { status, stderr } = runCli(["migrate:new"]);
     expect(status).toBe(1);

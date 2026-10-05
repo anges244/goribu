@@ -6,6 +6,7 @@ const CONFIG_BRAND = new WeakSet();
 const CONFIG_FIELDS = new Set([
   "name",
   "domain",
+  "workersDev",
   "compatibilityDate",
   "compatibilityFlags",
   "responseHeaders",
@@ -46,7 +47,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, domain, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2 fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, domain, workersDev, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2 fields.",
     );
   }
 
@@ -63,7 +64,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, domain, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, domain, workersDev, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -99,6 +100,18 @@ export function defineConfig(config) {
         );
       }
     }
+  }
+  if (normalized.workersDev === undefined) normalized.workersDev = true;
+  if (typeof normalized.workersDev !== "boolean") {
+    throw new TypeError(
+      "[Goribu] Application configuration field workersDev must be true, false, or omitted. Omit it to keep the default workers.dev address, or set workersDev: false to serve the app only from domain.",
+    );
+  }
+  // Without workers.dev and a configured domain, a deploy leaves the app with no address.
+  if (!normalized.workersDev && normalized.domain === undefined) {
+    throw new TypeError(
+      '[Goribu] Application configuration field workersDev: false requires domain. Set domain to your custom hostname, such as "app.example.com", or remove workersDev to keep the workers.dev address.',
+    );
   }
   assertOptionalResponseHeaders(
     normalized.responseHeaders,

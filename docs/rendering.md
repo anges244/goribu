@@ -56,7 +56,9 @@ audited for the client boundary. `goribu.config.js` rejects a
 
 Keep `children` under the fixed `#root`, render the route-owned `head` inside
 `<head>`, and place one `<Stylesheet />` and one `<ClientEntry>`. `nonce` is for
-application-owned inline elements on Worker-rendered documents. Route titles
+application-owned inline elements on Worker-rendered documents and is `undefined`
+on prerendered pages; see
+[metadata.md](./metadata.md#inline-scripts-and-prerendered-pages). Route titles
 belong to metadata, not a fallback `<title>` in Document. See
 [metadata.md](./metadata.md).
 

@@ -46,8 +46,8 @@ export function createR2ManagementClient({ access, fetch: fetchImpl = globalThis
   }
 
   return Object.freeze({
-    origins(workerName, workerExists) {
-      return discoverR2Origins({ request, accountId: access.accountId, workerName, workerExists });
+    origins(workerName, workerExists, workersDev) {
+      return discoverR2Origins({ request, accountId: access.accountId, workerName, workerExists, workersDev });
     },
     async worker(workerName) {
       const settings = await request(`/workers/scripts/${encodeURIComponent(workerName)}/settings`, { missingCode: 10007 });

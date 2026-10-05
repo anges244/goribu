@@ -355,7 +355,11 @@ export function createApp(options) {
       });
       return finalizeMatchedResult(result, match, "POST", url, false, false, nonce, url.href, readCfRay(request));
     }
+    // Static HTML is shared by every visitor, so prerendering omits the nonce. A
+    // candidate the Worker serves at request time (dev, or downgraded at build)
+    // receives the CSP header too, so it keeps the nonce that header allows.
     const renderNonce =
+      runtime.env.__GORIBU_PRERENDER === true &&
       (match.kind === "page" ||
         (match.kind === "automatic-head" && match.target?.kind === "page")) &&
       match.route.staticCandidate === true
@@ -807,7 +811,8 @@ async function finalizeHandlerResult(result, options) {
   if (
     result.kind === "text" ||
     result.kind === "json" ||
-    result.kind === "invalid"
+    result.kind === "invalid" ||
+    result.kind === "stream"
   ) {
     if (BODYLESS_STATUSES.has(result.status)) {
       throw new RangeError(

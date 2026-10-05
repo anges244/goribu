@@ -35,6 +35,7 @@ export function createRequest(request, params, runtime) {
 
   return {
     method: request.method,
+    url,
     path: url.pathname,
     params: safeParams,
     query: url.searchParams,

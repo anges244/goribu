@@ -10,6 +10,8 @@ import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "../wrangler-di
  * remote authentication. The target is always explicit — Goribu never relies on
  * Wrangler's default of local or remote. `--file` carries a mutation, `--command`
  * carries an inspection; `json` parses Wrangler's per-statement result array.
+ * `adHoc` runs someone's own SQL (`goribu d1`): Wrangler prints its results, and
+ * because Goribu cannot know what that SQL changes, failures claim nothing about it.
  *
  * @param {{
  *   projectRoot: string,
@@ -24,6 +26,7 @@ import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "../wrangler-di
  *   resolveBin?: Function,
  *   errorLabel?: string,
  *   readOnly?: boolean,
+ *   adHoc?: boolean,
  * }} options
  * @returns {Promise<Array<{ results: unknown[], success: boolean, meta?: object }> | undefined>}
  */
@@ -34,6 +37,8 @@ export async function executeD1(options) {
   // or claim a mutation was rolled back.
   const errorLabel = options?.errorLabel ?? "goribu migrate";
   const readOnly = options?.readOnly === true;
+  const adHoc = options?.adHoc === true;
+  const note = failureNote(readOnly, adHoc);
   if (typeof projectRoot !== "string" || projectRoot.length === 0) {
     throw new TypeError(
       "[Goribu] executeD1({ projectRoot }) requires the application project root.",
@@ -54,6 +59,9 @@ export async function executeD1(options) {
     throw new TypeError(
       "[Goribu] executeD1() requires exactly one of file or command.",
     );
+  }
+  if (adHoc && options.json === true) {
+    throw new TypeError("[Goribu] executeD1() cannot both print ad-hoc results and parse them as JSON.");
   }
 
   const spawn = options.spawn ?? nodeSpawn;
@@ -90,11 +98,11 @@ export async function executeD1(options) {
   try {
     child = spawn(process.execPath, args, {
       cwd: resolve(projectRoot),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", adHoc ? "inherit" : "pipe", "pipe"],
     });
     forwardWranglerDiagnostics(child.stderr);
   } catch (cause) {
-    throw wranglerError(target, errorLabel, readOnly, cause);
+    throw wranglerError(target, errorLabel, note, cause);
   }
 
   let output = "";
@@ -103,12 +111,12 @@ export async function executeD1(options) {
   });
 
   const { code, signal } = await new Promise((resolvePromise, rejectPromise) => {
-    child.on("error", (cause) => rejectPromise(wranglerError(target, errorLabel, readOnly, cause)));
+    child.on("error", (cause) => rejectPromise(wranglerError(target, errorLabel, note, cause)));
     child.on("close", (exitCode, terminatingSignal) =>
       resolvePromise({ code: exitCode, signal: terminatingSignal }),
     );
   });
-  if (signal !== null || code !== 0) throw wranglerError(target, errorLabel, readOnly);
+  if (signal !== null || code !== 0) throw wranglerError(target, errorLabel, note);
 
   if (options.json !== true) return undefined;
   let parsed;
@@ -158,15 +166,19 @@ export function lastResultRows(result) {
   return result[result.length - 1].results;
 }
 
-function wranglerError(target, errorLabel, readOnly, cause) {
+/** What a failed run did not change, as far as Goribu can know. */
+function failureNote(readOnly, adHoc) {
+  if (readOnly) return " No resources were changed.";
+  if (adHoc) return "";
+  return " No migration was recorded for a statement that did not complete.";
+}
+
+function wranglerError(target, errorLabel, note, cause) {
   return new Error(
     `[Goribu] Wrangler could not run the ${target} D1 SQL for \`${errorLabel}\`. ` +
       "Read the Wrangler error above and check the SQL. " +
       (target === "remote" ? CLOUDFLARE_AUTH_HELP : "") +
-      "Then rerun the command. " +
-      (readOnly
-        ? "No resources were changed."
-        : "No migration was recorded for a statement that did not complete."),
+      `Then rerun the command.${note}`,
     cause === undefined ? undefined : { cause },
   );
 }

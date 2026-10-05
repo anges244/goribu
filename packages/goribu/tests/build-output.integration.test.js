@@ -95,6 +95,17 @@ it.each(["buildEnd", "outputOptions"])("preserves generated inputs when %s redir
   expect(readFileSync(migration, "utf8")).toBe(migrationSource);
 }, 30000);
 
+it("keeps local .env values out of production output", () => {
+  const root = project();
+  writeFileSync(join(root, ".env"), "LOCAL_SECRET=local-only-value\n");
+  expect(build(root).status).toBe(0);
+  const dist = join(root, ".goribu/dist");
+  expect(existsSync(join(dist, "goribu_basic_app/wrangler.json"))).toBe(true);
+  const files = readdirSync(dist, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile());
+  expect(files.map((entry) => entry.name)).not.toContain(".dev.vars");
+  expect(files.some((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8").includes("local-only-value"))).toBe(false);
+}, 120000);
+
 it("cleans removed static output across builds while preserving inputs, local state, and legacy dist", () => {
   const root = project();
   for (const [path, text] of [

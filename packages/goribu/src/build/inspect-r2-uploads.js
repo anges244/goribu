@@ -20,7 +20,7 @@ export async function inspectR2Uploads({ metadata, buckets, client, names, acces
   // Missing keys are a deploy step, not a blocker: deploy creates the buckets
   // first, so the token can be scoped to them, then asks for the keys.
   const missing = R2_UPLOAD_KEYS.filter((name) => !names.includes(name));
-  const discovery = await client.origins(appConfig.name, workerExists);
+  const discovery = await client.origins(appConfig.name, workerExists, appConfig.workersDev);
   let origins = discovery.origins;
   // A newly configured domain is attached after Worker upload. Include its
   // verified origin now so the first visit already has working direct uploads.

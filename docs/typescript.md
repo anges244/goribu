@@ -65,7 +65,9 @@ for `[id].tsx`. Parameter names and page props are explicit; Goribu does not
 generate route types or infer a handler's props from its default component.
 
 `Middleware<Env>` types a function in `_middleware.ts`. Return a response intent
-to stop or return nothing to continue; there is no `next` argument. A custom
+to stop or return nothing to continue; there is no `next` argument. Fields a
+middleware attaches to `req` are declared on `AppRequestFields`; see
+[Passing data to the route](./middleware.md#passing-data-to-the-route). A custom
 Document uses `DocumentProps` from `goribu`. A custom `_500` page receives
 `ServerErrorProps` from `goribu/server`, containing `errorId` and the safe `url`
 pathname.

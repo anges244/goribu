@@ -68,9 +68,9 @@ Keep `children` under `#root`, render `head` in `<head>`, and place one of each
 helper. Production replaces the development client source with its hashed entry
 and emits route-specific preloads. `<Stylesheet />` emits hashed graph CSS in
 production. In development, it loads the entry and current page's imported CSS
-through Vite before the first paint. Once the client modules load, Vite's
-injected styles take over and Goribu removes the initial stylesheet, so removed
-CSS rules do not linger during hot updates. Keep CSS imports in the client
+through Vite before the first paint. Vite's injected styles take over as the
+client modules load, and Goribu removes the initial stylesheet before the first
+hot update, so removed CSS rules do not linger during edits. Keep CSS imports in the client
 entry or browser-reachable page modules; no stylesheet URL prop is needed.
 
 Worker-rendered documents receive one request nonce shared by
@@ -104,6 +104,25 @@ This policy is Worker-only. Static routes bypass the Worker and cannot currently
 receive application-defined CSP or other static headers; `public/_headers`
 remains reserved for Goribu's generated cache rules: immutable browser assets
 and static navigation payloads, and an uncached navigation index.
+
+### Inline scripts and prerendered pages
+
+On a prerendered page `nonce` is `undefined`, and no CSP header reaches the
+page. Pass `nonce={nonce}` to your inline scripts anyway. React leaves the
+attribute out when the value is `undefined`, so one Document works for both kinds
+of page: Worker-rendered pages, including static pages in development, carry the
+nonce their CSP allows, and prerendered pages have no CSP to satisfy.
+
+```jsx
+<script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
+```
+
+Send a CSP through `responseHeaders`. Do not build a
+`<meta http-equiv="Content-Security-Policy">` from `nonce` in the Document: on a
+prerendered page it would allow only `'nonce-undefined'` and block the page's
+inline scripts. A nonce has to be new for every response, and a static file is
+the same for everyone, so prerendered pages cannot use one. Until static header
+rules exist, set `prerender = false` on a page that must have a CSP.
 
 ## Public browser values
 

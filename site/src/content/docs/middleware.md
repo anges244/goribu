@@ -55,6 +55,47 @@ Returning a raw `Response` or a bare value is a mistake Goribu catches — retur
 cookies a continuing middleware set are kept when the route renders, and are even
 applied to a short-circuit response.
 
+## Passing data to the route
+
+Middleware and the route share one `req`, so attach what a middleware loads and
+read it later in the chain or in the handler:
+
+```js
+// src/routes/dashboard/_middleware.js
+export default async function loadUser(req, res) {
+  const user = await findSessionUser(req);
+  if (!user) return res.redirect("/login");
+  req.user = user;   // later middleware and the handler see it
+}
+```
+
+```js
+// src/routes/dashboard/settings.js
+export function GET(req, res) {
+  return res.json({ name: req.user.name });
+}
+```
+
+The value lasts for this one request. Use your own field names, such as `user`
+or `team`. Don't overwrite Goribu's fields (`method`, `path`, `cookies`, `env`,
+and the rest), and avoid generic names a later Goribu version might add.
+
+In TypeScript, declare the fields once by augmenting `AppRequestFields`:
+
+```ts
+// src/request.d.ts
+import type { User } from "./lib/users";
+
+declare module "goribu/server" {
+  interface AppRequestFields {
+    user?: User;
+  }
+}
+```
+
+Every `Handler` and `Middleware` then accepts `req.user`. Keep a field optional
+unless the middleware that sets it applies to every route.
+
 ## Order: outermost first
 
 When several `_middleware` files apply to a route, they run **outermost to

@@ -5,6 +5,7 @@ export type ResponseHeaders = Record<string, string | string[]>;
 export interface ApplicationConfig<Env extends object = Record<string, unknown>> {
   name: string;
   domain?: string;
+  workersDev?: boolean;
   compatibilityDate: string;
   compatibilityFlags?: string[];
   database?: { type: "d1"; name: string; replication?: boolean };
@@ -24,7 +25,8 @@ export interface ApplicationConfig<Env extends object = Record<string, unknown>>
 }
 declare const configBrand: unique symbol;
 export type DefinedConfig<Env extends object = Record<string, unknown>> =
-  Readonly<Omit<ApplicationConfig<Env>, "compatibilityFlags" | "database" | "kv" | "r2">> & {
+  Readonly<Omit<ApplicationConfig<Env>, "workersDev" | "compatibilityFlags" | "database" | "kv" | "r2">> & {
+    readonly workersDev: boolean;
     readonly compatibilityFlags: readonly string[];
     readonly database?: Readonly<NonNullable<ApplicationConfig<Env>["database"]>>;
     readonly kv?: Readonly<NonNullable<ApplicationConfig<Env>["kv"]>>;
@@ -160,8 +162,16 @@ export interface UploadPolicy<Env extends object = Record<string, unknown>, Para
   }) => string;
 }
 
-export interface GoribuRequest<Env extends object = Record<string, unknown>, Params extends Record<keyof Params, string> = Record<string, string>> {
+/**
+ * Fields the app attaches to `req` in middleware for later middleware and the
+ * handler. Declare them by augmenting this interface:
+ * `declare module "goribu/server" { interface AppRequestFields { user?: User } }`.
+ */
+export interface AppRequestFields {}
+export interface GoribuRequest<Env extends object = Record<string, unknown>, Params extends Record<keyof Params, string> = Record<string, string>> extends AppRequestFields {
   method: string;
+  /** The absolute route URL, such as for building an OAuth callback from `url.origin`. */
+  url: URL;
   path: string;
   params: Params;
   query: URLSearchParams;
@@ -188,6 +198,8 @@ export interface GoribuResponse<Props extends object = Record<string, unknown>> 
   headers(headers: ResponseHeaders): this;
   text(body?: unknown): ResponseResult;
   json(data: unknown): ResponseResult;
+  /** Send binary or streamed bytes, such as an R2 object's body. Content type defaults to application/octet-stream. */
+  stream(body: ReadableStream | ArrayBuffer | ArrayBufferView | Blob): ResponseResult;
   invalid(errors: string | FormErrors, status?: number): ResponseResult;
   redirect(location: string): ResponseResult;
   render(...args: {} extends Props ? [props?: Props] : [props: Props]): ResponseResult;

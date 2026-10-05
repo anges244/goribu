@@ -1,6 +1,7 @@
 import { createElement as h } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/runtime/create-app.js";
+import { createResponse } from "../src/runtime/create-response.js";
 import { defineConfig } from "goribu/server";
 import { ClientEntry } from "goribu";
 
@@ -182,6 +183,34 @@ describe("createApp().fetch", () => {
       '<link rel="canonical" href="https://example.com/?source=test" data-goribu-head=""/>',
     );
     expect(html.match(new RegExp(`nonce="${nonce}"`, "g"))).toHaveLength(3);
+  });
+
+  it("omits the nonce from a static candidate only while prerendering", async () => {
+    const app = build({
+      manifest: [{ ...ABOUT, staticCandidate: true }],
+      applicationConfig: defineConfig({
+        name: "test-app",
+        compatibilityDate: "2026-08-31",
+        responseHeaders: ({ nonce }) => ({ "content-security-policy": `script-src 'nonce-${nonce}'` }),
+      }),
+      documentId: "doc",
+      modules: new Map([
+        ["about", pageModule("About")],
+        ["doc", { default: ({ children, nonce }) => h("html", null,
+          h("head", null, h("script", { nonce, dangerouslySetInnerHTML: { __html: "window.theme=1" } })),
+          h("body", null, h("div", { id: "root" }, children)),
+        ) }],
+      ]),
+    });
+
+    // Dev, or a candidate downgraded at build: the Worker sends the CSP header,
+    // so the inline script must carry the nonce it allows.
+    const served = await app.fetch(get("/about"), {}, CTX());
+    const nonce = /'nonce-([a-f0-9]{32})'/.exec(served.headers.get("content-security-policy"))[1];
+    expect(await served.text()).toContain(`<script nonce="${nonce}">window.theme=1`);
+
+    const prerendered = await app.fetch(get("/about"), { __GORIBU_PRERENDER: true }, CTX());
+    expect(await prerendered.text()).toContain("<script>window.theme=1");
   });
 
   it("threads production assets through matched pages and entry-only 404 renders", async () => {
@@ -1114,6 +1143,36 @@ describe("createApp().fetch — named handlers", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
     expect(await response.json()).toEqual({ ok: true, method: "GET" });
+  });
+
+  it("streams res.stream() bodies with route headers, cookies and a bodyless HEAD", async () => {
+    const app = handlerApp(
+      new Map([["hello", {
+        GET: (req, res) => {
+          req.cookies.set("seen", "yes");
+          const body = new Blob(["file bytes"]).stream();
+          return res.headers({ "content-type": "image/png", "cache-control": "private, max-age=60" }).stream(body);
+        },
+      }], ["item", { GET: (req, res) => res.stream(new Uint8Array([1, 2, 3])) }]]),
+    );
+
+    const response = await dispatch(app, get("/hello"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    expect(response.headers.get("cache-control")).toBe("private, max-age=60");
+    expect(response.headers.get("set-cookie")).toContain("seen=yes");
+    expect(await response.text()).toBe("file bytes");
+
+    const head = await dispatch(app, new Request("https://example.com/hello", { method: "HEAD" }));
+    expect(head.headers.get("content-type")).toBe("image/png");
+    expect(await head.text()).toBe("");
+
+    const bytes = await dispatch(app, get("/items/1"));
+    expect(bytes.headers.get("content-type")).toBe("application/octet-stream");
+    expect([...new Uint8Array(await bytes.arrayBuffer())]).toEqual([1, 2, 3]);
+
+    expect(() => createResponse({ canRender: false }).stream("text"))
+      .toThrow(/\[Goribu\] res\.stream\(body\) requires a ReadableStream.*res\.text\(body\)/);
   });
 
   it("finalizes res.redirect() as a 303 to the location with no body", async () => {

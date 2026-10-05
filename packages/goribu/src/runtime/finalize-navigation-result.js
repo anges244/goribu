@@ -83,7 +83,8 @@ export function finalizeNavigationResult(result, options) {
   if (
     result.kind === "text" ||
     result.kind === "json" ||
-    result.kind === "invalid"
+    result.kind === "invalid" ||
+    result.kind === "stream"
   ) {
     if (BODYLESS_STATUSES.has(result.status)) {
       throw new RangeError(

@@ -1,18 +1,22 @@
-/** Discover hostnames, including workers.dev as enabled by the generated config. */
-export async function discoverR2Origins({ request, accountId, workerName, workerExists }) {
-  const origins = new Set(), warnings = [];
-  const subdomain = workerExists ? await request(`/workers/scripts/${encodeURIComponent(workerName)}/subdomain`) : { enabled: true };
-  if (typeof subdomain?.enabled !== "boolean") throw invalidOrigins();
-  // Generated config has neither routes nor workers_dev. Wrangler enables this
-  // address on EVERY deploy, including for existing disabled or draft Workers.
-  const account = await request("/workers/subdomain", { missingCode: 10007 });
-  if (account === null || account?.subdomain === "") {
-    throw new Error("[Goribu] The account has no workers.dev subdomain. Register one in Cloudflare Workers & Pages before retrying `goribu deploy`; Goribu does not register it automatically.");
+/** Discover hostnames, including workers.dev when the generated config enables it. */
+export async function discoverR2Origins({ request, accountId, workerName, workerExists, workersDev }) {
+  const origins = new Set(), warnings = [], labels = {};
+  if (workersDev) {
+    const subdomain = workerExists ? await request(`/workers/scripts/${encodeURIComponent(workerName)}/subdomain`) : { enabled: true };
+    if (typeof subdomain?.enabled !== "boolean") throw invalidOrigins();
+    // Generated config sets workers_dev: true and Wrangler applies it on EVERY
+    // deploy, including for existing disabled or draft Workers.
+    const account = await request("/workers/subdomain", { missingCode: 10007 });
+    if (account === null || account?.subdomain === "") {
+      throw new Error("[Goribu] The account has no workers.dev subdomain. Register one in Cloudflare Workers & Pages before retrying `goribu deploy`, or set workersDev: false with a domain in goribu.config.js; Goribu does not register it automatically.");
+    }
+    if (typeof account?.subdomain !== "string" || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(account.subdomain)) throw invalidOrigins();
+    const workersDevOrigin = `https://${hostname(`${workerName}.${account.subdomain}.workers.dev`)}`;
+    origins.add(workersDevOrigin);
+    if (!workerExists) labels.expectedAfterFirstDeploy = true;
+    else if (!subdomain.enabled) labels.enabledByDeploy = workersDevOrigin;
   }
-  if (typeof account?.subdomain !== "string" || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(account.subdomain)) throw invalidOrigins();
-  const workersDevOrigin = `https://${hostname(`${workerName}.${account.subdomain}.workers.dev`)}`;
-  origins.add(workersDevOrigin);
-  if (!workerExists) return { origins: [...origins], warnings, expectedAfterFirstDeploy: true };
+  if (!workerExists) return { origins: [...origins], warnings, ...labels };
   const query = new URLSearchParams({ service: workerName, environment: "production" });
   const domains = await listAll(request, `/workers/domains?${query}`);
   for (const domain of domains) {
@@ -43,8 +47,7 @@ export async function discoverR2Origins({ request, accountId, workerName, worker
       for (const scheme of match[1] ? [match[1]] : ["http", "https"]) origins.add(`${scheme}://${host}`);
     }
   }
-  return { origins: [...origins].sort(), warnings,
-    ...(!subdomain.enabled ? { enabledByDeploy: workersDevOrigin } : {}) };
+  return { origins: [...origins].sort(), warnings, ...labels };
 }
 
 async function listAll(request, path, options = {}) {

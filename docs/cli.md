@@ -206,8 +206,9 @@ Worker. On first deployment, secret setup creates a draft Worker before the fina
 upload.
 
 An application [`domain`](./deploy.md#custom-domain) is inspected before resource
-changes and connected after the Worker upload succeeds. Existing domains and
-workers.dev remain available. A domain failure after upload reports that the
+changes and connected after the Worker upload succeeds. Existing domains stay
+available, and so does workers.dev unless the app sets
+[`workersDev: false`](./deploy.md#workersdev-address). A domain failure after upload reports that the
 Worker is already deployed and exits non-zero so the connection can be repaired
 and retried.
 
@@ -297,10 +298,38 @@ goribu migrate:new create posts        # scaffold the next migration
 goribu migrate:seed                    # run migrations/seed.sql locally
 ```
 
+To inspect or change data directly, use [`goribu d1`](#goribu-d1).
+
 `migrate:seed` is local-only and rejects `--remote` before SQL runs. See
 [migrations.md](./migrations.md) for file naming, drift, rollback safety, and
 deploy ordering. `goribu migrate --remote` remains useful when an expand
 migration should land before the corresponding Worker deploy.
+
+## `goribu d1`
+
+Run SQL against the declared D1 database and print the result. Pass the SQL as
+one quoted argument:
+
+```sh
+goribu d1 "SELECT * FROM posts LIMIT 5"           # local D1
+goribu d1 --remote "SELECT count(*) FROM posts"   # production D1
+```
+
+Local is the default, and it is the same database `goribu dev` and
+`goribu migrate` use. Wrangler prints the results: a table in a terminal, JSON
+when the output is piped. Local SQL runs without confirmation.
+
+`--remote` runs a single `SELECT` directly. Anything else, including a second
+statement, a `WITH` query, or SQL that starts with a comment, could change
+production data. Goribu shows the SQL and runs it only after you type the
+database name. Without an interactive terminal (in CI, from a script or a coding
+agent, or with piped input), that SQL is refused and nothing runs. A typed
+confirmation is the guard because Goribu does not try to guess whether other SQL
+writes: a `SELECT` is the only shape it can prove is read-only.
+
+Changes made this way are not recorded anywhere. Production data changes that
+should be repeatable or reviewed belong in a migration
+(`goribu migrate:new <name>`); see [migrations.md](./migrations.md).
 
 ## Exit codes
 

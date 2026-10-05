@@ -6,6 +6,7 @@ const POSTS_ID = "src/routes/posts/[id].jsx";
 const IMPLICIT_ID = "src/routes/about.jsx";
 const REDIRECT_ID = "src/routes/go.js";
 const API_ID = "src/routes/api.js";
+const FILE_ID = "src/routes/file.js";
 const GUARDED_ID = "src/routes/guarded.jsx";
 const HEADERS_ID = "src/routes/headers.jsx";
 const COOKIE_ID = "src/routes/cookie.jsx";
@@ -39,6 +40,12 @@ const routes = [
     id: API_ID,
     pattern: "/api",
     segments: [{ type: "static", value: "api" }],
+    methods: ["GET"],
+  }),
+  route({
+    id: FILE_ID,
+    pattern: "/file",
+    segments: [{ type: "static", value: "file" }],
     methods: ["GET"],
   }),
   route({
@@ -104,6 +111,7 @@ function createNavigationApp(options = {}) {
             return response.status(202).headers({ "x-page": "posts" }).render({
               id: request.params.id,
               query: request.query.get("view"),
+              url: request.url.href,
               scope: `${request.env.APP}:${request.navigationScope}`,
             });
           },
@@ -132,6 +140,7 @@ function createNavigationApp(options = {}) {
           },
         },
       ],
+      [FILE_ID, { GET: (request, response) => response.stream(new Uint8Array([1, 2, 3])) }],
       [
         GUARDED_ID,
         {
@@ -217,6 +226,7 @@ describe("reserved navigation protocol", () => {
       props: {
         id: "42",
         query: "full",
+        url: "https://example.com/posts/42?view=full",
         scope: "goribu:client",
       },
       meta: {
@@ -312,7 +322,7 @@ describe("reserved navigation protocol", () => {
   it("asks for a full load when the target cannot produce a hydratable route page", async () => {
     const app = createNavigationApp();
 
-    for (const target of ["/api", "/guarded", "/missing"]) {
+    for (const target of ["/api", "/file", "/guarded", "/missing"]) {
       const response = await request(
         app,
         `/_goribu/worker-nav?to=${encodeURIComponent(target)}`,

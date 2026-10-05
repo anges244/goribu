@@ -300,7 +300,7 @@ describe("goribu build static output (workerd)", () => {
     }
   });
 
-  it("matches the static HTML byte-for-byte with what the Worker serves in workerd", async () => {
+  it("matches the static HTML byte-for-byte with what the Worker serves in workerd, apart from its nonce", async () => {
     const harness = createTestHarness({ workers: [{ configPath: workerConfig }] });
     await harness.listen();
     const worker = harness.getWorker();
@@ -308,9 +308,11 @@ describe("goribu build static output (workerd)", () => {
       for (const [file, path] of [["index.html", "/"], ["about.html", "/about"]]) {
         // The direct Worker handle bypasses the Static Assets front door, so this
         // compares the written file against a fresh Worker render, not the file
-        // being served back to itself.
+        // being served back to itself. A request-time render carries that
+        // response's nonce; prerendered HTML is shared, so it has none.
         const served = await (await worker.fetch(`https://goribu.test${path}`)).text();
-        expect(readFileSync(join(clientDir, file), "utf8")).toBe(served);
+        expect(served).toMatch(/ nonce="[a-f0-9]{32}"/);
+        expect(readFileSync(join(clientDir, file), "utf8")).toBe(served.replace(/ nonce="[a-f0-9]{32}"/g, ""));
       }
     } finally {
       await harness.close();
