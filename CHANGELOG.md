@@ -11,6 +11,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Client navigation to a different path now remounts the page, even when both
+  paths match the same route, such as `/e/a` and `/e/b`. Previously the page kept
+  its component state, so state seeded from props could carry over to another
+  entry. Navigation that keeps the path still updates in place: query changes,
+  revisiting the current URL, and in-place Form renders. Remove `key` workarounds
+  added for this.
 - Browser-reachable route modules now reject wildcard `export *`. Use explicit
   named re-exports for handlers and browser helpers instead. This restriction
   does not apply to helper barrels under `_`-prefixed folders.

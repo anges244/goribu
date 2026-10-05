@@ -53,9 +53,13 @@ function LocatedPage({ Page, pageProps, location, onCommit, uploadHints }) {
   useLayoutEffect(() => {
     if (onCommit !== undefined) queueMicrotask(onCommit);
   }, [onCommit]);
+  // A different path starts the page fresh, as a document load would, so state
+  // seeded from one entry's props never carries into another. The same path,
+  // including a query change, refresh or Form render, updates in place.
+  const key = typeof location === "string" ? new URL(location).pathname : undefined;
   return h(
     LocationContext.Provider,
     { value: typeof location === "string" ? location : null },
-    h(UploadHintsContext.Provider, { value: uploadHints ?? null }, h(Page, pageProps)),
+    h(UploadHintsContext.Provider, { value: uploadHints ?? null }, h(Page, { ...pageProps, key })),
   );
 }

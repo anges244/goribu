@@ -90,6 +90,19 @@ empty, non-HTTP, and non-browser calls fail with a `[Goribu]` repair message.
 Prefer `<Link>` for navigation users may open in another tab, copy, or reach
 without JavaScript.
 
+## Page state across navigation
+
+Navigating to a different path starts the page fresh, as a document load
+would. Going from `/e/a` to `/e/b` remounts the `src/routes/e/[id]` page, so
+state seeded from props, such as `useState(props.entry.title)`, always belongs to
+the entry it was created for. Navigation that keeps the path updates the page
+in place and preserves its component state and DOM. That covers query changes
+such as `?tab=notes`, revisiting the current URL, and in-place Form renders.
+
+There is no option to keep component state across different paths of the same
+route. Keep state that must survive that navigation in the URL or in browser
+storage.
+
 ## Static navigation
 
 Production bootstrap reads one uncached, build-identified static navigation

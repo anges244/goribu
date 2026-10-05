@@ -115,6 +115,35 @@ it("preserves hydrated DOM, useId and local state through in-place and same-rout
   expect(errors).toEqual([]);
 });
 
+it("starts the page fresh when navigation changes the path of the same route", async () => {
+  function EntryPage({ title = "initial" }) {
+    const [draft, setDraft] = useState(title);
+    return h("input", { value: draft, onChange: (event) => setDraft(event.target.value) });
+  }
+  // Both paths match one route, as /e/a and /e/b both match src/routes/e/[id].
+  const { controller } = await mount({ initial: EntryPage }, {}, (destination) => ({
+    routeId: "initial",
+    props: destination.pathname === "/initial" ? {} : { title: destination.pathname.split("/").pop() },
+  }));
+  const first = document.querySelector("input");
+
+  let navigation;
+  await act(async () => { navigation = controller.navigate("/e/b"); });
+  await navigation;
+  const second = document.querySelector("input");
+  expect(second).not.toBe(first);
+  expect(second.value).toBe("b");
+
+  await act(async () => {
+    const traversed = new Promise((resolve) => window.addEventListener("popstate", resolve, { once: true }));
+    window.history.back();
+    await traversed;
+  });
+  await drainFrames();
+  expect(window.location.pathname).toBe("/initial");
+  expect(document.querySelector("input").value).toBe("initial");
+});
+
 it("lets navigation started by a child layout effect own scrolling and settles the superseded commit", async () => {
   let controller;
   let finalNavigation;
@@ -285,7 +314,7 @@ function NextPage() {
   }, "Destination"));
 }
 
-async function mount(pages, additionalLoaders = {}) {
+async function mount(pages, additionalLoaders = {}, resolveRoute = (destination) => ({ routeId: destination.pathname.slice(1), props: {} })) {
   const errors = [];
   const container = document.createElement("div");
   container.id = "root";
@@ -317,8 +346,8 @@ async function mount(pages, additionalLoaders = {}) {
     root, pageLoaders, browserWindow: window,
     fetch: async (url) => {
       const destination = new URL(new URL(url).searchParams.get("to"), window.location.origin);
-      const routeId = destination.pathname.slice(1);
-      return Response.json({ kind: "render", routeId, props: {}, meta: { title: routeId }, status: 200 });
+      const { routeId, props } = resolveRoute(destination);
+      return Response.json({ kind: "render", routeId, props, meta: { title: routeId }, status: 200 });
     },
   });
   controllers.push(controller);
