@@ -43,6 +43,9 @@ add routes and dependencies only for actual application needs.
 - Only `PUBLIC_*` environment values are browser-visible. Never prefix secrets
   with `PUBLIC_` or serialize them into page props.
 - `/_goribu/` is reserved. Do not create app routes or public files there.
+- Do not add `404.html` files to `public/` or name a static route `404`; production
+  builds generate `404.html` from `src/routes/_404`, which must render without
+  request data.
 
 ## Data and validation
 
