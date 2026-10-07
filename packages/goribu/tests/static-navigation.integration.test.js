@@ -10,7 +10,7 @@ import { createNavigationController } from "../src/browser/create-navigation-con
 
 const fixture = fileURLToPath(new URL("../../../fixtures/basic-app", import.meta.url));
 const cli = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
-let root, clientDir, harness, origin, manifest;
+let root, clientDir, harness, origin, manifest, buildOutput;
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "goribu-static-navigation-"));
@@ -32,12 +32,17 @@ export function meta({ props, url }) { return { title: props.token, description:
 export default function Snapshot({ token, text }) { return <main data-id="__GORIBU_PROPS__" data-route-id="__GORIBU_ROUTE__"><h1>{token}</h1><p>{text}</p><Link href="/">Home</Link></main>; }
 `);
   writeFileSync(join(root, "src/routes/broken.jsx"), 'export default function Broken() { throw new Error("cannot prerender"); }');
+  // React finishes this stream with the fallback, so only a complete build render catches it.
+  writeFileSync(join(root, "src/routes/fragile.jsx"), `import { Suspense } from "react";
+function Broken() { throw new Error("boundary failed"); }
+export default function Fragile() { return <Suspense fallback={<p>Fallback only</p>}><Broken /></Suspense>; }`);
   const result = spawnSync(process.execPath, [cli, "build"], {
     cwd: root, encoding: "utf8", timeout: 100000,
     env: { ...process.env, NODE_ENV: "production" },
   });
   expect(result.error, String(result.error)).toBeUndefined();
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  buildOutput = `${result.stdout}\n${result.stderr}`;
   manifest = JSON.parse(readFileSync(join(clientDir, "_goribu/navigation.json"), "utf8"));
   harness = createTestHarness({ workers: [{ configPath: join(root, ".goribu/dist/static_navigation_test/wrangler.json") }] });
   const { url } = await harness.listen();
@@ -51,6 +56,7 @@ afterAll(async () => {
 
 it("serves the index and the exact HTML snapshot's props and metadata without executing the Worker", async () => {
   expect(Object.keys(manifest.routes).sort()).toEqual(["/", "/about", "/snapshot"]);
+  expect(buildOutput).toContain('Route "src/routes/fragile.jsx" (/fragile) is a prerender candidate but was not statically output: the Worker reported an error inside a Suspense boundary');
   const index = await fetch(`${origin}/_goribu/navigation.json`);
   expect(index.headers.get("x-worker-executed")).toBeNull();
   expect(index.headers.get("cache-control")).toContain("no-store");

@@ -52,7 +52,17 @@ Start with the test for the behavior you changed, for example:
 pnpm test packages/goribu/tests/create-request.test.js --maxWorkers=1
 ```
 
-Then run the workspace suite:
+For quick feedback across the unit and lightweight contract tests:
+
+```sh
+pnpm test:fast
+```
+
+This uses up to four isolated workers. It skips the build, Worker integration,
+CLI dispatch, package archive, and public type suites listed in
+`vitest.fast.config.js`. A fast pass is not complete validation.
+
+Before submitting a change, run the complete workspace suite:
 
 ```sh
 VITEST_MAX_WORKERS=1 pnpm test
@@ -63,6 +73,9 @@ One test worker limits contention between compiler and Worker integration tests.
 The suite includes real builds, local servers, package archive checks, and public
 type fixtures. Some tests require Git, `tar`, and npm in addition to pnpm; the
 release tooling targets macOS/Linux.
+
+See [Testing the framework](docs/testing.md) for test selection, temporary app
+and cache isolation, and the distinction between test counts and coverage.
 
 Keep changes focused. Add regression coverage for bugs and update the public
 declarations when runtime APIs change. Update the changelog and relevant guides;

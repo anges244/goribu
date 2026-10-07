@@ -11,7 +11,7 @@ import { DefaultErrorPage } from "./default-error-page.js";
  * props on a route miss, or the handler’s res.notFound(props). The built-in page
  * uses only safe request diagnostics; handler headers are preserved.
  *
- * @param {{ NotFoundPage?: Function|null, Document: Function, location?: string, cfRay?: string, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * @param {{ NotFoundPage?: Function|null, Document: Function, location?: string, cfRay?: string, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string, complete?: boolean }} options
  * @returns {Promise<Response>}
  */
 export async function renderNotFound(options) {
@@ -57,6 +57,7 @@ export async function renderNotFound(options) {
     mode: options?.mode,
     clientAssetManifest: options?.clientAssetManifest,
     clientAssetBase: options?.clientAssetBase,
+    complete: options?.complete,
   });
 }
 

@@ -73,6 +73,9 @@ browser hydration payload. See [handlers.md](./handlers.md).
 A URL that matches no route renders a not-found page with a `404` status,
 through the same shell as any other page. Supply your own by adding
 `src/routes/_404.jsx`; without one, Goribu streams a plain built-in page.
+Production builds also prerender it once for URLs that no Worker route could
+match, so it must render without request data; see
+[worker-routing.md](./worker-routing.md).
 
 ## When rendering can't proceed
 

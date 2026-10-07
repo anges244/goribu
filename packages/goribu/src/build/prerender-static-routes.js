@@ -198,8 +198,12 @@ async function renderThroughWorker(worker, route) {
   }
 
   if (response.status !== 200) {
-    if (response.headers.get("x-goribu-prerender-error") === "r2-signed-url") {
+    const diagnostic = response.headers.get("x-goribu-prerender-error");
+    if (diagnostic === "r2-signed-url") {
       return { ok: false, reason: "called req.r2.signedUrl(), whose link would expire inside static HTML" };
+    }
+    if (diagnostic === "incomplete-render") {
+      return { ok: false, reason: "reported an error inside a Suspense boundary, so its HTML would contain only the fallback" };
     }
     return { ok: false, reason: `responded ${response.status}` };
   }
@@ -229,8 +233,12 @@ async function renderThroughWorker(worker, route) {
  * Wrangler's test harness, from the build's own generated Wrangler config, so
  * static output is rendered by the real artifact in its real runtime. Injectable
  * so the orchestration can be tested without starting workerd.
+ *
+ * frontDoor requests instead pass through the Static Assets router as public
+ * traffic would, without the build-only binding, so the build can prove what
+ * the emitted routing configuration actually serves.
  */
-async function startPrerenderWorker({ configPath }) {
+export async function startPrerenderWorker({ configPath, frontDoor = false }) {
   const { createTestHarness } = await import("wrangler");
 
   // Keep the harness's own informational logging out of the build output, without
@@ -244,9 +252,10 @@ async function startPrerenderWorker({ configPath }) {
   };
 
   let harness;
+  let url;
   try {
-    harness = createTestHarness({ workers: [{ configPath, vars: { __GORIBU_PRERENDER: true } }] });
-    await harness.listen();
+    harness = createTestHarness({ workers: [{ configPath, ...(frontDoor ? {} : { vars: { __GORIBU_PRERENDER: true } }) }] });
+    ({ url } = await harness.listen());
   } catch (error) {
     restoreLogLevel();
     throw error;
@@ -255,6 +264,7 @@ async function startPrerenderWorker({ configPath }) {
 
   return {
     fetch(pathname) {
+      if (frontDoor) return fetch(new URL(pathname, url), { redirect: "manual" });
       // The direct Worker handle dispatches straight to the Worker, bypassing the
       // Static Assets front door, so a route renders through the Worker even after
       // its own static file has been written into the asset directory. Manual

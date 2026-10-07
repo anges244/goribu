@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { copyTestApp } from "./support/copy-test-app.js";
 
 // A real end-to-end exercise of the static-output boundary: it runs the actual
 // `goribu build` on the fixture app, which builds the Worker and client bundles
@@ -11,20 +12,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // stubbed — this proves the workerd render path, not just the orchestration.
 
 const cliPath = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
-const appDir = fileURLToPath(new URL("../../../fixtures/basic-app", import.meta.url));
-const clientDir = join(appDir, ".goribu", "dist", "client");
-const workerConfig = join(appDir, ".goribu", "dist", "goribu_basic_app", "wrangler.json");
+const fixture = fileURLToPath(new URL("../../../fixtures/basic-app", import.meta.url));
+let appDir, clientDir, workerConfig;
 
 let build;
 
-function cleanBuildOutput() {
-  for (const dir of [".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
-    rmSync(join(appDir, dir), { recursive: true, force: true });
-  }
-}
-
 beforeAll(() => {
-  cleanBuildOutput();
+  appDir = copyTestApp(fixture, "goribu-prerender-test-");
+  clientDir = join(appDir, ".goribu", "dist", "client");
+  workerConfig = join(appDir, ".goribu", "dist", "goribu_basic_app", "wrangler.json");
   // spawnSync blocks the event loop, so Vitest's hook timeout cannot interrupt a
   // hung build. Bound the child directly and surface a spawn/kill error.
   const result = spawnSync(process.execPath, [cliPath, "build"], {
@@ -40,7 +36,7 @@ beforeAll(() => {
 }, 120000);
 
 afterAll(() => {
-  cleanBuildOutput();
+  if (appDir) rmSync(appDir, { recursive: true, force: true });
 });
 
 describe("goribu build static output (workerd)", () => {

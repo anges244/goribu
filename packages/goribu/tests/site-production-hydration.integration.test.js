@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readMigrations } from "../src/build/migrations/read-migrations.js";
+import { copyTestApp } from "./support/copy-test-app.js";
 
 const cliPath = fileURLToPath(new URL("../bin/goribu.js", import.meta.url));
-const siteDir = fileURLToPath(new URL("../../../site", import.meta.url));
-const clientDir = join(siteDir, ".goribu", "dist", "client");
-const workerConfig = join(siteDir, ".goribu", "dist", "goribu_site", "wrangler.json");
+const siteSource = fileURLToPath(new URL("../../../site", import.meta.url));
+let siteDir, clientDir, workerConfig;
 const productionEntry =
   /\/_goribu\/assets\/client-entry-[A-Za-z0-9_-]{8}\.js/;
 const productionStyle =
@@ -19,14 +19,10 @@ const productionRoute =
 
 let build;
 
-function cleanBuildOutput() {
-  for (const dir of [".goribu", ".wrangler", "goribu.wrangler.jsonc"]) {
-    rmSync(join(siteDir, dir), { recursive: true, force: true });
-  }
-}
-
 beforeAll(() => {
-  cleanBuildOutput();
+  siteDir = copyTestApp(siteSource, "goribu-site-test-", ["plugins", "migrations"]);
+  clientDir = join(siteDir, ".goribu", "dist", "client");
+  workerConfig = join(siteDir, ".goribu", "dist", "goribu_site", "wrangler.json");
   const result = spawnSync(process.execPath, [cliPath, "build"], {
     cwd: siteDir,
     encoding: "utf8",
@@ -40,7 +36,7 @@ beforeAll(() => {
 }, 120000);
 
 afterAll(() => {
-  cleanBuildOutput();
+  if (siteDir) rmSync(siteDir, { recursive: true, force: true });
 });
 
 describe("site production hydration", () => {

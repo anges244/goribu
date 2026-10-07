@@ -20,6 +20,7 @@ beforeAll(async () => {
   symlinkSync(join(fixture, "node_modules"), join(root, "node_modules"), "dir");
   server = await createServer({
     root,
+    cacheDir: join(root, ".vite-cache"),
     configFile: false,
     logLevel: "silent",
     plugins: [goribu()],

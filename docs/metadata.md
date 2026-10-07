@@ -57,7 +57,9 @@ the normal error boundary before page bytes commit.
 During request-time rendering, `url` is the displayed route URL. Prerendering
 uses the build-time route URL; static navigation reuses the saved metadata. A same-page
 form render receives the verified Referer URL, including its query. `_404`
-receives the missing URL and its props. Production `_500` receives the safe
+receives the missing URL and its props when the Worker renders it; the prebuilt
+production copy served for unknown URLs receives `/404` (see
+[worker-routing.md](./worker-routing.md)). Production `_500` receives the safe
 `{ url, errorId }` props, while its metadata URL omits query and hash.
 
 `res.notFound(props)` renders `_404` with that page's own `meta`, not the route's.

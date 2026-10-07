@@ -8,15 +8,16 @@ import { createServer } from "vite";
 import { expect, it, vi } from "vitest";
 import { goribu } from "goribu/vite";
 import { createClientRouteModuleId } from "../src/build/create-client-boundary-plugin.js";
+import { copyTestApp } from "./support/copy-test-app.js";
 
 it("prebundles lazy-page React imports with the bootstrap on a cold dev start", async () => {
-  const cacheDir = mkdtempSync(join(tmpdir(), "goribu-cold-client-"));
+  const root = copyTestApp(fileURLToPath(new URL("../../../fixtures/basic-app/", import.meta.url)), "goribu-cold-client-");
   let server;
   try {
     server = await createServer({
       configFile: false,
-      root: fileURLToPath(new URL("../../../fixtures/basic-app/", import.meta.url)),
-      cacheDir,
+      root,
+      cacheDir: join(root, ".vite-cache"),
       logLevel: "silent",
       // Exercise the browser plugins without starting a Worker or HTTP listener.
       plugins: goribu().filter((plugin) => plugin.name?.startsWith("goribu")),
@@ -48,7 +49,7 @@ it("prebundles lazy-page React imports with the bootstrap on a cold dev start", 
     expect(optimizer.metadata.browserHash).toBe(firstHash);
   } finally {
     await server?.close();
-    rmSync(cacheDir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 }, 20000);
 

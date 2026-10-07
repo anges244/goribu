@@ -121,7 +121,7 @@ it("starts, uploads and verifies public/private files through dev and the built 
       for (const path of ["/_goribu/r2/unknown", "/_goribu/r2/private/key", "/_goribu/r2/upload/"]) expect((await fetch(new URL(path, base), { redirect: "manual" })).status).toBe(404);
       expect((await fetch(new URL("/_goribu/r2/upload", base))).status).toBe(405);
     }
-    server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [goribu()], server: { host: "127.0.0.1", port: 0 } });
+    server = await createServer({ root, cacheDir: join(root, ".vite-cache"), configFile: false, logLevel: "silent", plugins: [goribu()], server: { host: "127.0.0.1", port: 0 } });
     await server.listen();
     await exercise(server.resolvedUrls.local[0], true);
     await server.close();

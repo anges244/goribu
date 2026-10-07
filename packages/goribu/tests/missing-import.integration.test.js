@@ -26,6 +26,7 @@ beforeAll(async () => {
   }));
   server = await createServer({
     root, configFile: false, logLevel: "silent",
+    cacheDir: join(root, ".vite-cache"),
     resolve: { tsconfigPaths: true, alias: { "@": join(root, "src") } },
     plugins: [goribu(), { name: "observe-session", configureServer() { starts++; } }],
     server: { host: "127.0.0.1", port: 0 },

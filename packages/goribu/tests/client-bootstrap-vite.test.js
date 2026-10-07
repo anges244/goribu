@@ -1,14 +1,24 @@
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { goribu } from "goribu/vite";
 import { CLIENT_PAGE_MANIFEST_ID } from "../src/build/create-client-page-manifest-plugin.js";
+import { copyTestApp } from "./support/copy-test-app.js";
 
-const projectRoot = fileURLToPath(
+const fixture = fileURLToPath(
   new URL("../../../fixtures/basic-app/", import.meta.url),
 );
-const routesDir = join(projectRoot, "src", "routes");
+let projectRoot, routesDir;
+
+beforeAll(() => {
+  projectRoot = copyTestApp(fixture, "goribu-bootstrap-test-");
+  routesDir = join(projectRoot, "src", "routes");
+});
+afterAll(() => {
+  if (projectRoot) rmSync(projectRoot, { recursive: true, force: true });
+});
 
 describe("client hydration bootstrap", () => {
   it("bundles the runtime and lazy fixture pages without API-only server code", async () => {

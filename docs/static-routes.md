@@ -88,7 +88,8 @@ known at build time. It will render on the Worker at request time.
 
 A route is downgraded when it has a dynamic segment, selected middleware, or the
 Worker cannot render it at build time. A non-HTML response or one that sets a
-cookie also cannot become a public static snapshot. A route that *forced* `prerender = true`
+cookie also cannot become a public static snapshot, and neither can a page whose
+`Suspense` boundary throws: the HTML would contain only the fallback. A route that *forced* `prerender = true`
 fails the build instead of downgrading — it asked for a guarantee it could not
 keep.
 
@@ -111,6 +112,8 @@ not taken as proof.
 ## See also
 
 - [routing.md](./routing.md) — how URLs map to routes.
+- [worker-routing.md](./worker-routing.md) — which requests reach the Worker,
+  including unknown URLs.
 - [rendering.md](./rendering.md) — how a page renders to HTML.
 - [decisions.md](./decisions.md) — the two axes, and the static-output render
   path.

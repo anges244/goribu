@@ -15,6 +15,7 @@ import { runWrangler } from "../src/build/run-wrangler.js";
 import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
+import { finalizeWorkerRouting } from "../src/build/finalize-worker-routing.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
 import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
 import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
@@ -65,12 +66,14 @@ function printUsage(stream) {
 // build-time static output: routes whose first response needs no Worker are
 // rendered by running the emitted Worker in workerd and asking it for each route,
 // then written into the client asset directory, so Static Assets serves them
-// without ever invoking the Worker at request time.
+// without ever invoking the Worker at request time. Routing is planned last,
+// from the routes that actually prerendered and the final asset inventory.
 async function runBuild() {
   const { createBuilder } = await import("vite");
   const builder = await createBuilder({ root: process.cwd() });
   await builder.buildApp();
-  const { outputs } = await prerenderStaticRoutes({ projectRoot: process.cwd() });
+  const { outputs, prerendered } = await prerenderStaticRoutes({ projectRoot: process.cwd() });
+  await finalizeWorkerRouting({ projectRoot: process.cwd(), prerendered, outputs });
   console.log(
     `[Goribu] Build complete.\n` +
     `  HTML and browser assets: ${relative(process.cwd(), outputs.clientDir)}\n` +

@@ -93,7 +93,9 @@ From the route tree alone — before any handler exists — Goribu answers:
 - **HEAD** → the same status and headers as GET, with no body.
 - **OPTIONS** → `204 No Content` with an `Allow` header.
 - Any other method → `405 Method Not Allowed` with an `Allow` header.
-- An unmatched URL → the `_404` page.
+- An unmatched URL → the `_404` page. In production, Static Assets serves a
+  prebuilt copy for URLs that no Worker route could match; see
+  [worker-routing.md](./worker-routing.md).
 - A trailing slash → a redirect to the canonical, slash-free URL (the root `/`
   excepted). The Worker issues a `308` for the routes it serves; static routes
   are canonicalized by the asset layer's matching `drop-trailing-slash` handling.
@@ -105,3 +107,5 @@ From the route tree alone — before any handler exists — Goribu answers:
   response, and the document shell.
 - [static-routes.md](./static-routes.md) — which routes are served from Static
   Assets without invoking the Worker.
+- [worker-routing.md](./worker-routing.md) — which requests reach the Worker in
+  production, and the prebuilt not-found page.

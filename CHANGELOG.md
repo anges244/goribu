@@ -9,6 +9,36 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Production builds route only requests that can need the Worker to it. Unknown
+  URLs, such as scanner probes for `/wp-login.php`, receive a prebuilt copy of
+  the `_404` page from Static Assets without invoking the Worker. Applications
+  with a root parameter route keep default routing and get a build warning. See
+  [Worker routing](docs/worker-routing.md).
+
+### Changed
+
+- `goribu build` can now fail where it previously succeeded: when `_404` cannot
+  render without a request, when another `404.html` exists in `public/` or is
+  produced by a static route named `404`, when `public/.assetsignore` excludes
+  `404.html`, or when routing needs more than Cloudflare's 100 rules. Each
+  failure names the file or route to change.
+- In production, an unknown URL requested with a method other than `GET` or
+  `HEAD` answers `405` from Static Assets instead of the Worker's `404`.
+
+- Contributors can use `pnpm test:fast` for unit and lightweight contract
+  feedback; `pnpm test` and release validation still run the complete suite.
+- Tests that built the fixture and legacy site in place now use temporary app
+  copies. Development tests sharing installed dependencies use separate Vite
+  caches, and each migration integration test creates its own local database.
+
+### Fixed
+
+- A prerender candidate whose `Suspense` boundary throws is no longer published
+  as fallback-only HTML. It renders on the Worker with a named build warning, and
+  `prerender = true` fails the build.
+
 ## [0.9.2] - 2026-10-05
 
 ### Added

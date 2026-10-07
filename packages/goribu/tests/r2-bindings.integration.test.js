@@ -72,7 +72,7 @@ export default function Page({ url }) { return <a href={url}>Static R2 URL</a>; 
     const expected = { primary: "default bucket", secondary: r2.private ? "private bucket" : null,
       contentType: "text/plain", url: r2.domain ? `/_goribu/r2/public/${encodedKey}` : null };
     async function startDev() {
-      server = await createServer({ root, configFile: false, logLevel: "silent", plugins: [goribu()], server: { host: "127.0.0.1", port: 0 } });
+      server = await createServer({ root, cacheDir: join(root, ".vite-cache"), configFile: false, logLevel: "silent", plugins: [goribu()], server: { host: "127.0.0.1", port: 0 } });
       await server.listen();
       return new URL("/r2-binding", server.resolvedUrls.local[0]);
     }

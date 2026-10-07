@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
 import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
@@ -44,40 +44,45 @@ function query(command) {
   });
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "goribu-migrate-int-"));
   mkdirSync(join(root, "migrations"), { recursive: true });
   context = await resolveMigrationContext({ projectRoot: root, loadConfig });
 });
-afterAll(() => {
-  rmSync(root, { recursive: true, force: true });
+afterEach(() => {
+  if (root) rmSync(root, { recursive: true, force: true });
 });
+
+async function applyWidgetMigrations() {
+  const firstMigration = runMigrateNew({
+    projectRoot: root,
+    name: "create widgets",
+    stdout: capture(),
+  });
+  writeFileSync(
+    firstMigration.file,
+    "-- migrate:up\nCREATE TABLE widgets (name TEXT);\n" +
+      "-- migrate:down\nDROP TABLE widgets;\n",
+  );
+  const secondMigration = runMigrateNew({
+    projectRoot: root,
+    name: "seed widgets",
+    stdout: capture(),
+  });
+  writeFileSync(
+    secondMigration.file,
+    "-- migrate:up\nINSERT INTO widgets (name) VALUES ('gizmo');\n" +
+      "-- migrate:down\nDELETE FROM widgets WHERE name = 'gizmo';\n",
+  );
+
+  const applied = capture();
+  await runMigrate({ projectRoot: root, loadConfig, stdout: applied });
+  return applied;
+}
 
 describe("goribu migrate (local, real Wrangler)", () => {
   it("scaffolds and applies forward SQL, records the ledger, then is idempotent", { timeout: 120000 }, async () => {
-    const firstMigration = runMigrateNew({
-      projectRoot: root,
-      name: "create widgets",
-      stdout: capture(),
-    });
-    writeFileSync(
-      firstMigration.file,
-      "-- migrate:up\nCREATE TABLE widgets (name TEXT);\n" +
-        "-- migrate:down\nDROP TABLE widgets;\n",
-    );
-    const secondMigration = runMigrateNew({
-      projectRoot: root,
-      name: "seed widgets",
-      stdout: capture(),
-    });
-    writeFileSync(
-      secondMigration.file,
-      "-- migrate:up\nINSERT INTO widgets (name) VALUES ('gizmo');\n" +
-        "-- migrate:down\nDELETE FROM widgets WHERE name = 'gizmo';\n",
-    );
-
-    const applied = capture();
-    await runMigrate({ projectRoot: root, loadConfig, stdout: applied });
+    const applied = await applyWidgetMigrations();
     expect(applied.text).toContain("✓ Applied 0001_create-widgets to local");
     expect(applied.text).toContain("✓ Applied 0002_seed-widgets to local");
 
@@ -94,6 +99,7 @@ describe("goribu migrate (local, real Wrangler)", () => {
   });
 
   it("rolls back one migration atomically, then seeds without changing the ledger", { timeout: 120000 }, async () => {
+    await applyWidgetMigrations();
     const status = capture();
     await runMigrateStatus({ projectRoot: root, loadConfig, stdout: status });
     expect(status.text).toContain("Applied (2):");
@@ -171,6 +177,7 @@ describe("goribu migrate (local, real Wrangler)", () => {
   });
 
   it("runs `goribu d1` SQL against the same local database", { timeout: 120000 }, async () => {
+    await query("CREATE TABLE widgets (name TEXT)");
     await runD1({ projectRoot: root, loadConfig, sql: "INSERT INTO widgets (name) VALUES ('ad-hoc')" });
     expect(lastResultRows(await query("SELECT name FROM widgets WHERE name = 'ad-hoc'"))).toEqual([
       { name: "ad-hoc" },

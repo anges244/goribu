@@ -138,6 +138,23 @@ describe("renderPage hydration data", () => {
     expect(html).toContain("Ready");
   });
 
+  it("rejects a complete build-time render whose Suspense boundary fell back after an error", async () => {
+    function Broken() {
+      throw new Error("boundary failed");
+    }
+    const Page = () => h(Suspense, { fallback: h("p", null, "Fallback only") }, h(Broken));
+    const options = { Page, Document: CustomDocument, props: {} };
+
+    // Request-time streaming keeps React's client-render recovery.
+    expect(await (await renderPage(options)).text()).toContain("Fallback only");
+    await expect(renderPage({ ...options, complete: true })).rejects.toThrow(
+      expect.objectContaining({
+        message: expect.stringMatching(/inside a Suspense boundary.*renders completely without a request/),
+        cause: expect.objectContaining({ message: "boundary failed" }),
+      }),
+    );
+  });
+
   it("passes route head and nonce to Document and emits graph-owned styles", async () => {
     let documentProps;
     function Document(props) {

@@ -30,6 +30,7 @@ beforeAll(async () => {
   writeFileSync(greeting, 'import classes from "../greeting.module.css";\n' + readFileSync(greeting, "utf8").replace('<h1>', '<h1 className={classes.heading}>'));
   server = await createServer({
     root,
+    cacheDir: join(root, ".vite-cache"),
     configFile: false,
     logLevel: "silent",
     plugins: [goribu()],

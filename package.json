@@ -9,6 +9,7 @@
   "scripts": {
     "release": "node scripts/release.js",
     "test": "vitest run",
+    "test:fast": "vitest run --config vitest.fast.config.js",
     "test:watch": "vitest"
   },
   "devDependencies": {

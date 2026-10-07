@@ -1,5 +1,5 @@
 import { matchRoute } from "../routing/match-route.js";
-import { renderPage } from "../rendering/render-page.js";
+import { isIncompleteRenderError, renderPage } from "../rendering/render-page.js";
 import { renderNotFound } from "../rendering/render-not-found.js";
 import { DefaultDocument } from "../rendering/document.js";
 import { createRequest } from "./create-request.js";
@@ -175,6 +175,36 @@ export function createApp(options) {
           return Response.json({ version: 1, error: error.message }, { status: 400 });
         }
       }
+      // The build stores this as the page Static Assets serves for URLs outside
+      // the Worker's routing patterns. Every visitor shares it, so it renders
+      // before request state: no location, Ray ID, nonce, cookies or global
+      // headers. Its metadata uses the build-time URL /404.
+      if (outerUrl.pathname === "/_goribu/build/not-found") {
+        if (env.__GORIBU_PRERENDER !== true || request.method !== "GET") return new Response(null, { status: 404 });
+        try {
+          return await renderNotFound({
+            NotFoundPage,
+            Document,
+            metadata: resolveRouteMeta({
+              meta: NotFoundModule?.meta,
+              props: {},
+              url: new URL("/404", outerUrl.origin),
+              routeId: notFoundId ?? "built-in _404",
+            }),
+            mode,
+            clientAssetManifest,
+            clientAssetBase,
+            complete: true,
+          });
+        } catch (error) {
+          // A failed miss page fails the build, so tell the local build why.
+          const messages = [];
+          for (let cause = error; cause !== undefined && messages.length < 5; cause = cause?.cause) {
+            messages.push(cause instanceof Error ? cause.message : String(cause));
+          }
+          return new Response(messages.join(" Caused by: "), { status: 500 });
+        }
+      }
       const nonce = createResponseNonce();
       const cookieJar = createCookieJar(request);
       const d1Controller = createD1RequestController({
@@ -296,10 +326,11 @@ export function createApp(options) {
                 clientAssetManifest,
                 clientAssetBase,
               });
-        if (env.__GORIBU_PRERENDER === true && isSignedUrlPrerenderError(error)) {
-          // Fixed framework diagnostic for the local build harness only. Never
+        if (env.__GORIBU_PRERENDER === true) {
+          // Fixed framework diagnostics for the local build harness only. Never
           // transport the thrown value or a request-controlled error message.
-          response.headers.set("x-goribu-prerender-error", "r2-signed-url");
+          if (isSignedUrlPrerenderError(error)) response.headers.set("x-goribu-prerender-error", "r2-signed-url");
+          else if (isIncompleteRenderError(error)) response.headers.set("x-goribu-prerender-error", "incomplete-render");
         }
       }
       // Every document mutation can vary between its ordinary representation and a
@@ -365,6 +396,9 @@ export function createApp(options) {
       match.route.staticCandidate === true
         ? undefined
         : nonce;
+    // A static candidate rendered for the build must be complete. React would
+    // otherwise finish the stream with a fallback only client rendering repairs.
+    const completeRender = runtime.env.__GORIBU_PRERENDER === true && match.route?.staticCandidate === true;
 
     switch (match.kind) {
       // A route that exports a handler for the request method: run it and
@@ -398,6 +432,7 @@ export function createApp(options) {
           result?.kind === "not-found" ? nonce : renderNonce,
           formRenderContext?.displayedUrl ?? url.href,
           readCfRay(request),
+          completeRender,
         );
       }
 
@@ -423,6 +458,7 @@ export function createApp(options) {
           result?.kind === "not-found" ? nonce : renderNonce,
           formRenderContext?.displayedUrl ?? url.href,
           readCfRay(request),
+          completeRender,
         );
       }
 
@@ -464,6 +500,7 @@ export function createApp(options) {
           result?.kind === "not-found" ? nonce : renderNonce,
           formRenderContext?.displayedUrl ?? url.href,
           readCfRay(request),
+          completeRender,
         );
       }
 
@@ -597,6 +634,7 @@ export function createApp(options) {
     nonce,
     metadataUrl,
     cfRay,
+    complete = false,
   ) {
     const routeModule = requireModule(modules, match.route.id, "route");
     const metadata =
@@ -623,6 +661,7 @@ export function createApp(options) {
       metadata,
       uploads: getUploadPolicies().client.get(match.route.id),
       nonce,
+      complete,
       mode,
       clientAssetManifest,
       clientAssetBase,
@@ -855,6 +894,7 @@ async function finalizeHandlerResult(result, options) {
       metadata: options.metadata,
       uploads: options.uploads,
       nonce: options.nonce,
+      complete: options.complete,
       mode: options.mode,
       clientAssetManifest: options.clientAssetManifest,
       clientAssetBase: options.clientAssetBase,

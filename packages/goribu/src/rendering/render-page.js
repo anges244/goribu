@@ -9,6 +9,13 @@ import { createLocatedPage } from "../navigation/location-context.js";
 import { resolveClientAssets } from "./resolve-client-assets.js";
 import { createRouteHead } from "./route-head.js";
 
+const incompleteRenders = new WeakSet();
+
+/** Recognize renderPage's own complete-render failure without matching text. */
+export function isIncompleteRenderError(error) {
+  return incompleteRenders.has(error);
+}
+
 /**
  * Stream one matched route page into a Worker HTML Response.
  *
@@ -20,7 +27,11 @@ import { createRouteHead } from "./route-head.js";
  * channel for browser hydration. Matched pages also carry their canonical route
  * ID so the browser selects the same component from the generated loader map.
  *
- * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string }} options
+ * A complete render is for build-time snapshots. It waits for every Suspense
+ * boundary and rejects when React reports an error, because the stream would
+ * otherwise finish with a fallback that only client rendering can repair.
+ *
+ * @param {{ Page: Function, Document: Function, routeId?: string, location?: string, status?: number, props?: object, headers?: object, metadata?: object, nonce?: string, mode?: "development"|"production", clientAssetManifest?: object|null, clientAssetBase?: string, complete?: boolean }} options
  * @returns {Promise<Response>}
  */
 export async function renderPage(options) {
@@ -88,20 +99,33 @@ export async function renderPage(options) {
     }),
   );
 
+  const reported = [];
   let stream;
   try {
     // Do not await stream.allReady: returning as soon as React has a shell is
     // what preserves streaming behavior on Cloudflare Workers.
-    stream = await renderToReadableStream(
-      tree,
-      options?.nonce === undefined ? undefined : { nonce: options.nonce },
-    );
+    stream = await renderToReadableStream(tree, {
+      ...(options?.nonce === undefined ? {} : { nonce: options.nonce }),
+      ...(options?.complete === true ? { onError: (error) => { reported.push(error); } } : {}),
+    });
   } catch (cause) {
     throw new Error(
       "[Goribu] Could not start streaming the rendered page. " +
         "Check the route page and Document components for an error.",
       { cause },
     );
+  }
+  if (options?.complete === true) {
+    await stream.allReady;
+    if (reported.length > 0) {
+      const error = new Error(
+        "[Goribu] React reported an error inside a Suspense boundary, so the page would ship its fallback and rely on client rendering. " +
+          "Fix the component so it renders completely without a request.",
+        { cause: reported[0] },
+      );
+      incompleteRenders.add(error);
+      throw error;
+    }
   }
 
   return new Response(stream, {
