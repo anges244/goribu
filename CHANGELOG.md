@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-16
+
 ### Added
 
 - `pnpm release github <release-directory>` creates an explicit GitHub Release

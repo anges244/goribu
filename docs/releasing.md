@@ -2,11 +2,29 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare `0.9.2`, adding `goribu d1`, `goribu wrangler`, `res.stream`, `req.url`,
-`AppRequestFields`, `workersDev: false`, and development and boundary fixes;
+prepare `0.9.3`, adding selective Worker routing, static-render fixes,
+isolated contributor tests, and an explicit GitHub Release stage;
 substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.9.2 to 0.9.3
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.9.3`, then rebuild and deploy. Review these
+production routing changes before rebuilding:
+
+- Unknown URLs outside Worker route patterns now use a prebuilt `_404` page
+  from Static Assets. That page must render without request-specific data;
+  global `responseHeaders` do not apply to it. Applications with a root
+  parameter route keep default routing. See [Worker routing](worker-routing.md).
+- Builds reject other `404.html` files, including a static route named `404`,
+  asset exclusions that hide the generated miss page, and routing plans that
+  exceed Cloudflare's limits. Follow the reported file or route repair.
+- Unknown non-GET/HEAD requests outside Worker patterns answer `405` in
+  production; development still answers `404`.
+- Static candidates with a failing `Suspense` boundary now stay on the Worker;
+  an explicit `prerender = true` fails the build instead of publishing a fallback.
 
 ## Upgrading apps from 0.9.1 to 0.9.2
 
@@ -125,6 +143,10 @@ fixes and minor increments for features or breaking changes, recording breaking
 changes explicitly in the changelog. Reaching `1.0.0` is a separate decision
 about API stability.
 
+At the maintainer's request, `0.9.3` uses a patch increment although it adds
+selective Worker routing and new build restrictions, documented above and in
+the changelog.
+
 At the maintainer's request, `0.9.2` uses a patch increment although it adds
 features and the route-module restrictions and page remount listed in its
 upgrade notes and changelog.
@@ -176,7 +198,7 @@ site. Only the explicit `github` stage creates a GitHub tag and release;
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.9.2
+pnpm release prepare 0.9.3
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -192,7 +214,7 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.2
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.3
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
@@ -211,8 +233,8 @@ framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.9.2.tgz`
-- `create-goribu-0.9.2.tgz`
+- `goribu-0.9.3.tgz`
+- `create-goribu-0.9.3.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -239,7 +261,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.9.2
+pnpm release publish ../goribu-release-0.9.3
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command
@@ -293,7 +315,7 @@ authenticate with permission to create repository tags and releases:
 
 ```sh
 gh auth login --hostname github.com
-pnpm release github ../goribu-release-0.9.2
+pnpm release github ../goribu-release-0.9.3
 ```
 
 Use the same saved release directory as `publish`. This is an optional,
