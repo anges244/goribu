@@ -169,8 +169,9 @@ local application state, and the template's workspace lockfile do not ship.
 
 Run the repository command from its root, using Node.js 22+, the pinned pnpm,
 npm, Git, and `tar` on macOS/Linux. Install the workspace dependencies yourself
-before using it. The command never installs, commits, creates Git tags, logs in,
-or deploys the site.
+before using it. The command never installs, commits, logs in, or deploys the
+site. Only the explicit `github` stage creates a GitHub tag and release;
+`prepare`, `pack`, and `publish` do not use GitHub or create tags.
 
 ### 1. Prepare the version
 
@@ -279,10 +280,49 @@ There is no separate resume command or second channel.
   They are never interpreted as evidence that a version is available to publish.
 - A failed alpha-tag cleanup can be retried after the two releases have succeeded.
 
-The two npm publications and tag operations are separate operations, not a
+The two npm publications and npm tag operations are separate operations, not a
 transaction. Run one release at a time. Fresh reads detect conflicting registry
 state, but cannot lock out another publisher on a different machine. No rollback
 or unpublish operation is attempted.
+
+### 4. Create the GitHub Release
+
+After both packages are verified on npm, push the source commit to
+`anges244/goribu`. Install [GitHub CLI](https://cli.github.com/) if needed and
+authenticate with permission to create repository tags and releases:
+
+```sh
+gh auth login --hostname github.com
+pnpm release github ../goribu-release-0.9.2
+```
+
+Use the same saved release directory as `publish`. This is an optional,
+independent stage: npm publication never invokes it or requires GitHub access.
+The maintainer runs it after reviewing the release notes. It creates the public
+`v<version>` tag and one GitHub Release covering both packages in
+`anges244/goribu`.
+
+The command verifies the saved archive hashes against the receipt and npm. Both
+packages must already exist with those exact bytes. It reads the package
+manifests and the version's `CHANGELOG.md` section from the receipt's source
+commit, then tags that commit rather than the current checkout. The recorded
+commit must exist locally and be pushed to GitHub first. A matching changelog
+section must already exist in that commit; an `Unreleased` section cannot stand
+in for it. The notes omit the version heading and later changelog sections.
+
+You can announce an older published version from a newer checkout, provided its
+original receipt, archives, and source commit are available. This never changes
+npm's `latest` tags. The command publishes release notes and source archives;
+it does not upload the npm tarballs as GitHub assets.
+
+Retry the same command after a GitHub failure. A matching existing tag is reused,
+including an annotated tag that resolves to the recorded commit. A matching
+published release is verified and left alone. A tag pointing elsewhere, a draft
+or prerelease, or differing title or notes requires maintainer review; the
+command never moves tags or overwrites releases. Authentication, network, and
+unreadable-response failures stop the command. If the tag was created before
+release creation failed, it remains available for the retry. GitHub release
+creation cannot roll back or republish the npm packages.
 
 ## Close the public release
 

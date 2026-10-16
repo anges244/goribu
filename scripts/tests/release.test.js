@@ -190,6 +190,157 @@ it("repairs latest for an identical existing archive without republishing it", a
   expect(state.mutations).toEqual(["tag goribu", "publish create-goribu", "remove alpha"]);
 }, 15000);
 
+function githubRegistry() {
+  const state = registry();
+  for (const item of receipt.packages) {
+    state.data[item.name].versions[receipt.version] = {
+      name: item.name, version: receipt.version, dist: { integrity: item.integrity },
+    };
+    state.data[item.name]["dist-tags"].latest = receipt.version;
+  }
+  const notes = "### Added\n\n- The matching framework and starter.\n\n### Fixed\n\n- A release fix.";
+  const refs = [];
+  const releases = [];
+  const mutations = [];
+  const calls = [];
+  let interrupt = false;
+  const run = (bin, args, opts) => {
+    if (bin === "git" && args[0] === "show") {
+      expect(args[1]).toMatch(new RegExp(`^${receipt.commit}:`));
+      if (args[1].endsWith(":CHANGELOG.md")) return `# Changelog\n\n## [Unreleased]\n\n- Future work.\n\n## [0.7.0] - 2026-09-05\n\n${notes}\n\n## [0.6.9]\n\n- Older work.\n`;
+      const name = args[1].split("/")[1];
+      return readFileSync(join(source, "packages", name, "package.json"), "utf8");
+    }
+    if (bin !== "gh") return state.options.run(bin, args, opts);
+    calls.push(args);
+    if (args[0] === "api") {
+      expect(args.slice(1, 3)).toEqual(["--hostname", "github.com"]);
+      const path = args[3];
+      if (path.endsWith("/git/matching-refs/tags/v0.7.0")) return JSON.stringify(refs);
+      if (path.endsWith("/git/tags/" + "b".repeat(40))) return JSON.stringify({ object: { type: "commit", sha: commit } });
+      if (path.endsWith("/releases")) {
+        expect(args.slice(4)).toEqual(["--paginate", "--slurp"]);
+        return JSON.stringify([[{ tag_name: "v0.6.9" }], releases]);
+      }
+      if (path.endsWith("/git/refs")) {
+        expect(args.slice(4)).toEqual(["--method", "POST", "-f", "ref=refs/tags/v0.7.0", "-f", `sha=${commit}`]);
+        mutations.push("tag");
+        refs.push({ ref: "refs/tags/v0.7.0", object: { type: "commit", sha: commit } });
+        return JSON.stringify(refs.at(-1));
+      }
+    }
+    if (args[0] === "release" && args[1] === "create") {
+      expect(args.slice(2, 9)).toEqual(["v0.7.0", "--repo", "github.com/anges244/goribu", "--verify-tag", "--title", "v0.7.0", "--notes-file"]);
+      expect(readFileSync(args[9], "utf8")).toBe(`${notes}\n`);
+      mutations.push("release");
+      if (interrupt) { interrupt = false; throw new Error("GitHub interrupted"); }
+      releases.push({ tag_name: "v0.7.0", name: "v0.7.0", body: notes, draft: false, prerelease: false });
+      return "";
+    }
+    throw new Error(`Unexpected gh command: ${args}`);
+  };
+  return {
+    state, refs, releases, mutations, calls,
+    options: { ...state.options, run },
+    interruptRelease() { interrupt = true; },
+  };
+}
+
+it("creates one GitHub Release at the recorded commit and retries without npm mutations", async () => {
+  const github = githubRegistry();
+  // A similarly named tag must not count as the exact release tag.
+  github.refs.push({ ref: "refs/tags/v0.7.0-extra", object: { type: "commit", sha: "c".repeat(40) } });
+  // Announcing an older published version does not move npm's latest backwards.
+  for (const name of ["goribu", "create-goribu"]) {
+    github.state.data[name].versions["0.8.0"] = { name, version: "0.8.0" };
+    github.state.data[name]["dist-tags"].latest = "0.8.0";
+  }
+  await release(["github", artifacts], github.options);
+  await release(["github", artifacts], github.options);
+  expect(github.mutations).toEqual(["tag", "release"]);
+  expect(github.state.mutations).toEqual([]);
+  expect(github.state.data.goribu["dist-tags"].latest).toBe("0.8.0");
+});
+
+it("resumes GitHub release creation after its tag was created", async () => {
+  const github = githubRegistry();
+  github.interruptRelease();
+  await expect(release(["github", artifacts], github.options)).rejects.toThrow("GitHub interrupted");
+  await release(["github", artifacts], github.options);
+  expect(github.mutations).toEqual(["tag", "release", "release"]);
+  expect(github.state.mutations).toEqual([]);
+});
+
+it("accepts an existing annotated tag only when it resolves to the recorded commit", async () => {
+  const github = githubRegistry();
+  github.refs.push({ ref: "refs/tags/v0.7.0", object: { type: "tag", sha: "b".repeat(40) } });
+  await release(["github", artifacts], github.options);
+  expect(github.mutations).toEqual(["release"]);
+  github.refs[0].object = { type: "commit", sha: "c".repeat(40) };
+  await expect(release(["github", artifacts], github.options)).rejects.toThrow(/does not point to the recorded release commit/);
+  expect(github.mutations).toEqual(["release"]);
+});
+
+it("requires both npm archives to match before contacting GitHub", async () => {
+  for (const failure of ["unpublished", "integrity", "network"]) {
+    const github = githubRegistry();
+    if (failure === "unpublished") {
+      delete github.state.data["create-goribu"].versions["0.7.0"];
+      github.state.data["create-goribu"]["dist-tags"].latest = "0.6.9";
+    }
+    if (failure === "integrity") github.state.data["create-goribu"].versions["0.7.0"].dist.integrity = "sha512-wrong";
+    const opts = failure === "network" ? { ...github.options, fetch: async () => { throw new Error("offline"); } } : github.options;
+    await expect(release(["github", artifacts], opts)).rejects.toThrow(/not confirmed on npm|different or unverifiable bytes|Cannot read npm metadata/);
+    expect(github.calls).toEqual([]);
+    expect(github.state.mutations).toEqual([]);
+  }
+});
+
+it("rejects changed saved archives, invalid receipts, and missing release notes before GitHub writes", async () => {
+  for (const failure of ["archive", "receipt", "notes", "source"]) {
+    const directory = join(task, `github-${failure}`);
+    cpSync(artifacts, directory, { recursive: true });
+    if (failure === "archive") writeFileSync(join(directory, receipt.packages[1].filename), "changed");
+    if (failure === "receipt") writeFileSync(join(directory, "release.json"), JSON.stringify({ ...receipt, packages: [...receipt.packages].reverse() }));
+    const github = githubRegistry();
+    const run = (bin, args, opts) => {
+      if (bin === "git" && args[0] === "show") {
+        if (failure === "notes" && args[1].endsWith(":CHANGELOG.md")) return "## [Unreleased]\n\n- Future work.\n";
+        if (failure === "source") throw new Error("Recorded commit is missing");
+      }
+      return github.options.run(bin, args, opts);
+    };
+    await expect(release(["github", directory], { ...github.options, run })).rejects.toThrow(/changed after packing|invalid package identities|no changelog notes|Recorded commit is missing/);
+    expect(github.calls).toEqual([]);
+  }
+});
+
+it("preserves an existing release when its notes or publication state differ", async () => {
+  for (const change of [{ body: "Edited by the maintainer" }, { draft: true }, { prerelease: true }, { name: "Different title" }]) {
+    const github = githubRegistry();
+    await release(["github", artifacts], github.options);
+    Object.assign(github.releases[0], change);
+    await expect(release(["github", artifacts], github.options)).rejects.toThrow(/already exists with different metadata or notes/);
+    expect(github.mutations).toEqual(["tag", "release"]);
+  }
+});
+
+it("does not treat GitHub read failures or malformed responses as a missing release", async () => {
+  for (const failure of ["authentication", "releases", "malformed refs", "malformed releases"]) {
+    const github = githubRegistry();
+    const run = (bin, args, opts) => {
+      if (bin === "gh" && args[0] === "api") {
+        if (failure === "authentication" || (failure === "releases" && args[3].endsWith("/releases"))) throw new Error("GitHub unavailable");
+        if (failure === "malformed refs" && args[3].includes("matching-refs")) return "{}";
+        if (failure === "malformed releases" && args[3].endsWith("/releases")) return "[{}]";
+      }
+      return github.options.run(bin, args, opts);
+    };
+    await expect(release(["github", artifacts], { ...github.options, run })).rejects.toThrow(/GitHub unavailable|unreadable/);
+    expect(github.mutations).toEqual([]);
+  }
+});
+
 it("checks both registry names before publishing and refuses collisions or a latest downgrade", async () => {
   for (const failure of ["collision", "downgrade", "missing integrity", "null record"]) {
     const state = registry();

@@ -11,6 +11,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `pnpm release github <release-directory>` creates an explicit GitHub Release
+  from the saved source commit and changelog after both npm archive hashes are
+  verified. It supports retries and leaves npm publishing unchanged.
+
 - Production builds route only requests that can need the Worker to it. Unknown
   URLs, such as scanner probes for `/wp-login.php`, receive a prebuilt copy of
   the `_404` page from Static Assets without invoking the Worker. Applications

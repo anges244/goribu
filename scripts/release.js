@@ -8,11 +8,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REGISTRY = "https://registry.npmjs.org/";
 const NAMES = ["goribu", "create-goribu"];
+const GITHUB_REPOSITORY = "anges244/goribu";
 const HELP = `Usage: pnpm release <command> <value>
 
   prepare <version>     Set both versions and rebuild the starter template.
   pack <new-directory>  Test a clean checkout and save audited release archives.
   publish <directory>   Publish those saved archives to latest, framework first.
+  github <directory>    Create a GitHub Release after verifying the saved pair on npm.
 
 Use a release directory outside the repository. Review and independently test
 its archives before publish. No command installs dependencies or creates commits.`;
@@ -31,7 +33,7 @@ function runCommand(bin, args, { cwd, inherit = false } = {}) {
     maxBuffer: 16 * 1024 * 1024,
   });
   if (result.error || result.status !== 0) {
-    fail(`${bin} ${args[0]} failed${result.error ? `: ${result.error.message}` : ` (exit ${result.status})`}. Fix the reported problem${inherit ? "" : `: ${result.stderr?.trim() || "check that the command is installed and accessible"}`}, then retry the release command.${bin === "npm" ? ` For npm authentication, run npm login --registry=${REGISTRY}.` : ""}`);
+    fail(`${bin} ${args[0]} failed${result.error ? `: ${result.error.message}` : ` (exit ${result.status})`}. Fix the reported problem${inherit ? "" : `: ${result.stderr?.trim() || "check that the command is installed and accessible"}`}, then retry the release command.${bin === "npm" ? ` For npm authentication, run npm login --registry=${REGISTRY}.` : ""}${bin === "gh" ? " For GitHub access, install GitHub CLI and run gh auth login --hostname github.com." : ""}`);
   }
   return result.stdout ?? "";
 }
@@ -167,7 +169,7 @@ function smokeScaffolder(io, archive, version) {
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
-async function registryState(io, name, version, digest) {
+async function registryState(io, name, version, digest, { allowOlder = false } = {}) {
   let response;
   try { response = await io.fetch(`${REGISTRY}${name}`, { cache: "no-store", signal: AbortSignal.timeout(15000) }); }
   catch { fail(`Cannot read npm metadata for ${name}. Check connectivity and retry; registry uncertainty never means a version is unpublished.`); }
@@ -180,7 +182,7 @@ async function registryState(io, name, version, digest) {
       data.versions[latest]?.name !== name || data.versions[latest]?.version !== latest) {
     fail(`npm metadata for ${name} is incomplete. Inspect its versions and latest tag before retrying.`);
   }
-  assertNotOlder(version, latest);
+  if (!allowOlder) assertNotOlder(version, latest);
   const exists = Object.hasOwn(data.versions, version);
   const published = data.versions[version];
   if (exists && (published?.name !== name || published?.version !== version || published?.dist?.integrity !== digest)) {
@@ -192,13 +194,18 @@ async function registryState(io, name, version, digest) {
   return { published: exists, latest, alpha: data["dist-tags"].alpha };
 }
 
-async function publish(io, directory) {
+function releaseReceipt(directory) {
   const receipt = readJson(join(directory, "release.json"));
-  const version = releaseVersion(receipt.version);
+  const version = releaseVersion(receipt?.version);
   if (receipt.schema !== 1 || !/^[a-f0-9]{40,64}$/.test(receipt.commit) ||
       !Array.isArray(receipt.packages) || receipt.packages.length !== 2) {
     fail("Invalid release receipt. Use an unmodified directory completed by pnpm release pack.");
   }
+  return { receipt, version };
+}
+
+async function publish(io, directory) {
+  const { receipt, version } = releaseReceipt(directory);
   assertCommit(io, receipt.commit);
   if (packages(io.root).version !== version) fail("The checkout and release receipt have different versions. Return to the recorded release commit.");
   // Publish private copies of the reviewed bytes, so edits to the supplied
@@ -252,10 +259,82 @@ async function publish(io, directory) {
   } finally { rmSync(snapshot, { recursive: true, force: true }); }
 }
 
+async function github(io, directory) {
+  const { receipt, version } = releaseReceipt(directory);
+  const tag = `v${version}`;
+  // Read from the recorded commit so an older release can be announced without
+  // changing the current checkout or accidentally tagging today's HEAD.
+  for (const [index, name] of NAMES.entries()) {
+    const item = receipt.packages[index];
+    if (item?.name !== name || item.filename !== `${name}-${version}.tgz` ||
+        !/^sha512-[A-Za-z0-9+/]{86}==$/.test(item.integrity)) {
+      fail("The release receipt has invalid package identities or hashes. Restore it from the original packing run.");
+    }
+    const archive = join(directory, item.filename);
+    if (!lstatSync(archive).isFile() || integrity(archive) !== item.integrity) {
+      fail(`Release archive ${item.filename} changed after packing. Restore the reviewed bytes before creating a GitHub Release.`);
+    }
+    const manifest = json(io.run("git", ["show", `${receipt.commit}:packages/${name}/package.json`]), `recorded ${name} manifest`);
+    validatePackage(manifest, name, version);
+  }
+  const changelog = io.run("git", ["show", `${receipt.commit}:CHANGELOG.md`]).replace(/\r\n/g, "\n");
+  const heading = `## [${version}]`;
+  const sections = changelog.split(/(?=^## )/m);
+  const section = sections.find((text) => text.startsWith(`${heading}\n`) || text.startsWith(`${heading} - `));
+  const notes = section?.slice(section.indexOf("\n") + 1).trim();
+  if (!notes) fail(`The recorded commit has no changelog notes for ${version}. Finalize the version's changelog before packing a release.`);
+
+  for (const item of receipt.packages) {
+    const state = await registryState(io, item.name, version, item.integrity, { allowOlder: true });
+    if (!state.published) fail(`${item.name}@${version} is not confirmed on npm. Complete npm publication before creating its GitHub Release.`);
+  }
+
+  const api = (path, args = []) => json(io.run("gh", ["api", "--hostname", "github.com", `repos/${GITHUB_REPOSITORY}/${path}`, ...args]), `GitHub ${path}`);
+  // Successful, paginated reads distinguish absence from authentication or
+  // network failure. Never infer "missing" by swallowing a gh failure.
+  const refs = api(`git/matching-refs/tags/${tag}`);
+  if (!Array.isArray(refs)) fail("GitHub returned unreadable tag references. Check GitHub access and retry.");
+  const ref = refs.find((item) => item.ref === `refs/tags/${tag}`);
+  if (ref) {
+    let object = ref.object;
+    for (let depth = 0; object?.type === "tag" && depth < 10; depth++) {
+      if (!/^[a-f0-9]{40,64}$/.test(object.sha)) fail(`GitHub returned an invalid ${tag} tag. Inspect it before retrying.`);
+      object = api(`git/tags/${object.sha}`).object;
+    }
+    if (object?.type !== "commit" || object.sha !== receipt.commit) {
+      fail(`GitHub tag ${tag} does not point to the recorded release commit ${receipt.commit}. Inspect the tag; this command never moves existing tags.`);
+    }
+  }
+  const pages = api("releases", ["--paginate", "--slurp"]);
+  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page))) {
+    fail("GitHub returned unreadable releases. Check GitHub access and retry.");
+  }
+  const existing = pages.flat().find((item) => item.tag_name === tag);
+  if (existing) {
+    if (!ref || existing.draft !== false || existing.prerelease !== false ||
+        existing.name !== tag || existing.body?.trim() !== notes) {
+      fail(`GitHub Release ${tag} already exists with different metadata or notes. Review it on GitHub; this command never overwrites a release.`);
+    }
+    io.log(`[Goribu] GitHub Release ${tag} already matches the recorded commit and changelog: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}`);
+    return;
+  }
+
+  // Only the explicit github stage can create a remote tag. npm publication
+  // never requires gh, GitHub authentication, or any Git mutation.
+  if (!ref) api("git/refs", ["--method", "POST", "-f", `ref=refs/tags/${tag}`, "-f", `sha=${receipt.commit}`]);
+  const temporary = mkdtempSync(join(tmpdir(), "goribu-release-notes-"));
+  try {
+    const path = join(temporary, "notes.md");
+    writeFileSync(path, `${notes}\n`);
+    io.run("gh", ["release", "create", tag, "--repo", `github.com/${GITHUB_REPOSITORY}`, "--verify-tag", "--title", tag, "--notes-file", path], { inherit: true });
+  } finally { rmSync(temporary, { recursive: true, force: true }); }
+  io.log(`[Goribu] Created GitHub Release ${tag}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}`);
+}
+
 export async function release(argv, { root = ROOT, run = runCommand, fetch = globalThis.fetch, log = console.log } = {}) {
   if (!argv.length || (argv.length === 1 && argv[0] === "--help")) { log(HELP); return; }
   const [action, value] = argv;
-  if (argv.length !== 2 || !["prepare", "pack", "publish"].includes(action) || !value || value.startsWith("-")) fail(`Invalid release arguments. ${HELP}`);
+  if (argv.length !== 2 || !["prepare", "pack", "publish", "github"].includes(action) || !value || value.startsWith("-")) fail(`Invalid release arguments. ${HELP}`);
   const io = { root, fetch, log, run: (bin, args, options) => run(bin, args, { cwd: root, ...options }) };
   if (action === "prepare") {
     const next = releaseVersion(value);
@@ -281,6 +360,8 @@ export async function release(argv, { root = ROOT, run = runCommand, fetch = glo
     assertCommit(io, commit);
     writeFileSync(join(directory, "release.json"), JSON.stringify({ schema: 1, version, commit, packages: artifacts }, null, 2) + "\n", { flag: "wx" });
     log(`[Goribu] Tested and packed both ${version} archives in ${directory}. Independently install and exercise them before running pnpm release publish with this directory. Nothing was published.`);
+  } else if (action === "github") {
+    await github(io, releaseDirectory(root, value, false));
   } else {
     await publish(io, releaseDirectory(root, value, false));
   }
