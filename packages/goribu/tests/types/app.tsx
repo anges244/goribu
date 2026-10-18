@@ -6,6 +6,18 @@ import type { GoribuCache, Handler, Middleware, ServerErrorProps } from "goribu/
 import { goribu } from "goribu/vite";
 import "goribu/client";
 
+const postgresHandler: Handler = async (req, res) => {
+  const rows = await req.postgres<{ id: number; tags: string[] }[]>`select id, tags from posts`;
+  const row: { id: number; tags: string[] } = rows[0];
+  await req.postgres.begin(async (tx) => { await tx`SELECT 1`; });
+  await req.postgresCached`SELECT 1`;
+  // @ts-expect-error Postgres clients are readonly request properties.
+  req.postgres = req.postgresCached;
+  // @ts-expect-error The client has the Postgres.js Sql type, not any.
+  req.postgres.notAMethod();
+  return res.json(row);
+};
+
 interface Env { GREETING: string }
 interface Props { name: string }
 

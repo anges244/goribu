@@ -1,3 +1,4 @@
+import type { Sql } from "postgres";
 import type { D1Database, D1DatabaseSession, KVNamespace, KVNamespaceListResult, R2Bucket, R2Object, R2ObjectBody, R2GetOptions, R2PutOptions, R2MultipartOptions, R2MultipartUpload } from "@cloudflare/workers-types";
 import type { FormErrors } from "./index.js";
 
@@ -187,6 +188,10 @@ export interface GoribuRequest<Env extends object = Record<string, unknown>, Par
   kv: KV;
   cache: GoribuCache;
   r2: GoribuR2;
+  /** Postgres.js over the POSTGRES Hyperdrive binding, with query caching disabled. Created on first use in each request. */
+  readonly postgres: Sql;
+  /** Postgres.js over the POSTGRES_CACHED binding; Hyperdrive may answer reads from its cache. */
+  readonly postgresCached: Sql;
   waitUntil(promise: Promise<unknown>): void;
   /**
    * JSON and forms return objects. Declared upload fields become verified
@@ -246,6 +251,7 @@ export interface AppOptions<Env extends object = Record<string, unknown>> {
   clientAssetManifest?: { entry: ClientAsset; pages?: Record<string, ClientAsset>; navigationBuildId?: string } | null;
   clientAssetBase?: string;
   applicationConfig?: DefinedConfig<Env>;
+  postgres?: (env: Env) => { fresh(): Sql; cached(): Sql };
 }
 export function createApp<Env extends object = Record<string, unknown>>(options: AppOptions<Env>): WorkerApp<Env>;
 

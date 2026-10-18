@@ -79,6 +79,8 @@ describe("createPostgresHandles", () => {
         `[Goribu] env.${name} is not a Hyperdrive binding. Pass the Worker env unchanged to app.fetch; in tests provide { connectionString: "postgres://user:password@host:5432/db" }.`,
       ));
     }
+    env[name] = binding;
+    track(handles[method]());
   });
 
   it("does not include a connection string's secret in a missing-binding error", () => {

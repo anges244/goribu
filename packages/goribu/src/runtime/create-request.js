@@ -15,7 +15,7 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object, cache?: object }} [runtime]
+ * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object, postgres?: { fresh(): Function, cached(): Function }, cache?: object }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
@@ -33,7 +33,7 @@ export function createRequest(request, params, runtime) {
     return rawBodyPromise;
   }
 
-  return {
+  const req = {
     method: request.method,
     url,
     path: url.pathname,
@@ -65,6 +65,21 @@ export function createRequest(request, params, runtime) {
       return bodyPromise;
     },
   };
+  // Spreading or serializing req must never open a client or throw the not-configured error.
+  Object.defineProperties(req, {
+    postgres: { get: () => readPostgres(worker.postgres, "fresh", "req.postgres") },
+    postgresCached: { get: () => readPostgres(worker.postgres, "cached", "req.postgresCached") },
+  });
+  return req;
+}
+
+function readPostgres(handles, method, field) {
+  if (handles === undefined) {
+    throw new Error(
+      `[Goribu] ${field} was used but goribu.config.js declares no Postgres database. Add \`database: { type: "postgres" }\` to goribu.config.js, put your connection string in .env as POSTGRES_URL, then restart \`goribu dev\`.`,
+    );
+  }
+  return handles[method]();
 }
 
 function assertInputs(request, params) {
@@ -96,7 +111,7 @@ function assertRuntime(runtime) {
   if (runtime === undefined) return {};
   if (runtime === null || typeof runtime !== "object" || Array.isArray(runtime)) {
     throw new TypeError(
-      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV/R2/cache facades.",
+      "[Goribu] createRequest(request, params, runtime) requires the request runtime prepared by createApp(). Pass its Worker bindings, bound waitUntil function, cookie jar, and D1/KV/R2/Postgres/cache facades.",
     );
   }
   if (
@@ -146,6 +161,15 @@ function assertRuntime(runtime) {
   ) {
     throw new TypeError(
       "[Goribu] createRequest requires runtime.kv to be the request-scoped KV facade. Pass createKV(env) from the application boundary.",
+    );
+  }
+  if (
+    runtime.postgres !== undefined &&
+    (runtime.postgres === null || typeof runtime.postgres !== "object" ||
+      ["fresh", "cached"].some((method) => typeof runtime.postgres[method] !== "function"))
+  ) {
+    throw new TypeError(
+      "[Goribu] createRequest requires runtime.postgres to be the request's Postgres handles. Pass createPostgresHandles(env) from the application boundary.",
     );
   }
   return runtime;

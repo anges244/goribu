@@ -43,7 +43,7 @@ import { collectUploadPolicies, UploadPolicyError } from "../r2/upload-policies.
 import { isSignedUrlPrerenderError } from "../r2/prerender-error.js";
 
 const CALLER =
-  "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig })";
+  "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig, postgres })";
 
 // Statuses that cannot carry a response body. A terminal helper that produced a
 // body for one of these is a handler mistake, caught here rather than shipped.
@@ -58,7 +58,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  * application-constant data and turns each Web Request into a matched response:
  * a streamed page, or the result a named method handler returns through the
  * response builder. A handler receives Goribu's request surface (method, path,
- * params, query, headers, body helpers, cookies, D1, KV, R2, cache, Worker bindings, and a bound
+ * params, query, headers, body helpers, cookies, D1, KV, R2, Postgres, cache, Worker bindings, and a bound
  * waitUntil capability) and returns any res.* intent: res.text(), res.json(),
  * res.redirect(), res.render(props) to stream the route's own page with data, or
  * res.notFound(props) for the _404 page.
@@ -73,6 +73,7 @@ const BODYLESS_STATUSES = new Set([204, 205, 304]);
  *   clientAssetManifest?: object|null,
  *   clientAssetBase?: string,
  *   applicationConfig?: object,
+ *   postgres?: (env: object) => { fresh(): Function, cached(): Function },
  * }} options
  * @returns {{ fetch(request: Request, env: unknown, ctx: unknown): Promise<Response> }}
  */
@@ -128,6 +129,17 @@ export function createApp(options) {
   ) {
     throw new TypeError(
       `[Goribu] ${CALLER} requires applicationConfig to be the unchanged result of defineConfig(). Import and pass the application's goribu.config.js default export from the generated Worker.`,
+    );
+  }
+  const createPostgres = options.postgres;
+  if (createPostgres !== undefined && typeof createPostgres !== "function") {
+    throw new TypeError(
+      `[Goribu] ${CALLER} requires postgres to be the createPostgresHandles factory the generated Worker imports. Let goribu/vite generate the Worker entry instead of passing it by hand.`,
+    );
+  }
+  if ((applicationConfig?.database?.type === "postgres") !== (createPostgres !== undefined)) {
+    throw new TypeError(
+      `[Goribu] ${CALLER} received a postgres factory that disagrees with applicationConfig. Pass postgres exactly when goribu.config.js declares database: { type: "postgres" }; restart \`goribu dev\` or rerun \`goribu build\` to regenerate the Worker entry.`,
     );
   }
   let uploadPolicies;
@@ -220,6 +232,7 @@ export function createApp(options) {
         cookies: cookieJar,
         d1: d1Controller.d1,
         kv: createKV(env),
+        postgres: createPostgres?.(env),
         cache: createCache(globalThis.caches, request.url, { prerender: env.__GORIBU_PRERENDER === true }),
         r2: createR2(env, applicationConfig?.r2, mode, { requestUrl: request.url, prerender: env.__GORIBU_PRERENDER === true }),
       };
@@ -581,7 +594,7 @@ export function createApp(options) {
 
   // Run one named method handler and preserve its response-builder result. The
   // handler receives Goribu's request surface (method, path, params, query,
-  // headers, body helpers, cookies, D1, KV, R2, cache, Worker bindings, and waitUntil) and the
+  // headers, body helpers, cookies, D1, KV, R2, Postgres, cache, Worker bindings, and waitUntil) and the
   // response builder.
   async function dispatchHandler(
     match,

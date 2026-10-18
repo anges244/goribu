@@ -25,6 +25,16 @@ afterEach(() => {
 });
 
 describe("writeWorkerEntry", () => {
+  it("imports and passes the Postgres factory only when requested", () => {
+    const root = makeProject();
+    writeRoute(root, "index.jsx");
+    const normal = writeWorkerEntry({ projectRoot: root }).source;
+    const postgres = writeWorkerEntry({ projectRoot: root, postgres: true }).source;
+    expect(normal).not.toContain("virtual:goribu/postgres");
+    expect(postgres).toContain('import { createPostgresHandles } from "virtual:goribu/postgres";');
+    expect(postgres).toContain("applicationConfig, postgres: createPostgresHandles });");
+  });
+
   it("generates a Worker that imports each route and hands the manifest to createApp", () => {
     const root = makeProject();
     writeRoute(root, "index.jsx");

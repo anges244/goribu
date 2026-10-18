@@ -10,8 +10,8 @@ export function createPostgresHandles(env) {
   }
 
   // Cloudflare's Postgres.js guide creates a client per request and never ends it.
-  // A res.stream body may query after the Response is returned (Phase 2a, T3);
-  // workerd closes the sockets with the request's I/O context.
+  // A res.stream body may query after the Response is returned, so the client
+  // stays open; workerd closes the sockets with the request's I/O context.
   function lazyClient(bindingName, requestField, max) {
     let sql;
     return () => {

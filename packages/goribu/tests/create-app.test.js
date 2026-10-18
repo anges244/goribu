@@ -104,6 +104,53 @@ async function developmentErrorBody(app, request) {
 }
 
 describe("createApp().fetch", () => {
+  it("shares Postgres clients between middleware and handlers with handles per request", async () => {
+    const envs = [];
+    const freshFake = () => {};
+    const cachedFake = () => {};
+    let middlewareClient;
+    const app = build({
+      applicationConfig: defineConfig({ name: "postgres-app", compatibilityDate: "2026-08-31", database: { type: "postgres" } }),
+      postgres(env) {
+        envs.push(env);
+        return { fresh: () => freshFake, cached: () => cachedFake };
+      },
+      manifest: [HELLO_HANDLER],
+      middlewareByRoute: new Map([["hello", [{ id: "middleware", relativePath: "_middleware.js" }]]]),
+      modules: new Map([
+        ["middleware", { default(req) { middlewareClient = req.postgres; } }],
+        ["hello", { GET(req, res) {
+          expect(req.postgres).toBe(middlewareClient);
+          expect(req.postgres).toBe(freshFake);
+          expect(req.postgresCached).toBe(cachedFake);
+          return res.text("ok");
+        } }],
+      ]),
+    });
+    const firstEnv = { request: 1 };
+    const secondEnv = { request: 2 };
+    expect(envs).toHaveLength(0);
+    for (const env of [firstEnv, secondEnv]) {
+      const response = await app.fetch(get("/hello"), env, CTX());
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+    }
+    expect(envs).toHaveLength(2);
+    expect(envs[0]).toBe(firstEnv);
+    expect(envs[1]).toBe(secondEnv);
+  });
+
+  it("fails closed when the Postgres factory is invalid or disagrees with config", () => {
+    const caller = "createApp({ manifest, modules, errorPages, documentId, middlewareByRoute, mode, clientAssetManifest, clientAssetBase, applicationConfig, postgres })";
+    const applicationConfig = defineConfig({ name: "postgres-app", compatibilityDate: "2026-08-31", database: { type: "postgres" } });
+    expect(() => build({ postgres: {} })).toThrow(new TypeError(
+      `[Goribu] ${caller} requires postgres to be the createPostgresHandles factory the generated Worker imports. Let goribu/vite generate the Worker entry instead of passing it by hand.`,
+    ));
+    const mismatch = new TypeError(`[Goribu] ${caller} received a postgres factory that disagrees with applicationConfig. Pass postgres exactly when goribu.config.js declares database: { type: "postgres" }; restart \`goribu dev\` or rerun \`goribu build\` to regenerate the Worker entry.`);
+    expect(() => build({ postgres() {} })).toThrow(mismatch);
+    expect(() => build({ applicationConfig })).toThrow(mismatch);
+  });
+
   it("renders a matched page as a streamed HTML document", async () => {
     const response = await dispatch(build(), get("/"));
     const body = await response.text();

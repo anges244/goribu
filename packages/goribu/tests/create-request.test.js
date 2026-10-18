@@ -6,6 +6,18 @@ import { isHttpError } from "../src/runtime/http-error.js";
 const decoder = new TextDecoder();
 
 describe("createRequest", () => {
+  it("keeps unconfigured Postgres getters out of spreading and serialization", () => {
+    const req = createRequest(new Request("https://example.com"), {});
+    for (const field of ["postgres", "postgresCached"]) {
+      expect(() => req[field]).toThrow(new Error(
+        `[Goribu] req.${field} was used but goribu.config.js declares no Postgres database. Add \`database: { type: "postgres" }\` to goribu.config.js, put your connection string in .env as POSTGRES_URL, then restart \`goribu dev\`.`,
+      ));
+      expect(Object.keys(req)).not.toContain(field);
+    }
+    expect(() => ({ ...req })).not.toThrow();
+    expect(() => JSON.stringify(req)).not.toThrow();
+  });
+
   it("exposes the minimal Request surface and preserves special parameter names", () => {
     const request = new Request(
       "https://example.com/teams/member?tag=one&tag=two",
@@ -300,6 +312,9 @@ describe("createRequest", () => {
   });
 
   it("rejects incorrect internal usage and an already-consumed Request", async () => {
+    expect(() => createRequest(new Request("https://example.com"), {}, { postgres: {} })).toThrow(
+      new TypeError("[Goribu] createRequest requires runtime.postgres to be the request's Postgres handles. Pass createPostgresHandles(env) from the application boundary."),
+    );
     expect(() => createRequest({}, {})).toThrow(
       "[Goribu] createRequest(request, params) requires a Web Request",
     );

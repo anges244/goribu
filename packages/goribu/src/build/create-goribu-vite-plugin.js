@@ -1,4 +1,5 @@
 import { existsSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
@@ -28,6 +29,8 @@ import { BUILD_OUTPUT_DIRECTORY, assertBuildOutputs, createBuildOutputGuardPlugi
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
 const CLIENT_ENTRY = "src/setup/client-entry.js";
 const GENERATED_DIRECTORY = ".goribu";
+const POSTGRES_MODULE = "virtual:goribu/postgres";
+const POSTGRES_MODULE_FILE = fileURLToPath(new URL("../postgres/create-postgres.js", import.meta.url));
 const CLIENT_ASSETS_MODULE = "virtual:goribu/client-assets";
 const RESOLVED_CLIENT_ASSETS_MODULE = `\0${CLIENT_ASSETS_MODULE}`;
 
@@ -131,8 +134,8 @@ function createGoribuPlugin(navigationBuildId, development) {
         environment.command === "serve" ? "development" : "production";
       assertNoReservedPublicFiles(root, config.publicDir);
       assertClientEntry(root);
-      writeWorkerEntry({ projectRoot: root, mode });
       const appConfig = await loadApplicationConfig({ projectRoot: root });
+      writeWorkerEntry({ projectRoot: root, mode, postgres: appConfig.database?.type === "postgres" });
       await assertNoDuplicateD1Declaration({ projectRoot: root, appConfig });
       await assertNoDuplicateKVDeclaration({ projectRoot: root, appConfig });
       await assertNoDuplicateR2Declaration({ projectRoot: root, appConfig });
@@ -467,6 +470,8 @@ function createConfiguredClientAssetsPlugin(navigationBuildId) {
     },
 
     resolveId(source) {
+      // Use the package file so Postgres apps resolve postgres from Goribu's dependencies.
+      if (source === POSTGRES_MODULE) return POSTGRES_MODULE_FILE;
       return source === CLIENT_ASSETS_MODULE
         ? RESOLVED_CLIENT_ASSETS_MODULE
         : null;
