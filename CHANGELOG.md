@@ -31,6 +31,17 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `hyperdriveCachedId`, then applies pending Postgres migrations before
   uploading the Worker. It warns about pooler connection strings and about
   connection strings left as Worker secrets by earlier deploys.
+- A `wrangler` block in `goribu.config.js` passes native Wrangler fields, such
+  as Workers AI, service bindings, Vectorize, queue producers, Analytics Engine,
+  browser rendering, external Durable Objects and Workflows, `vars`, and
+  observability settings, into the generated Wrangler config. Goribu rejects
+  values JSON cannot represent, fields and binding names it owns, and fields
+  Wrangler's schema does not know, each with the path to fix. Builds stay
+  credential-free: prerendering runs without the block's bindings other than
+  `vars`. `goribu dev` needs a Cloudflare login when a binding such as AI always
+  runs on Cloudflare, and uses the same account as deploy. `goribu check` lists
+  these bindings as not inspected or managed. See
+  [Wrangler configuration](docs/wrangler.md).
 
 ### Changed
 
@@ -42,6 +53,11 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directive.
 - `goribu migrate:down`, `goribu migrate:seed` and `goribu d1` refuse Postgres
   apps with the alternative to use.
+- `goribu` now depends on exact versions of Wrangler (4.127.1) and
+  `@cloudflare/vite-plugin` (1.54.2), the pair the plugin itself pins, so every
+  install runs the Wrangler Goribu was tested with.
+- A static route that fails to prerender with a non-200 response now reports
+  the Worker's logged error, such as a `TypeError`, after the status.
 
 ## [0.9.3] - 2026-10-16
 

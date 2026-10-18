@@ -94,6 +94,11 @@ which suppresses both. Edits reload the session. See
 [Environment variables](./environment-variables.md) for precedence and how
 browser values differ from Worker bindings.
 
+Bindings that Wrangler always runs on Cloudflare, such as Workers AI declared in
+a [`wrangler` block](./wrangler.md#development), need a Cloudflare login even in
+development. Dev resolves the same account as `goribu deploy` before starting
+and stops with a repair message when there is no login.
+
 To change the defaults for every run, set Vite's `server.port`,
 `server.strictPort`, and `server.host` in `vite.config.js`. Without
 `strictPort: true`, a port set there moves to the next free port when it is
@@ -132,6 +137,10 @@ Builds suppress the bundler's `MODULE_LEVEL_DIRECTIVE` warning for `"use client"
 in `node_modules`: library React Server Component annotations do not control
 Goribu's rendering. Application directives, `"use server"`, and other diagnostics
 still reach your configured log handlers. This affects logging only, not bundles.
+
+Builds need no Cloudflare login. Prerendering runs the built Worker without the
+bindings a [`wrangler` block](./wrangler.md#builds-and-static-routes) adds,
+other than vars; the deployment configuration keeps them.
 
 ## `goribu cloudflare-login`
 
@@ -288,7 +297,9 @@ goribu check
 `goribu check` takes no arguments. Its migration section states whether deploy
 will create the database and which pending files it will apply before uploading
 the Worker. Postgres apps are not inspected yet: check prints one line saying so
-and describing what deploy will do.
+and describing what deploy will do. Bindings from a
+[`wrangler` block](./wrangler.md) are listed separately as deployed as written
+and not inspected or managed by Goribu.
 
 ## Migration commands
 

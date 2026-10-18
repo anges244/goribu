@@ -17,6 +17,7 @@ import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 import { finalizeWorkerRouting } from "../src/build/finalize-worker-routing.js";
 import { loadApplicationConfig } from "../src/build/load-application-config.js";
+import { listPrerenderWithheld } from "../src/build/wrangler-passthrough.js";
 import { runPostgresMigrate } from "../src/build/postgres/run-postgres-migrate.js";
 import { runPostgresMigrateStatus } from "../src/build/postgres/run-postgres-migrate-status.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
@@ -71,12 +72,16 @@ function printUsage(stream) {
 // then written into the client asset directory, so Static Assets serves them
 // without ever invoking the Worker at request time. Routing is planned last,
 // from the routes that actually prerendered and the final asset inventory.
+// That build-time Worker runs without the wrangler block's fields other than
+// vars, so building needs no Cloudflare access; the deploy config keeps them.
 async function runBuild() {
   const { createBuilder } = await import("vite");
   const builder = await createBuilder({ root: process.cwd() });
   await builder.buildApp();
-  const { outputs, prerendered } = await prerenderStaticRoutes({ projectRoot: process.cwd() });
-  await finalizeWorkerRouting({ projectRoot: process.cwd(), prerendered, outputs });
+  const { wrangler } = await loadApplicationConfig({ projectRoot: process.cwd() });
+  const withheld = listPrerenderWithheld(wrangler);
+  const { outputs, prerendered } = await prerenderStaticRoutes({ projectRoot: process.cwd(), withheld });
+  await finalizeWorkerRouting({ projectRoot: process.cwd(), prerendered, outputs, withheld: withheld.fields });
   console.log(
     `[Goribu] Build complete.\n` +
     `  HTML and browser assets: ${relative(process.cwd(), outputs.clientDir)}\n` +

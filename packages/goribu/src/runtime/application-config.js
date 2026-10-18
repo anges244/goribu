@@ -1,6 +1,7 @@
 import { assertOptionalResponseHeaders } from "./response-headers.js";
 import { assertR2Config } from "./r2-config.js";
 import { assertHostname } from "./hostname-config.js";
+import { snapshotWranglerConfig } from "./wrangler-config.js";
 
 const CONFIG_BRAND = new WeakSet();
 const CONFIG_FIELDS = new Set([
@@ -13,6 +14,7 @@ const CONFIG_FIELDS = new Set([
   "database",
   "kv",
   "r2",
+  "wrangler",
 ]);
 const D1_DATABASE_FIELDS = new Set(["type", "name", "replication"]);
 const POSTGRES_DATABASE_FIELDS = new Set(["type", "hyperdriveId", "hyperdriveCachedId"]);
@@ -49,7 +51,7 @@ export function defineConfig(config) {
 
   if (Object.getOwnPropertySymbols(config).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, domain, workersDev, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2 fields.",
+      "[Goribu] Application configuration cannot contain symbol-keyed fields. Use only the documented name, domain, workersDev, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, r2, and wrangler fields.",
     );
   }
 
@@ -66,7 +68,7 @@ export function defineConfig(config) {
     }
     if (!CONFIG_FIELDS.has(field)) {
       throw new TypeError(
-        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, domain, workersDev, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, and r2.`,
+        `[Goribu] Application configuration contains unknown field ${JSON.stringify(field)}. Remove it; the supported fields are name, domain, workersDev, compatibilityDate, compatibilityFlags, responseHeaders, database, kv, r2, and wrangler.`,
       );
     }
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
@@ -138,6 +140,11 @@ export function defineConfig(config) {
         '[Goribu] Application configuration field domain must differ from r2.domain. Use separate hostnames for your app and bucket, such as "app.example.com" and "media.example.com".',
       );
     }
+  }
+  // Only the shape is checked here; this module also runs in the Worker. The
+  // build checks reserved fields and Wrangler's schema when it writes the config.
+  if (normalized.wrangler !== undefined) {
+    normalized.wrangler = snapshotWranglerConfig(normalized.wrangler);
   }
 
   const result = Object.freeze(normalized);

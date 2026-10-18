@@ -25,6 +25,7 @@ import { createDevelopmentLifecyclePlugin } from "./development-lifecycle.js";
 import { createDevelopmentImportRecoveryPlugin } from "./development-import-recovery.js";
 import { createDevelopmentRouteInventoryPlugin } from "./development-route-inventory.js";
 import { getDevelopmentSecret } from "./development-secret.js";
+import { prepareDevelopmentRemoteBindings } from "./development-remote-bindings.js";
 import { BUILD_OUTPUT_DIRECTORY, assertBuildOutputs, createBuildOutputGuardPlugin } from "./build-output.js";
 
 const PUBLIC_ENV_PREFIX = "PUBLIC_";
@@ -151,6 +152,9 @@ function createGoribuPlugin(navigationBuildId, development) {
       }
       if (environment.command === "serve" && appConfig.r2 !== undefined) {
         development.secret = getDevelopmentSecret(root);
+      }
+      if (environment.command === "serve" && appConfig.wrangler !== undefined) {
+        await prepareDevelopmentRemoteBindings({ projectRoot: root, appConfig });
       }
       return {
         envPrefix: PUBLIC_ENV_PREFIX,

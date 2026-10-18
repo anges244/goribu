@@ -32,7 +32,9 @@ Edits to the loaded files restart the development session.
 Goribu generates `goribu.wrangler.jsonc` at the project root so Cloudflare can
 find those files beside its configuration. This file and `.goribu/` are generated
 and should be ignored by Git. Configure `goribu.config.js`; do not edit the
-generated Wrangler file.
+generated Wrangler file. Plain values that are not secret can also be declared as
+[`wrangler.vars`](wrangler.md#vars-and-secrets); a matching key in these files
+overrides them in development.
 
 When R2 is configured, Goribu creates and reuses its own `.goribu/dev-secret`
 for local signing. It supplies this as a serve-only `GORIBU_SECRET` fallback

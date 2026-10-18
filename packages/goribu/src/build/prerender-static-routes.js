@@ -33,8 +33,13 @@ const RESERVED_ASSETS_DIR = "_goribu";
  * URL would collide with this output or silently shadow a route meant to stay
  * dynamic, so it fails the build.
  *
+ * Fields from the app's `wrangler` block other than vars are withheld from the
+ * build's Worker (see `startPrerenderWorker`), so a page that uses one of those
+ * bindings fails to render; the failure names them.
+ *
  * @param {{
  *   projectRoot: string,
+ *   withheld?: { fields: string[], bindings: string[] },
  *   log?: { warn: Function, log: Function },
  *   startWorker?: Function,
  * }} options
@@ -53,6 +58,7 @@ export async function prerenderStaticRoutes(options) {
   }
   const log = options?.log ?? console;
   const startWorker = options?.startWorker ?? startPrerenderWorker;
+  const withheld = options?.withheld ?? { fields: [], bindings: [] };
 
   const root = resolve(projectRoot);
   const routesDir = join(root, ROUTES_DIRECTORY);
@@ -95,7 +101,7 @@ export async function prerenderStaticRoutes(options) {
   }
 
   const prerendered = [];
-  const worker = await startWorker({ configPath });
+  const worker = await startWorker({ configPath, withheld: withheld.fields });
   try {
     if (inspectUploads) {
       // Evaluate every route's policy in the emitted Worker, including action-only
@@ -120,6 +126,9 @@ export async function prerenderStaticRoutes(options) {
     }
     for (const route of staticRoutes) {
       const result = await renderThroughWorker(worker, route);
+      if (!result.ok && withheld.bindings.length > 0) {
+        result.reason += `; prerendering runs without the wrangler bindings ${withheld.bindings.join(", ")}, so a page that uses them must render on the Worker`;
+      }
 
       if (result.ok) {
         await navigationOutput.write(route, result.html);
@@ -186,6 +195,7 @@ function announceDowngrade(log, route) {
  * so it fails the build with a repair instruction instead.
  */
 async function renderThroughWorker(worker, route) {
+  worker.takeError?.();
   let response;
   try {
     response = await worker.fetch(route.pathname);
@@ -205,7 +215,8 @@ async function renderThroughWorker(worker, route) {
     if (diagnostic === "incomplete-render") {
       return { ok: false, reason: "reported an error inside a Suspense boundary, so its HTML would contain only the fallback" };
     }
-    return { ok: false, reason: `responded ${response.status}` };
+    const error = worker.takeError?.();
+    return { ok: false, reason: `responded ${response.status}${error ? ` (${error})` : ""}` };
   }
   if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/html")) {
     return { ok: false, reason: "did not return an HTML page" };
@@ -237,8 +248,12 @@ async function renderThroughWorker(worker, route) {
  * frontDoor requests instead pass through the Static Assets router as public
  * traffic would, without the build-only binding, so the build can prove what
  * the emitted routing configuration actually serves.
+ *
+ * `withheld` top-level fields are removed from an in-memory copy of the config,
+ * never from the deploy file. Prerendering then needs no Cloudflare credentials
+ * and never reaches the production resources those bindings name.
  */
-export async function startPrerenderWorker({ configPath, frontDoor = false }) {
+export async function startPrerenderWorker({ configPath, frontDoor = false, withheld = [] }) {
   const { createTestHarness } = await import("wrangler");
 
   // Keep the harness's own informational logging out of the build output, without
@@ -256,7 +271,10 @@ export async function startPrerenderWorker({ configPath, frontDoor = false }) {
   let harness;
   let url;
   try {
-    harness = createTestHarness({ workers: [{ configPath, ...(frontDoor ? {} : { vars: { __GORIBU_PRERENDER: true } }) }] });
+    const buildVars = frontDoor ? {} : { __GORIBU_PRERENDER: true };
+    harness = createTestHarness(withheld.length === 0
+      ? { workers: [{ configPath, ...(frontDoor ? {} : { vars: buildVars }) }] }
+      : { root: dirname(configPath), workers: [{ config: withholdFields(configPath, withheld, buildVars) }] });
     ({ url } = await harness.listen());
   } catch (error) {
     restoreEnvironment();
@@ -274,6 +292,15 @@ export async function startPrerenderWorker({ configPath, frontDoor = false }) {
       // non-200 downgrade signal rather than silently followed.
       return worker.fetch(pathname, { redirect: "manual" });
     },
+    // The last error the Worker logged since the previous call, reduced to its
+    // innermost cause, which names what actually failed during a render.
+    takeError() {
+      const logged = harness.getLogs().filter((entry) => entry.level === "error").at(-1)?.message;
+      harness.clearLogs();
+      if (typeof logged !== "string") return null;
+      const cause = [...logged.matchAll(/\[cause\]: ([^\n]+)/g)].at(-1)?.[1] ?? logged.split("\n")[0];
+      return cause.trim().slice(0, 300);
+    },
     async stop() {
       try {
         await harness.close();
@@ -282,6 +309,13 @@ export async function startPrerenderWorker({ configPath, frontDoor = false }) {
       }
     },
   };
+}
+
+function withholdFields(configPath, fields, vars) {
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  for (const field of fields) delete config[field];
+  config.vars = { ...config.vars, ...vars };
+  return config;
 }
 
 function overrideEnvironment(values) {

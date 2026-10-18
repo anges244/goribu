@@ -3,6 +3,16 @@ import type { D1Database, D1DatabaseSession, KVNamespace, KVNamespaceListResult,
 import type { FormErrors } from "./index.js";
 
 export type ResponseHeaders = Record<string, string | string[]>;
+type WranglerJson = string | number | boolean | null | readonly WranglerJson[] | { readonly [key: string]: WranglerJson };
+/** Wrangler fields Goribu writes or owns; the build rejects them with the reason. */
+type ReservedWranglerField =
+  | "name" | "main" | "compatibility_date" | "compatibility_flags" | "assets" | "workers_dev" | "preview_urls" | "account_id"
+  | "d1_databases" | "kv_namespaces" | "r2_buckets" | "hyperdrive"
+  | "routes" | "route" | "env" | "previews" | "compliance_region" | "pages_build_output_dir"
+  | "dev" | "alias" | "define" | "minify" | "base_dir" | "build" | "find_additional_modules" | "no_bundle" | "preserve_file_names" | "rules" | "site" | "tsconfig"
+  | "triggers" | "migrations" | "exports" | "containers" | "cloudchamber" | "placement" | "unsafe" | "unsafe_hello_world";
+/** Native Wrangler configuration fields, as JSON, merged into the generated config. */
+type WranglerConfig = { readonly [key: string]: WranglerJson } & { readonly [Field in ReservedWranglerField]?: never };
 export interface ApplicationConfig<Env extends object = Record<string, unknown>> {
   name: string;
   domain?: string;
@@ -22,6 +32,7 @@ export interface ApplicationConfig<Env extends object = Record<string, unknown>>
     private?: { name: string };
     jurisdiction?: "eu";
   };
+  wrangler?: WranglerConfig;
   responseHeaders?: (context: Readonly<{
     request: Request;
     env: Env;

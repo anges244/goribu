@@ -25,11 +25,12 @@ const NOT_FOUND_ASSET = "404.html";
  *   projectRoot: string,
  *   prerendered: Array<{ id: string }>,
  *   outputs: { configPath: string, clientDir: string },
+ *   withheld?: string[],
  *   log?: { warn: Function, log: Function },
  *   startWorker?: Function,
  * }} options
  */
-export async function finalizeWorkerRouting({ projectRoot, prerendered, outputs, log = console, startWorker = startPrerenderWorker }) {
+export async function finalizeWorkerRouting({ projectRoot, prerendered, outputs, withheld = [], log = console, startWorker = startPrerenderWorker }) {
   const root = resolve(projectRoot);
   const routesDir = join(root, ROUTES_DIRECTORY);
   const { configPath, clientDir } = outputs;
@@ -54,7 +55,7 @@ export async function finalizeWorkerRouting({ projectRoot, prerendered, outputs,
       );
     }
     const notFound = scanErrorPages(routesDir).notFound;
-    html = await renderMissPage(startWorker, configPath, notFound === null ? "built-in 404 page" : `_404 page "${relative(root, notFound)}"`);
+    html = await renderMissPage(startWorker, { configPath, withheld }, notFound === null ? "built-in 404 page" : `_404 page "${relative(root, notFound)}"`);
     writeFileSync(join(clientDir, NOT_FOUND_ASSET), html, "utf8");
   }
 
@@ -65,14 +66,14 @@ export async function finalizeWorkerRouting({ projectRoot, prerendered, outputs,
   };
   writeFileSync(configPath, `${JSON.stringify(config)}\n`, "utf8");
   if (plan.patterns !== null) {
-    await assertMissPageServed(startWorker, configPath, html);
+    await assertMissPageServed(startWorker, { configPath, withheld }, html);
     log.log(`[Goribu] Unknown URLs outside ${plan.patterns.length} Worker routing rule(s) receive the static 404 page without invoking the Worker.`);
   }
   return plan;
 }
 
-async function renderMissPage(startWorker, configPath, label) {
-  const worker = await startWorker({ configPath });
+async function renderMissPage(startWorker, workerOptions, label) {
+  const worker = await startWorker(workerOptions);
   try {
     let response;
     try {
@@ -102,8 +103,8 @@ async function renderMissPage(startWorker, configPath, label) {
   }
 }
 
-async function assertMissPageServed(startWorker, configPath, html) {
-  const frontDoor = await startWorker({ configPath, frontDoor: true });
+async function assertMissPageServed(startWorker, workerOptions, html) {
+  const frontDoor = await startWorker({ ...workerOptions, frontDoor: true });
   try {
     // A reserved framework path is never a route or an asset. Without the build
     // binding, the Worker answers it with an empty 404 rather than this page.

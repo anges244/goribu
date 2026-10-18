@@ -68,6 +68,19 @@ config.domain = "other.example.com";
 // @ts-expect-error Only one hostname string is accepted.
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", domain: ["app.example.com"] });
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-files" } });
+const wranglerConfig = defineConfig({
+  name: "typed-app", compatibilityDate: "2026-09-01",
+  wrangler: { ai: { binding: "AI" }, services: [{ binding: "SEARCH", service: "search-worker" }], vars: { API_HOST: "example.com", LIMITS: { max: 3 } } },
+});
+if (wranglerConfig.wrangler !== undefined) {
+  const wranglerVars = wranglerConfig.wrangler.vars;
+  // @ts-expect-error The wrangler snapshot is immutable.
+  wranglerConfig.wrangler.ai = null;
+}
+// @ts-expect-error Goribu writes the KV binding from kv.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", wrangler: { kv_namespaces: [] } });
+// @ts-expect-error The wrangler block holds JSON values only.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", wrangler: { vars: { NOW: new Date() } } });
 // @ts-expect-error R2 names are required.
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { domain: "media.example.com" } });
 // @ts-expect-error Only EU or the omitted default jurisdiction is supported.

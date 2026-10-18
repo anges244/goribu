@@ -67,7 +67,7 @@ importers:
         specifier: ^7.29.8
         version: 7.29.8
       '@cloudflare/vite-plugin':
-        specifier: ^1.54.2
+        specifier: 1.54.2
         version: 1.54.2(vite@8.2.2(@types/node@22.20.2)(esbuild@0.28.1)(jiti@2.7.0))(wrangler@4.127.1(@cloudflare/workers-types@5.20260911.1))
       '@cloudflare/workers-types':
         specifier: ^5.20260828.1
@@ -91,7 +91,7 @@ importers:
         specifier: ^8.2.2
         version: 8.2.2(@types/node@22.20.2)(esbuild@0.28.1)(jiti@2.7.0)
       wrangler:
-        specifier: ^4.127.1
+        specifier: 4.127.1
         version: 4.127.1(@cloudflare/workers-types@5.20260911.1)
 
   site:

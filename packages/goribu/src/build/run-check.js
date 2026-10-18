@@ -15,6 +15,7 @@ import { BUILD_OUTPUT_DIRECTORY } from "./build-output.js";
 import { CLOUDFLARE_AUTH_HELP, forwardWranglerDiagnostics } from "./wrangler-diagnostics.js";
 import { getCloudflareAccess } from "./cloudflare-access.js";
 import { inspectAppDomain, formatAppDomainPlan } from "./inspect-app-domain.js";
+import { listBindings } from "./wrangler-passthrough.js";
 
 const D1_PRICING_URL = "https://developers.cloudflare.com/d1/platform/pricing/";
 
@@ -305,6 +306,10 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
     }),
     resources: Object.freeze(resources),
     bindings: Object.freeze(bindings),
+    // Deploy passes these through unchanged; check neither inspects nor creates them.
+    passthroughBindings: Object.freeze(Object.entries(listBindings(appConfig.wrangler))
+      .filter(([, binding]) => binding.type !== "plain_text" && binding.type !== "json")
+      .map(([name, binding]) => Object.freeze({ name, type: binding.type }))),
     costWarnings: Object.freeze(costWarnings),
     migrations: migrationsPlan,
   });
@@ -338,6 +343,11 @@ export function formatCheckPlan(plan) {
       ? ["  none"]
       : plan.bindings.map((binding) => `  ${binding.name} -> ${binding.resource}`)),
     "",
+    ...(plan.passthroughBindings.length === 0 ? [] : [
+      "Wrangler bindings from goribu.config.js (deployed as written; not inspected or managed by Goribu)",
+      ...plan.passthroughBindings.map((binding) => `  ${binding.name} -> ${binding.type}`),
+      "",
+    ]),
     ...(plan.r2 ? [formatR2Plan(plan.r2)] : []),
     ...(plan.postgres
       ? ["Postgres: not inspected by check yet. Deploy creates or updates the Hyperdrive configs and applies pending migrations before upload."]
