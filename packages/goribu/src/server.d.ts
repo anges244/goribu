@@ -8,7 +8,12 @@ export interface ApplicationConfig<Env extends object = Record<string, unknown>>
   workersDev?: boolean;
   compatibilityDate: string;
   compatibilityFlags?: string[];
-  database?: { type: "d1"; name: string; replication?: boolean };
+  database?:
+    | { type: "d1"; name: string; replication?: boolean }
+    | ({ type: "postgres" } & (
+      | { hyperdriveId: string; hyperdriveCachedId: string }
+      | { hyperdriveId?: never; hyperdriveCachedId?: never }
+    ));
   kv?: { name: string };
   r2?: {
     name: string;

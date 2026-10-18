@@ -15,6 +15,8 @@ const CONFIG_FIELDS = new Set([
   "r2",
 ]);
 const D1_DATABASE_FIELDS = new Set(["type", "name", "replication"]);
+const POSTGRES_DATABASE_FIELDS = new Set(["type", "hyperdriveId", "hyperdriveCachedId"]);
+const DATABASE_SHAPES = 'database: { type: "d1", name: "your-app-db", replication? } or database: { type: "postgres", hyperdriveId?, hyperdriveCachedId? }';
 
 // Cloudflare Worker script name: lowercase letters, digits, and hyphens, not
 // starting or ending with a hyphen, up to 63 characters.
@@ -118,7 +120,7 @@ export function defineConfig(config) {
     "Application configuration field responseHeaders",
   );
   if (normalized.database !== undefined) {
-    normalized.database = assertD1DatabaseConfig(normalized.database);
+    normalized.database = assertDatabaseConfig(normalized.database);
   }
   if (normalized.kv !== undefined) {
     normalized.kv = assertKVConfig(normalized.kv);
@@ -164,34 +166,33 @@ function assertKVConfig(kv) {
   return Object.freeze({ name });
 }
 
-/** Validate the one D1 declaration this block currently supports. */
-function assertD1DatabaseConfig(database) {
+function assertDatabaseConfig(database) {
   if (
-    database === null ||
-    typeof database !== "object" ||
-    Array.isArray(database) ||
+    database === null || typeof database !== "object" ||
     Object.getPrototypeOf(database) !== Object.prototype
   ) {
     throw new TypeError(
-      '[Goribu] Application configuration field database must be a plain object. Pass defineConfig({ database: { type: "d1", name: "your-app-db" } }) in goribu.config.js.',
+      `[Goribu] Application configuration field database must be a plain object. Use ${DATABASE_SHAPES} in goribu.config.js.`,
     );
   }
-
   if (Object.getOwnPropertySymbols(database).length > 0) {
     throw new TypeError(
-      "[Goribu] Application configuration field database cannot contain symbol-keyed fields. Use only type, name, and replication for the D1 declaration.",
+      `[Goribu] Application configuration field database cannot contain symbol-keyed fields. Use ${DATABASE_SHAPES} in goribu.config.js.`,
     );
   }
 
-  const normalized = {};
-  for (const [field, descriptor] of Object.entries(
-    Object.getOwnPropertyDescriptors(database),
-  )) {
-    if (!D1_DATABASE_FIELDS.has(field)) {
-      throw new TypeError(
-        `[Goribu] Application configuration field database contains unknown field ${JSON.stringify(field)}. Remove it; the supported D1 fields are type, name, and replication.`,
-      );
+  const descriptors = Object.getOwnPropertyDescriptors(database);
+  if (descriptors.type?.value === "postgres") {
+    for (const [field, envKey] of [["url", "POSTGRES_URL"], ["migrateUrl", "POSTGRES_MIGRATE_URL"]]) {
+      if (Object.hasOwn(descriptors, field)) {
+        throw new TypeError(
+          `[Goribu] Application configuration field database.${field} is unsupported. Put ${envKey} in .env / .env.production; connection strings never go in goribu.config.js.`,
+        );
+      }
     }
+  }
+  const normalized = {};
+  for (const [field, descriptor] of Object.entries(descriptors)) {
     if (!("value" in descriptor) || descriptor.enumerable !== true) {
       throw new TypeError(
         `[Goribu] Application configuration field database.${field} must be an ordinary enumerable value. Replace getters, setters, or hidden properties with a direct value.`,
@@ -199,16 +200,51 @@ function assertD1DatabaseConfig(database) {
     }
     normalized[field] = descriptor.value;
   }
-
-  if (normalized.type !== "d1") {
+  if (normalized.type !== "d1" && normalized.type !== "postgres") {
     throw new TypeError(
-      '[Goribu] Application configuration field database.type must be "d1". Set type: "d1" for the database declared in goribu.config.js.',
+      '[Goribu] Application configuration field database.type must be "d1" or "postgres". Set type: "d1" or type: "postgres" in goribu.config.js.',
     );
   }
+  const fields = normalized.type === "d1" ? D1_DATABASE_FIELDS : POSTGRES_DATABASE_FIELDS;
+  for (const field of Object.keys(descriptors)) {
+    if (!fields.has(field)) {
+      throw new TypeError(
+        `[Goribu] Application configuration field database contains unknown field ${JSON.stringify(field)}. Remove it; use ${DATABASE_SHAPES} in goribu.config.js.`,
+      );
+    }
+  }
+  return normalized.type === "d1"
+    ? assertD1DatabaseConfig(normalized)
+    : assertPostgresDatabaseConfig(normalized);
+}
 
+function assertPostgresDatabaseConfig(database) {
+  for (const field of ["hyperdriveId", "hyperdriveCachedId"]) {
+    if (database[field] !== undefined &&
+      (typeof database[field] !== "string" || database[field].trim().length === 0)) {
+      throw new TypeError(
+        `[Goribu] Application configuration field database.${field} must be a non-empty string or omitted. Supply both Hyperdrive IDs, or omit both to let Goribu provision them.`,
+      );
+    }
+  }
+  if ((database.hyperdriveId === undefined) !== (database.hyperdriveCachedId === undefined)) {
+    throw new TypeError(
+      "[Goribu] Application configuration requires database.hyperdriveId and database.hyperdriveCachedId together. Supply both Hyperdrive IDs, or omit both to let Goribu provision them.",
+    );
+  }
+  if (database.hyperdriveId !== undefined && database.hyperdriveId === database.hyperdriveCachedId) {
+    throw new TypeError(
+      "[Goribu] Application configuration fields database.hyperdriveId and database.hyperdriveCachedId must name different Hyperdrive configs (one caching disabled, one enabled). Supply two different IDs, or omit both to let Goribu provision them.",
+    );
+  }
+  return Object.freeze(database);
+}
+
+/** Validate the D1-specific fields after the shared database checks. */
+function assertD1DatabaseConfig(database) {
   if (
-    typeof normalized.name !== "string" ||
-    !DATABASE_NAME_PATTERN.test(normalized.name)
+    typeof database.name !== "string" ||
+    !DATABASE_NAME_PATTERN.test(database.name)
   ) {
     throw new TypeError(
       "[Goribu] Application configuration field database.name must be a lowercase D1 database name: start with a letter or digit, then letters, digits, hyphens, or underscores, up to 63 characters. Rename the database in goribu.config.js.",
@@ -216,8 +252,8 @@ function assertD1DatabaseConfig(database) {
   }
 
   if (
-    normalized.replication !== undefined &&
-    typeof normalized.replication !== "boolean"
+    database.replication !== undefined &&
+    typeof database.replication !== "boolean"
   ) {
     throw new TypeError(
       "[Goribu] Application configuration field database.replication must be true, false, or omitted. " +
@@ -225,7 +261,7 @@ function assertD1DatabaseConfig(database) {
     );
   }
 
-  return Object.freeze(normalized);
+  return Object.freeze(database);
 }
 
 /**

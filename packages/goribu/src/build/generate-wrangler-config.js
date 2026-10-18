@@ -4,6 +4,10 @@ import { writeGeneratedFile } from "./write-generated-file.js";
 
 const GENERATED_DIRECTORY = ".goribu";
 export const GENERATED_WRANGLER_CONFIG = "goribu.wrangler.jsonc";
+// Distinct 32-hex placeholders shaped like real Hyperdrive IDs.
+// Deploy must replace both with provisioned IDs before uploading a Worker.
+export const GORIBU_HYPERDRIVE_PLACEHOLDER = "00000000000000000000000000000000";
+export const GORIBU_HYPERDRIVE_CACHED_PLACEHOLDER = "00000000000000000000000000000001";
 const WORKER_FILENAME = "worker.js";
 const ASSETS_BINDING = "ASSETS";
 const D1_BINDING = "DB";
@@ -61,12 +65,15 @@ function synthesizeWranglerConfig(appConfig) {
     preview_urls: false,
   };
 
-  const flags = appConfig.compatibilityFlags;
-  if (Array.isArray(flags) && flags.length > 0) {
-    config.compatibility_flags = [...flags];
+  const flags = [...appConfig.compatibilityFlags];
+  if (appConfig.database?.type === "postgres" && !flags.includes("nodejs_compat")) {
+    flags.push("nodejs_compat");
+  }
+  if (flags.length > 0) {
+    config.compatibility_flags = flags;
   }
 
-  if (appConfig.database !== undefined) {
+  if (appConfig.database?.type === "d1") {
     config.d1_databases = [
       {
         binding: D1_BINDING,
@@ -76,6 +83,13 @@ function synthesizeWranglerConfig(appConfig) {
         // Goribu owns the production UUID separately at deploy time.
         preview_database_id: appConfig.database.name,
       },
+    ];
+  }
+
+  if (appConfig.database?.type === "postgres") {
+    config.hyperdrive = [
+      { binding: "POSTGRES", id: appConfig.database.hyperdriveId ?? GORIBU_HYPERDRIVE_PLACEHOLDER },
+      { binding: "POSTGRES_CACHED", id: appConfig.database.hyperdriveCachedId ?? GORIBU_HYPERDRIVE_CACHED_PLACEHOLDER },
     ];
   }
 

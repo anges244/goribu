@@ -108,7 +108,9 @@ accessing their fields.
 - KV is eventually consistent, including cached misses. Use D1 when correctness
   requires fresh reads; never promise KV read-your-writes.
 - Test the actual affected behavior. Before handing off, run the relevant checks
-  and `pnpm build`; do not claim a command passed without observing it.
+  and `pnpm build`. Trivial CSS-only changes, such as opacity, color, or spacing
+  tweaks, are exempt from the build requirement; keep verification proportional
+  to the change. Do not claim a command passed without observing it.
 
 For deeper topics, consult the matching page in the
 [Goribu guides](https://goribu.dev/docs): routing,

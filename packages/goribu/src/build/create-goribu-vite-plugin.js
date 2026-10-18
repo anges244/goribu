@@ -14,6 +14,7 @@ import { createClientPageManifestPlugin } from "./create-client-page-manifest-pl
 import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
+import { assertNoDuplicateHyperdriveDeclaration } from "./postgres/assert-no-duplicate-hyperdrive.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { GENERATED_WRANGLER_CONFIG, writeWranglerConfig } from "./generate-wrangler-config.js";
 import { APPLICATION_CONFIG_FILENAME, loadApplicationConfig } from "./load-application-config.js";
@@ -135,6 +136,7 @@ function createGoribuPlugin(navigationBuildId, development) {
       await assertNoDuplicateD1Declaration({ projectRoot: root, appConfig });
       await assertNoDuplicateKVDeclaration({ projectRoot: root, appConfig });
       await assertNoDuplicateR2Declaration({ projectRoot: root, appConfig });
+      await assertNoDuplicateHyperdriveDeclaration({ projectRoot: root, appConfig });
       writeWranglerConfig({ projectRoot: root, appConfig });
       if (environment.command === "serve" && appConfig.r2 !== undefined) {
         development.secret = getDevelopmentSecret(root);

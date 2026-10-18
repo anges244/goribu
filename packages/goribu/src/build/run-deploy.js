@@ -8,6 +8,7 @@ import { provisionD1 } from "./provision-d1.js";
 import { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
+import { assertNoDuplicateHyperdriveDeclaration } from "./postgres/assert-no-duplicate-hyperdrive.js";
 import { provisionKV } from "./provision-kv.js";
 import { provisionR2 } from "./provision-r2.js";
 import { canPromptForSecrets, ensureR2SigningSecret, ensureR2UploadKeys } from "./r2-secrets.js";
@@ -49,6 +50,7 @@ export async function runDeploy(options) {
   await guard({ projectRoot, appConfig });
   await (options?.guardKV ?? assertNoDuplicateKVDeclaration)({ projectRoot, appConfig });
   await (options?.guardR2 ?? assertNoDuplicateR2Declaration)({ projectRoot, appConfig });
+  await (options?.guardHyperdrive ?? assertNoDuplicateHyperdriveDeclaration)({ projectRoot, appConfig });
   const secretsFile = findProductionSecretsFile(projectRoot);
   (options?.stdout ?? process.stdout).write(`${formatSecretsPlan(secretsFile)}\n`);
   // Authentication is read-only remote work, not provisioning. Fail before an

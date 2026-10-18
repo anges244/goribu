@@ -210,7 +210,9 @@ export function createApp(options) {
       const d1Controller = createD1RequestController({
         resolver: createD1BindingResolver(env),
         cookieJar,
-        replication: applicationConfig?.database?.replication,
+        replication: applicationConfig?.database?.type === "d1"
+          ? applicationConfig.database.replication
+          : undefined,
       });
       const runtime = {
         env,

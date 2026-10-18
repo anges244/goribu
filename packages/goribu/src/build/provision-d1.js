@@ -21,7 +21,7 @@ export async function provisionD1(options) {
       "[Goribu] provisionD1({ appConfig }) requires the defineConfig() result from goribu.config.js.",
     );
   }
-  if (appConfig.database === undefined) return null;
+  if (appConfig.database?.type !== "d1") return null;
 
   const stdout = options?.stdout ?? process.stdout;
   if (stdout === null || typeof stdout.write !== "function") {

@@ -48,25 +48,25 @@ export async function runCheck(options) {
   const appDomain = appConfig.domain === undefined ? null
     : await (options?.inspectAppDomain ?? inspectAppDomain)({ projectRoot, appConfig, access });
 
-  const hasDatabase = appConfig.database !== undefined;
-  const remoteDatabases = hasDatabase ? await inspectD1({ projectRoot }) : [];
+  const hasD1 = appConfig.database?.type === "d1";
+  const remoteDatabases = hasD1 ? await inspectD1({ projectRoot }) : [];
   const inspectKV = options?.inspectKV ?? listRemoteKVNamespaces;
   const remoteNamespaces = appConfig.kv === undefined ? [] : await inspectKV({ projectRoot });
   const r2 = appConfig.r2 === undefined ? null : await (options?.inspectR2 ?? inspectR2)({
     projectRoot, appConfig, ...(appDomain ? { appDomain, access } : {}),
   });
 
-  // Read the local migration files whenever a database is declared, so the plan can
+  // Read the local migration files whenever D1 is declared, so the plan can
   // report pending work even before the database exists. A malformed file fails closed
   // here — a pre-deploy check must never paper over a broken migration.
-  const migrations = hasDatabase
+  const migrations = hasD1
     ? readMigrations({ migrationsDir: join(resolve(projectRoot), MIGRATIONS_DIRNAME) })
     : [];
 
   // Only reach for the production ledger once the database is known to exist; querying a
   // database that has not been created yet would fail for the wrong reason. Existence is
   // derived from the same validated inventory the plan uses, so the two cannot disagree.
-  const existing = hasDatabase
+  const existing = hasD1
     ? findDeclaredDatabase({ appConfig, remoteDatabases })
     : undefined;
   const appliedRows =
@@ -197,7 +197,7 @@ function wranglerStartError(cause) {
  */
 export function findDeclaredDatabase({ appConfig, remoteDatabases } = {}) {
   const declaration = appConfig?.database;
-  if (declaration === undefined) return undefined;
+  if (declaration?.type !== "d1") return undefined;
   const databases = normalizeRemoteD1Databases(remoteDatabases);
   const matches = databases.filter((database) => database.name === declaration.name);
   if (matches.length > 1) {
@@ -226,7 +226,7 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
     throw new Error("[Goribu] The application domain plan is missing. Rerun `goribu check` with domain inspection enabled before planning deployment.");
   }
 
-  if (declaration !== undefined) {
+  if (declaration?.type === "d1") {
     const existing = findDeclaredDatabase({ appConfig, remoteDatabases });
     const applied = planMigrations({ migrations, appliedRows });
     migrationsPlan = Object.freeze({

@@ -23,6 +23,29 @@ const config = defineConfig<Env>({
   }),
 });
 defineConfig(config);
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", database: { type: "postgres" } });
+const postgresConfig = defineConfig({
+  name: "typed-app", compatibilityDate: "2026-09-01",
+  database: { type: "postgres", hyperdriveId: "direct-id", hyperdriveCachedId: "cached-id" },
+});
+defineConfig(postgresConfig);
+if (postgresConfig.database?.type === "postgres" && postgresConfig.database.hyperdriveId !== undefined) {
+  const cachedId: string = postgresConfig.database.hyperdriveCachedId;
+  // @ts-expect-error Defined Postgres configuration is immutable.
+  postgresConfig.database.hyperdriveId = "changed";
+}
+if (config.database?.type === "d1") {
+  const databaseName: string = config.database.name;
+  const replication: boolean | undefined = config.database.replication;
+}
+// @ts-expect-error Hyperdrive IDs must be supplied together.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", database: { type: "postgres", hyperdriveId: "direct-id" } });
+// @ts-expect-error A cached Hyperdrive ID also requires the uncached ID.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", database: { type: "postgres", hyperdriveCachedId: "cached-id" } });
+// @ts-expect-error Connection strings belong in POSTGRES_URL in env files.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", database: { type: "postgres", url: "postgres://localhost/app" } });
+// @ts-expect-error Migration connection strings belong in POSTGRES_MIGRATE_URL in env files.
+defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", database: { type: "postgres", migrateUrl: "postgres://localhost/app" } });
 const applicationDomain: string | undefined = config.domain;
 const workersDev: boolean = config.workersDev;
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", domain: "app.example.com", workersDev: false });

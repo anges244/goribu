@@ -10,9 +10,9 @@ export function finalizeD1Binding(options) {
     );
   }
   const appConfig = options?.appConfig;
-  if (!isApplicationConfig(appConfig) || appConfig.database === undefined) {
+  if (!isApplicationConfig(appConfig) || appConfig.database?.type !== "d1") {
     throw new TypeError(
-      "[Goribu] finalizeD1Binding({ appConfig }) requires a defineConfig() result with a database declaration.",
+      "[Goribu] finalizeD1Binding({ appConfig }) requires a defineConfig() result with a D1 database declaration. Set database: { type: \"d1\", name: \"your-db-name\" } in goribu.config.js.",
     );
   }
   const database = options?.database;

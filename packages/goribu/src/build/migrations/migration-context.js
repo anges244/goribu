@@ -28,7 +28,12 @@ export async function resolveMigrationContext({ projectRoot, loadConfig } = {}) 
   const root = resolve(projectRoot);
   const load = loadConfig ?? loadApplicationConfig;
   const appConfig = await load({ projectRoot: root });
-  if (appConfig.database === undefined) {
+  if (appConfig.database?.type === "postgres") {
+    throw new Error(
+      '[Goribu] Postgres migration and SQL commands are not available yet. Use `psql "$POSTGRES_URL"` to run SQL directly until Goribu supports these commands for Postgres.',
+    );
+  }
+  if (appConfig.database?.type !== "d1") {
     throw new Error(
       "[Goribu] No D1 database is declared, so there is nothing to run SQL against. " +
         'Add `database: { type: "d1", name: "your-db-name" }` to goribu.config.js first.',

@@ -110,6 +110,19 @@ describe("goribu()", () => {
     }
   });
 
+  it("rejects duplicate Hyperdrive ownership during development and production setup", async () => {
+    for (const command of ["serve", "build"]) {
+      const root = makeProject();
+      writeMinimalProject(root);
+      writeFileSync(join(root, "goribu.config.js"),
+        `import { defineConfig } from ${JSON.stringify(APPLICATION_CONFIG_URL)};\n` +
+        'export default defineConfig({ name: "test-app", compatibilityDate: "2026-09-01", database: { type: "postgres" } });\n');
+      writeFileSync(join(root, "wrangler.json"), '{"hyperdrive":[]}');
+      await expect(goribuPlugin().config({ root }, { command }))
+        .rejects.toThrow(/Remove the hyperdrive entry.*set hyperdriveId and hyperdriveCachedId/);
+    }
+  });
+
   it("rejects options with a teaching error", () => {
     expect(() => goribu({})).toThrow(/does not accept options/);
   });

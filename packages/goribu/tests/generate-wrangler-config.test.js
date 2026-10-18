@@ -1,9 +1,10 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import { writeWranglerConfig } from "../src/build/generate-wrangler-config.js";
+import { provisionD1 } from "../src/build/provision-d1.js";
 
 const created = [];
 
@@ -91,6 +92,88 @@ describe("writeWranglerConfig", () => {
         preview_database_id: "goribu-basic-db",
       },
     ]);
+    expect(config).not.toHaveProperty("hyperdrive");
+    expect(config).not.toHaveProperty("compatibility_flags");
+  });
+
+  it("synthesizes distinct Hyperdrive placeholders and nodejs_compat for automatic Postgres setup", () => {
+    const root = makeProject();
+    const appConfig = defineConfig({
+      name: "postgres-app",
+      compatibilityDate: "2026-08-31",
+      database: { type: "postgres" },
+    });
+
+    writeWranglerConfig({ projectRoot: root, appConfig });
+    const config = readConfig(root);
+    expect(config.hyperdrive).toEqual([
+      { binding: "POSTGRES", id: "00000000000000000000000000000000" },
+      { binding: "POSTGRES_CACHED", id: "00000000000000000000000000000001" },
+    ]);
+    expect(config.compatibility_flags).toEqual(["nodejs_compat"]);
+  });
+
+  it("uses both supplied Hyperdrive IDs directly", () => {
+    const root = makeProject();
+    const appConfig = defineConfig({
+      name: "postgres-app",
+      compatibilityDate: "2026-08-31",
+      database: {
+        type: "postgres",
+        hyperdriveId: "11111111111111111111111111111111",
+        hyperdriveCachedId: "22222222222222222222222222222222",
+      },
+    });
+
+    writeWranglerConfig({ projectRoot: root, appConfig });
+    expect(readConfig(root).hyperdrive).toEqual([
+      { binding: "POSTGRES", id: "11111111111111111111111111111111" },
+      { binding: "POSTGRES_CACHED", id: "22222222222222222222222222222222" },
+    ]);
+  });
+
+  it("preserves author flag order and appends nodejs_compat only when absent for Postgres", () => {
+    for (const [type, flags, expected] of [
+      ["postgres", ["streams_enable_constructors", "url_standard"], ["streams_enable_constructors", "url_standard", "nodejs_compat"]],
+      ["postgres", ["streams_enable_constructors", "nodejs_compat", "url_standard"], ["streams_enable_constructors", "nodejs_compat", "url_standard"]],
+      ["d1", ["streams_enable_constructors", "url_standard"], ["streams_enable_constructors", "url_standard"]],
+    ]) {
+      const root = makeProject();
+      const appConfig = defineConfig({
+        name: "app",
+        compatibilityDate: "2026-08-31",
+        compatibilityFlags: flags,
+        database: type === "d1" ? { type, name: "app-db" } : { type },
+      });
+
+      writeWranglerConfig({ projectRoot: root, appConfig });
+      expect(readConfig(root).compatibility_flags).toEqual(expected);
+      expect(appConfig.compatibilityFlags).toEqual(flags);
+    }
+  });
+
+  it("never provisions or synthesizes D1 for a Postgres declaration", async () => {
+    const root = makeProject();
+    const appConfig = defineConfig({
+      name: "postgres-app",
+      compatibilityDate: "2026-08-31",
+      database: { type: "postgres" },
+    });
+    const unexpectedD1Call = vi.fn(() => {
+      throw new Error("Postgres must not inspect, authenticate for, or mutate D1");
+    });
+
+    await expect(provisionD1({
+      projectRoot: root,
+      appConfig,
+      inspectD1: unexpectedD1Call,
+      getAccess: unexpectedD1Call,
+      requestD1: unexpectedD1Call,
+    })).resolves.toBeNull();
+    expect(unexpectedD1Call).not.toHaveBeenCalled();
+
+    writeWranglerConfig({ projectRoot: root, appConfig });
+    expect(readConfig(root)).not.toHaveProperty("d1_databases");
   });
 
   it("requires a project root", () => {

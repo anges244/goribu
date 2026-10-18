@@ -29,7 +29,7 @@ export async function assertNoDuplicateD1Declaration(options) {
       "[Goribu] assertNoDuplicateD1Declaration({ appConfig }) requires the defineConfig() result from goribu.config.js.",
     );
   }
-  if (appConfig.database === undefined) return;
+  if (appConfig.database?.type !== "d1") return;
 
   for (const filename of WRANGLER_CONFIG_FILES) {
     const configPath = join(projectRoot, filename);

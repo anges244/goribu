@@ -191,6 +191,20 @@ describe("runDeploy", () => {
     expect(deploy).not.toHaveBeenCalled();
   });
 
+  it("rejects duplicate Hyperdrive ownership before authentication, build, or deployment", async () => {
+    const projectRoot = makeProject();
+    const appConfig = defineConfig({ name: "app", compatibilityDate: "2026-09-01", database: { type: "postgres" } });
+    writeFileSync(join(projectRoot, "wrangler.jsonc"), '{"hyperdrive":[]}');
+    const build = vi.fn();
+    const getAccess = vi.fn();
+    const deploy = vi.fn();
+    await expect(runDeploy({ projectRoot, loadConfig: async () => appConfig, build, getAccess, deploy }))
+      .rejects.toThrow(/Remove the hyperdrive entry.*set hyperdriveId and hyperdriveCachedId/);
+    expect(build).not.toHaveBeenCalled();
+    expect(getAccess).not.toHaveBeenCalled();
+    expect(deploy).not.toHaveBeenCalled();
+  });
+
   it("guards and authenticates before building, then provisions, finalizes, migrates, and deploys", async () => {
     const events = [];
     const appConfig = defineConfig({
@@ -200,6 +214,7 @@ describe("runDeploy", () => {
     });
     const database = { name: "app-db", uuid: "database-id" };
     const guard = vi.fn(async () => events.push("guard"));
+    const guardHyperdrive = vi.fn(async () => events.push("guard-hyperdrive"));
     const provision = vi.fn(async () => {
       events.push("provision");
       return database;
@@ -218,6 +233,7 @@ describe("runDeploy", () => {
         build,
         loadConfig: async () => appConfig,
         guard,
+        guardHyperdrive,
         getAccess: async () => {
           events.push("auth");
           return fakeAccess();
@@ -231,6 +247,7 @@ describe("runDeploy", () => {
     ).resolves.toBe(0);
     expect(events).toEqual([
       "guard",
+      "guard-hyperdrive",
       "auth",
       "build",
       "provision",
@@ -239,6 +256,7 @@ describe("runDeploy", () => {
       "deploy",
     ]);
     expect(guard).toHaveBeenCalledWith({ projectRoot: "/app", appConfig });
+    expect(guardHyperdrive).toHaveBeenCalledWith({ projectRoot: "/app", appConfig });
     expect(migrate).toHaveBeenCalledWith({
       projectRoot: "/app",
       target: "remote",
