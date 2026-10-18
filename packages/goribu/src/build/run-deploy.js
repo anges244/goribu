@@ -18,6 +18,12 @@ import { getCloudflareAccess } from "./cloudflare-access.js";
 import { findProductionSecretsFile, formatSecretsPlan } from "./production-secrets.js";
 import { inspectAppDomain, formatAppDomainPlan } from "./inspect-app-domain.js";
 import { provisionAppDomain } from "./provision-app-domain.js";
+import { readPostgresEnv } from "./postgres/read-postgres-env.js";
+import { provisionHyperdrive } from "./postgres/provision-hyperdrive.js";
+import { finalizeHyperdriveBindings } from "./postgres/finalize-hyperdrive-bindings.js";
+import { filterProductionSecrets } from "./postgres/filter-production-secrets.js";
+import { runPostgresMigrate } from "./postgres/run-postgres-migrate.js";
+import { listWorkerSecretNames } from "./worker-secrets.js";
 
 export { resolveWranglerBin } from "./resolve-wrangler-bin.js";
 
@@ -43,6 +49,8 @@ export async function runDeploy(options) {
   const finalize = options?.finalize ?? finalizeD1Binding;
   const deploy = options?.deploy ?? runWranglerDeploy;
   const appConfig = await loadConfig({ projectRoot });
+  const hasPostgres = appConfig.database?.type === "postgres";
+  const stdout = options?.stdout ?? process.stdout;
 
   // Prove all local inputs and the complete production build before the first
   // remote mutation. The Vite plugin repeats the ownership guard so standalone
@@ -51,8 +59,12 @@ export async function runDeploy(options) {
   await (options?.guardKV ?? assertNoDuplicateKVDeclaration)({ projectRoot, appConfig });
   await (options?.guardR2 ?? assertNoDuplicateR2Declaration)({ projectRoot, appConfig });
   await (options?.guardHyperdrive ?? assertNoDuplicateHyperdriveDeclaration)({ projectRoot, appConfig });
-  const secretsFile = findProductionSecretsFile(projectRoot);
-  (options?.stdout ?? process.stdout).write(`${formatSecretsPlan(secretsFile)}\n`);
+  if (hasPostgres) {
+    // BYO Hyperdrive apps also need the production URL for direct migrations.
+    await (options?.readPostgresEnv ?? readPostgresEnv)({ projectRoot, target: "production" });
+  }
+  let secretsFile = findProductionSecretsFile(projectRoot);
+  if (!hasPostgres) stdout.write(`${formatSecretsPlan(secretsFile)}\n`);
   // Authentication is read-only remote work, not provisioning. Fail before an
   // expensive build even when the application declares no managed resources.
   const access = await (options?.getAccess ?? getCloudflareAccess)({ projectRoot });
@@ -65,86 +77,117 @@ export async function runDeploy(options) {
     (options?.finalizeR2Account ?? finalizeR2Account)({ projectRoot, appConfig, accountId: access.accountId });
   }
 
-  if (secretsFile) {
-    await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile, accountId: access.accountId });
-  }
+  const filtered = hasPostgres
+    ? await (options?.filterProductionSecrets ?? filterProductionSecrets)({ projectRoot, secretsFile })
+    : null;
+  try {
+    if (filtered) {
+      secretsFile = filtered.secretsFile;
+      stdout.write(`${formatSecretsPlan(secretsFile, { postgres: true })}\n`);
+    }
+    if (secretsFile) {
+      await (options?.validateSecrets ?? validateProductionSecrets)({ projectRoot, secretsFile, accountId: access.accountId });
+    }
 
-  // Prove zone and hostname ownership before any resources or migrations change.
-  // Attachment waits until Wrangler has successfully deployed the Worker.
-  const appDomain = appConfig.domain === undefined ? null
-    : await (options?.inspectAppDomain ?? inspectAppDomain)({ projectRoot, appConfig, access });
-  if (appDomain) (options?.stdout ?? process.stdout).write(formatAppDomainPlan(appDomain));
+    if (hasPostgres) {
+      const names = await (options?.listWorkerSecretNames ?? listWorkerSecretNames)({
+        projectRoot, appConfig, access, allowMissingWorker: true,
+      });
+      for (const name of ["POSTGRES_URL", "POSTGRES_MIGRATE_URL"]) {
+        if (names.includes(name)) {
+          stdout.write(`[Goribu] Warning: Worker ${appConfig.name} already has a ${name} secret from an earlier deploy. Goribu excludes it from this upload but does not delete existing secrets. Remove it with \`pnpm exec goribu wrangler secret delete ${name} --name ${appConfig.name}\`.\n`);
+        }
+      }
+    }
 
-  // Inspect both R2 buckets and reject unsafe public access before D1/KV writes
-  // or migrations. R2 itself only creates buckets after its full inspection.
-  const r2 = await (options?.provisionR2 ?? provisionR2)({
-    projectRoot,
-    appConfig,
-    getAccess,
-    stdout: options?.stdout ?? process.stdout,
-    canPrompt: options?.canPrompt ?? canPromptForSecrets(),
-    ...(appDomain ? { appDomain } : {}),
-  });
+    // Prove zone and hostname ownership before any resources or migrations change.
+    // Attachment waits until Wrangler has successfully deployed the Worker.
+    const appDomain = appConfig.domain === undefined ? null
+      : await (options?.inspectAppDomain ?? inspectAppDomain)({ projectRoot, appConfig, access });
+    if (appDomain) (options?.stdout ?? process.stdout).write(formatAppDomainPlan(appDomain));
 
-  const database = await provision({
-    projectRoot,
-    appConfig,
-    getAccess,
-    stdout: options?.stdout ?? process.stdout,
-  });
-
-  const namespace = await (options?.provisionKV ?? provisionKV)({
-    projectRoot,
-    appConfig,
-    getAccess,
-    stdout: options?.stdout ?? process.stdout,
-  });
-
-  if (namespace !== null) {
-    (options?.finalizeKV ?? finalizeKVBinding)({ projectRoot, appConfig, namespace });
-  }
-
-  if (database !== null) {
-    // Finish the local deploy artifact as soon as provisioning provides the UUID. A malformed
-    // artifact should stop here, before pending SQL changes production schema.
-    finalize({ projectRoot, appConfig, database });
-
-    // Production schema is ready before the new Worker becomes reachable. Reusing the
-    // loaded config keeps deploy on one view of the application, while runMigrate's
-    // drift guard ensures a changed or missing applied file blocks the upload.
-    await migrate({
+    // Inspect both R2 buckets and reject unsafe public access before D1/KV writes
+    // or migrations. R2 itself only creates buckets after its full inspection.
+    const r2 = await (options?.provisionR2 ?? provisionR2)({
       projectRoot,
-      target: "remote",
-      loadConfig: async () => appConfig,
-      errorLabel: "goribu deploy",
+      appConfig,
+      getAccess,
+      stdout: options?.stdout ?? process.stdout,
+      canPrompt: options?.canPrompt ?? canPromptForSecrets(),
+      ...(appDomain ? { appDomain } : {}),
+    });
+
+    const database = hasPostgres ? null : await provision({
+      projectRoot,
+      appConfig,
+      getAccess,
       stdout: options?.stdout ?? process.stdout,
     });
-  }
-  // On first deploy Wrangler may create a draft Worker to hold the secret.
-  // Finish provisioning and migrations before that first Worker mutation.
-  if (appConfig.r2 !== undefined) {
-    await (options?.ensureR2SigningSecret ?? ensureR2SigningSecret)({ projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout });
-    // The buckets exist now, so the person can scope a token to them.
-    if (r2?.uploads.keys === "missing") {
-      await (options?.ensureR2UploadKeys ?? ensureR2UploadKeys)({ projectRoot, appConfig, access, uploads: r2.uploads, stdout: options?.stdout ?? process.stdout });
+
+    if (hasPostgres) {
+      const hyperdrive = await (options?.provisionHyperdrive ?? provisionHyperdrive)({ projectRoot, appConfig, access, stdout });
+      (options?.finalizeHyperdriveBindings ?? finalizeHyperdriveBindings)({ projectRoot, appConfig, hyperdrive });
     }
-  }
-  const code = await deploy({ projectRoot, secretsFile, accountId: access.accountId });
-  if (code !== 0) return code;
-  if (appDomain) {
-    try {
-      await (options?.provisionAppDomain ?? provisionAppDomain)({
-        projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout,
+
+    const namespace = await (options?.provisionKV ?? provisionKV)({
+      projectRoot,
+      appConfig,
+      getAccess,
+      stdout: options?.stdout ?? process.stdout,
+    });
+
+    if (namespace !== null) {
+      (options?.finalizeKV ?? finalizeKVBinding)({ projectRoot, appConfig, namespace });
+    }
+
+    if (hasPostgres) {
+      await (options?.runPostgresMigrate ?? runPostgresMigrate)({
+        projectRoot, target: "remote", loadConfig: async () => appConfig, stdout,
       });
-    } catch (cause) {
-      throw new Error(
-        `[Goribu] Worker ${appConfig.name} was deployed, but its custom domain ${appConfig.domain} could not be confirmed. ` +
-        `The Worker remains deployed; fix the domain problem and rerun \`goribu deploy\`. ${cause.message}`,
-        { cause },
-      );
+    } else if (database !== null) {
+      // Finish the local deploy artifact as soon as provisioning provides the UUID. A malformed
+      // artifact should stop here, before pending SQL changes production schema.
+      finalize({ projectRoot, appConfig, database });
+
+      // Production schema is ready before the new Worker becomes reachable. Reusing the
+      // loaded config keeps deploy on one view of the application, while runMigrate's
+      // drift guard ensures a changed or missing applied file blocks the upload.
+      await migrate({
+        projectRoot,
+        target: "remote",
+        loadConfig: async () => appConfig,
+        errorLabel: "goribu deploy",
+        stdout: options?.stdout ?? process.stdout,
+      });
     }
+    // On first deploy Wrangler may create a draft Worker to hold the secret.
+    // Finish provisioning and migrations before that first Worker mutation.
+    if (appConfig.r2 !== undefined) {
+      await (options?.ensureR2SigningSecret ?? ensureR2SigningSecret)({ projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout });
+      // The buckets exist now, so the person can scope a token to them.
+      if (r2?.uploads.keys === "missing") {
+        await (options?.ensureR2UploadKeys ?? ensureR2UploadKeys)({ projectRoot, appConfig, access, uploads: r2.uploads, stdout: options?.stdout ?? process.stdout });
+      }
+    }
+    const code = await deploy({ projectRoot, secretsFile, accountId: access.accountId });
+    if (code !== 0) return code;
+    if (appDomain) {
+      try {
+        await (options?.provisionAppDomain ?? provisionAppDomain)({
+          projectRoot, appConfig, access, stdout: options?.stdout ?? process.stdout,
+        });
+      } catch (cause) {
+        throw new Error(
+          `[Goribu] Worker ${appConfig.name} was deployed, but its custom domain ${appConfig.domain} could not be confirmed. ` +
+          `The Worker remains deployed; fix the domain problem and rerun \`goribu deploy\`. ${cause.message}`,
+          { cause },
+        );
+      }
+    }
+    return code;
+  } finally {
+    await filtered?.cleanup();
   }
-  return code;
 }
 
 /** Let pinned Wrangler validate the file and built Worker before remote mutation. */

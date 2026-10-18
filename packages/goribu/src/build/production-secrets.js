@@ -19,7 +19,12 @@ export function findProductionSecretsFile(projectRoot) {
   }
 }
 
-export function formatSecretsPlan(secretsFile) {
+export function formatSecretsPlan(secretsFile, { postgres = false } = {}) {
+  if (postgres) {
+    return secretsFile
+      ? "Secrets: upload remaining entries from .env.production; POSTGRES_URL and POSTGRES_MIGRATE_URL are excluded; preserve other existing secrets."
+      : "Secrets: use existing platform secrets; POSTGRES_URL and POSTGRES_MIGRATE_URL are excluded from upload.";
+  }
   return secretsFile
     ? "Secrets: upload from .env.production; preserve other existing secrets."
     : "Secrets: use existing platform secrets; no .env.production found.";

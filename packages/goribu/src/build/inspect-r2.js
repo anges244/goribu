@@ -1,6 +1,6 @@
 import { getCloudflareAccess } from "./cloudflare-access.js";
 import { createR2ManagementClient } from "./cloudflare-r2.js";
-import { listR2SecretNames } from "./r2-secrets.js";
+import { listWorkerSecretNames } from "./worker-secrets.js";
 import { readR2Uploads } from "./read-r2-uploads.js";
 import { formatR2Uploads, inspectR2Uploads } from "./inspect-r2-uploads.js";
 
@@ -35,7 +35,7 @@ export async function inspectR2(options) {
     const zone = await client.zone(first.domain);
     domain = Object.freeze({ name: first.domain, bucket: first.name, jurisdiction: first.jurisdiction, zoneId: zone.id, action: connected ? "none" : "connect" });
   }
-  const names = worker.exists ? await (options.listSecrets ?? listR2SecretNames)({ projectRoot, appConfig, access }) : [];
+  const names = worker.exists ? await (options.listSecrets ?? listWorkerSecretNames)({ projectRoot, appConfig, access }) : [];
   const uploads = await inspectR2Uploads({ metadata, buckets, client, names, access, appConfig, appDomain: options.appDomain, workerExists: worker.exists });
   return Object.freeze({ ...plan, domain, uploads,
     warnings: Object.freeze([...plan.warnings, ...uploads.warnings]), errors: Object.freeze([...plan.errors, ...uploads.errors]),

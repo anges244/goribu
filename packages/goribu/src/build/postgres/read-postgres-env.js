@@ -62,16 +62,7 @@ function readPostgresFile(projectRoot, filename) {
     );
   }
 
-  let parsed;
-  if (filename === ".env.production") {
-    try {
-      const json = JSON.parse(contents);
-      if (json !== null && Object.getPrototypeOf(json) === Object.prototype) parsed = json;
-    } catch {
-      // Like Wrangler's --secrets-file, try dotenv after JSON parsing fails.
-    }
-  }
-  parsed ??= parse(contents);
+  const parsed = filename === ".env.production" ? parseProductionSecrets(contents) : parse(contents);
   const entries = {};
   for (const key of ["POSTGRES_URL", "POSTGRES_MIGRATE_URL"]) {
     if (Object.hasOwn(parsed, key)) {
@@ -79,6 +70,17 @@ function readPostgresFile(projectRoot, filename) {
     }
   }
   return entries;
+}
+
+/** Shared with deploy filtering; values stay literal, without dotenv expansion. */
+export function parseProductionSecrets(contents) {
+  try {
+    const json = JSON.parse(contents);
+    if (json !== null && Object.getPrototypeOf(json) === Object.prototype) return json;
+  } catch {
+    // Like Wrangler's --secrets-file, try dotenv after JSON parsing fails.
+  }
+  return parse(contents);
 }
 
 function validateEntry(entry) {

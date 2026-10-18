@@ -295,6 +295,7 @@ export function createCheckPlan({ appConfig, remoteDatabases, remoteNamespaces, 
     r2,
     appDomain,
     secretsFile,
+    ...(declaration?.type === "postgres" ? { postgres: true } : {}),
     deployTarget: Object.freeze({
       worker: appConfig.name,
       environment: "production",
@@ -324,7 +325,7 @@ export function formatCheckPlan(plan) {
     `  Static assets: ${plan.deployTarget.staticAssets}`,
     `  Compatibility date: ${plan.deployTarget.compatibilityDate}`,
     `  Compatibility flags: ${flags.length === 0 ? "none" : flags.join(", ")}`,
-    `  ${formatSecretsPlan(plan.secretsFile)}`,
+    `  ${formatSecretsPlan(plan.secretsFile, { postgres: plan.postgres })}`,
     "",
     ...(plan.appDomain ? [formatAppDomainPlan(plan.appDomain)] : []),
     "Resources",
@@ -338,8 +339,9 @@ export function formatCheckPlan(plan) {
       : plan.bindings.map((binding) => `  ${binding.name} -> ${binding.resource}`)),
     "",
     ...(plan.r2 ? [formatR2Plan(plan.r2)] : []),
-    "Migrations (production)",
-    ...formatMigrations(plan.migrations),
+    ...(plan.postgres
+      ? ["Postgres: not inspected by check yet. Deploy creates or updates the Hyperdrive configs and applies pending migrations before upload."]
+      : ["Migrations (production)", ...formatMigrations(plan.migrations)]),
     "",
     "Cost warnings",
     ...(plan.costWarnings.length === 0

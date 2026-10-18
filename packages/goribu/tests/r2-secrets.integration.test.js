@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
-import { ensureR2SigningSecret, ensureR2UploadKeys, listR2SecretNames } from "../src/build/r2-secrets.js";
+import { listWorkerSecretNames } from "../src/build/worker-secrets.js";
+import { ensureR2SigningSecret, ensureR2UploadKeys } from "../src/build/r2-secrets.js";
 
 it("real Wrangler creates a draft and pipes a generated secret, reuses it, and keeps values out of errors and logs", async () => {
   const root = mkdtempSync(join(tmpdir(), "goribu-r2-secret-api-"));
@@ -70,7 +71,7 @@ it("real Wrangler creates a draft and pipes a generated secret, reuses it, and k
     await ensureR2SigningSecret(options);
     expect(calls.slice(before).every((call) => call.startsWith("GET"))).toBe(true);
     expect(secret).toBe(generated);
-    expect(await listR2SecretNames(options)).toEqual(["GORIBU_SECRET"]);
+    expect(await listWorkerSecretNames(options)).toEqual(["GORIBU_SECRET"]);
     expect(readFileSync(join(root, ".env.production"), "utf8")).toBe("APP_SECRET=synthetic-app-value\n");
     for (const { args, options: child } of spawnCalls) {
       expect(args).not.toContain(generated);
