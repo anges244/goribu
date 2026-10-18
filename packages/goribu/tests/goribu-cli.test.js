@@ -211,4 +211,25 @@ describe("goribu CLI", () => {
     expect(status).toBe(1);
     expect(stderr).toMatch(/takes a descriptive name/);
   });
+
+  it.each([
+    [["migrate:down"], "[Goribu] `goribu migrate:down` is not available for Postgres yet. Write a new forward migration instead."],
+    [["migrate:seed"], '[Goribu] `goribu migrate:seed` is D1-only. For Postgres, run `psql "$POSTGRES_URL" -f migrations/seed.sql`.'],
+    [["d1", "SELECT 1"], '[Goribu] `goribu d1` is D1-only. For Postgres, run `psql "$POSTGRES_URL"`.'],
+  ])("refuses %j on Postgres with the canonical alternative", (args, message) => {
+    const root = mkdtempSync(join(tmpdir(), "goribu-postgres-cli-refusal-"));
+    try {
+      const configUrl = new URL("../src/runtime/application-config.js", import.meta.url).href;
+      writeFileSync(join(root, "goribu.config.js"), `
+import { defineConfig } from ${JSON.stringify(configUrl)};
+export default defineConfig({ name: "app", compatibilityDate: "2026-09-03", database: { type: "postgres" } });
+`);
+      const preload = `process.chdir(${JSON.stringify(root)});`;
+      const result = runCli(args, ["--import", `data:text/javascript,${encodeURIComponent(preload)}`]);
+      expect(result.status).toBe(1);
+      expect(result.stderr.trim()).toBe(message);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

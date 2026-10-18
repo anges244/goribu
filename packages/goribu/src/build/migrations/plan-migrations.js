@@ -79,3 +79,43 @@ export function describeDrift(drift) {
     "forward migration for the change. Never edit a migration that has already run."
   );
 }
+
+// An empty scaffold must never be recorded as applied, because filling it in
+// afterwards would drift its checksum.
+export function assertNoEmptyMigrations(migrations) {
+  const empty = migrations.find((migration) => migration.upSql.length === 0);
+  if (empty !== undefined) {
+    throw new Error(
+      `[Goribu] Migration ${empty.name} has no SQL under -- migrate:up. ` +
+        "Add its forward SQL before migrating, or delete the file. Applying an empty scaffold " +
+        "now and writing its SQL later would drift the recorded checksum.",
+    );
+  }
+}
+
+export function formatMigrationStatus(target, plan) {
+  const lines = [
+    `Goribu migrations — ${target}`,
+    "",
+    `Applied (${plan.applied.length}):`,
+    ...listOrNone(plan.applied.map((migration) => migration.name)),
+    "",
+    `Pending (${plan.pending.length}):`,
+    ...listOrNone(plan.pending.map((migration) => migration.name)),
+  ];
+  if (plan.drift.length > 0) {
+    lines.push("", `Drift (${plan.drift.length}):`);
+    for (const { name, reason } of plan.drift) {
+      lines.push(`  - ${name}: ${reason}`);
+    }
+    lines.push(
+      "",
+      "Resolve drift before running migrations: restore the original files or add a new forward migration.",
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function listOrNone(names) {
+  return names.length === 0 ? ["  none"] : names.map((name) => `  - ${name}`);
+}

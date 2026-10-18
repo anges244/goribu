@@ -12,6 +12,8 @@ export const SEED_FILENAME = "seed.sql";
 const MIGRATION_FILENAME = /^(\d{4})_([a-z0-9]+(?:-[a-z0-9]+)*)\.sql$/;
 const UP_MARKER = /^--\s*migrate:up\s*$/;
 const DOWN_MARKER = /^--\s*migrate:down\s*$/;
+const NO_TRANSACTION_DIRECTIVE = /^--\s*goribu:no-transaction\s*$/;
+const DIRECTIVE_PREFIX = /^\s*--\s*goribu:/i;
 
 /**
  * Read, validate, and parse the application's migration files.
@@ -21,7 +23,7 @@ const DOWN_MARKER = /^--\s*migrate:down\s*$/;
  * no migrations exist yet. `seed.sql` is reserved and never treated as a migration.
  *
  * @param {{ migrationsDir: string }} options
- * @returns {ReadonlyArray<{ name: string, sequence: number, upSql: string, downSql: string, checksum: string }>}
+ * @returns {ReadonlyArray<{ name: string, sequence: number, upSql: string, downSql: string, checksum: string, transaction: boolean }>}
  */
 export function readMigrations({ migrationsDir } = {}) {
   if (typeof migrationsDir !== "string" || migrationsDir.length === 0) {
@@ -67,7 +69,7 @@ export function readMigrations({ migrationsDir } = {}) {
     const raw = normalizeNewlines(
       readFileSync(join(migrationsDir, entry.name), "utf8"),
     );
-    const { upSql, downSql } = parseSections(entry.name, raw);
+    const { upSql, downSql, transaction } = parseSections(entry.name, raw);
     migrations.push(
       Object.freeze({
         name: entry.name.slice(0, -".sql".length),
@@ -75,6 +77,7 @@ export function readMigrations({ migrationsDir } = {}) {
         upSql,
         downSql,
         checksum: createHash("sha256").update(raw, "utf8").digest("hex"),
+        transaction,
       }),
     );
   }
@@ -88,7 +91,16 @@ function parseSections(filename, raw) {
   const lines = raw.split("\n");
   let upLine = -1;
   let downLine = -1;
+  let transaction = true;
   for (let index = 0; index < lines.length; index += 1) {
+    if (index === 0 && NO_TRANSACTION_DIRECTIVE.test(lines[index])) {
+      transaction = false;
+    } else if (DIRECTIVE_PREFIX.test(lines[index])) {
+      throw new Error(
+        `[Goribu] Migration ${JSON.stringify(filename)} has an unrecognized or misplaced Goribu directive on line ${index + 1}: ${JSON.stringify(lines[index].trim())}. ` +
+          "The only directive is `-- goribu:no-transaction`, it must be the very first line of the file, and it applies to Postgres only. Move it to line 1 or remove it.",
+      );
+    }
     if (UP_MARKER.test(lines[index])) {
       if (upLine !== -1) throw markerError(filename, "-- migrate:up", "more than once");
       upLine = index;
@@ -110,6 +122,7 @@ function parseSections(filename, raw) {
   return {
     upSql: lines.slice(upLine + 1, downLine).join("\n").trim(),
     downSql: lines.slice(downLine + 1).join("\n").trim(),
+    transaction,
   };
 }
 

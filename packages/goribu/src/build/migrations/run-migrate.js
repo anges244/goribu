@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readMigrations, TRACKING_TABLE } from "./read-migrations.js";
-import { describeDrift, planMigrations } from "./plan-migrations.js";
+import { assertNoEmptyMigrations, describeDrift, planMigrations } from "./plan-migrations.js";
 import { resolveMigrationContext } from "./migration-context.js";
 import { executeD1, lastResultRows } from "./wrangler-d1.js";
 
@@ -41,14 +41,12 @@ export async function runMigrate(options) {
 
   const migrations = readMigrations({ migrationsDir: context.migrationsDir });
 
-  // Preflight, before the tracking table exists or any SQL runs: an empty scaffold must
-  // never be recorded as applied, because filling it in afterwards would drift its checksum.
-  const empty = migrations.find((migration) => migration.upSql.length === 0);
-  if (empty !== undefined) {
+  // Preflight, before the tracking table exists or any SQL runs.
+  assertNoEmptyMigrations(migrations);
+  const noTransaction = migrations.find((migration) => migration.transaction === false);
+  if (noTransaction !== undefined) {
     throw new Error(
-      `[Goribu] Migration ${empty.name} has no SQL under -- migrate:up. ` +
-        "Add its forward SQL before migrating, or delete the file. Applying an empty scaffold " +
-        "now and writing its SQL later would drift the recorded checksum.",
+      `[Goribu] Migration ${noTransaction.name} starts with -- goribu:no-transaction, which is a Postgres-only directive. D1 applies each migration file as one batch, so remove that first line.`,
     );
   }
 

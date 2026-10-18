@@ -20,6 +20,29 @@ function write(name, contents) {
 const BODY = "-- migrate:up\nCREATE TABLE t (a);\n-- migrate:down\nDROP TABLE t;\n";
 
 describe("readMigrations", () => {
+  it("reports a first-line transaction opt-out without including it in forward SQL", () => {
+    write("0001_default.sql", BODY);
+    write("0002_add-index.sql", `-- goribu:no-transaction\n${BODY}`);
+    const [normal, optedOut] = readMigrations({ migrationsDir: dir });
+    expect(normal.transaction).toBe(true);
+    expect(optedOut.transaction).toBe(false);
+    expect(optedOut.upSql).toBe(normal.upSql);
+    expect(optedOut.upSql).not.toContain("goribu:no-transaction");
+    expect(optedOut.checksum).not.toBe(normal.checksum);
+  });
+
+  it.each([
+    [`-- add-index\n-- goribu:no-transaction\n${BODY}`, 2],
+    ["-- migrate:up\n-- goribu:no-transaction\nSELECT 1;\n-- migrate:down\n", 2],
+    [`-- goribu:no-transactions\n${BODY}`, 1],
+    [`-- Goribu:No-Transaction\n${BODY}`, 1],
+  ])("rejects unrecognized or misplaced directives (%#)", (contents, line) => {
+    write("0003_add-index.sql", contents);
+    expect(() => readMigrations({ migrationsDir: dir })).toThrow(
+      new RegExp(`misplaced Goribu directive on line ${line}`),
+    );
+  });
+
   it("returns an empty list when the directory does not exist", () => {
     expect(readMigrations({ migrationsDir: join(dir, "missing") })).toEqual([]);
   });

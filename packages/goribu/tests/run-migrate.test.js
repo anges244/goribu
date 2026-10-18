@@ -127,6 +127,25 @@ describe("runMigrate", () => {
     expect(execute.calls).toHaveLength(0);
   });
 
+  it("refuses the Postgres-only directive before any database call", async () => {
+    const file = join(root, "migrations", "0003_add-index.sql");
+    writeFileSync(file, "-- goribu:no-transaction\n-- migrate:up\nCREATE INDEX idx ON t (id);\n-- migrate:down\n");
+    const execute = fakeExecute();
+    await expect(
+      runMigrate({ projectRoot: root, loadConfig, execute, stdout: capture() }),
+    ).rejects.toThrow(new Error(
+      "[Goribu] Migration 0003_add-index starts with -- goribu:no-transaction, which is a Postgres-only directive. D1 applies each migration file as one batch, so remove that first line.",
+    ));
+    expect(execute.calls).toHaveLength(0);
+
+    // An empty scaffold still gets the empty-up error before the directive error.
+    writeFileSync(file, "-- goribu:no-transaction\n-- migrate:up\n-- migrate:down\n");
+    await expect(
+      runMigrate({ projectRoot: root, loadConfig, execute, stdout: capture() }),
+    ).rejects.toThrow(/0003_add-index has no SQL under -- migrate:up/);
+    expect(execute.calls).toHaveLength(0);
+  });
+
   it("refuses when no database is declared", async () => {
     const noDb = defineConfig({ name: "app", compatibilityDate: "2026-09-03" });
     await expect(

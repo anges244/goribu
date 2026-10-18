@@ -16,6 +16,9 @@ import { endFailedSession, installDevLifecycle } from "../src/build/development-
 import { runDeploy as deployApplication } from "../src/build/run-deploy.js";
 import { prerenderStaticRoutes } from "../src/build/prerender-static-routes.js";
 import { finalizeWorkerRouting } from "../src/build/finalize-worker-routing.js";
+import { loadApplicationConfig } from "../src/build/load-application-config.js";
+import { runPostgresMigrate } from "../src/build/postgres/run-postgres-migrate.js";
+import { runPostgresMigrateStatus } from "../src/build/postgres/run-postgres-migrate-status.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
 import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
 import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
@@ -30,8 +33,8 @@ const COMMANDS = {
   tail: "Stream live logs from the deployed Worker.",
   "cloudflare-login": "Log in to Cloudflare through Wrangler.",
   wrangler: "Run Goribu's Wrangler with the deploy account: goribu wrangler <args>.",
-  migrate: "Apply pending D1 migrations (default local; --remote for production).",
-  "migrate:down": "Roll back the last applied migration (default local; --remote supported).",
+  migrate: "Apply pending D1 or Postgres migrations (default local; --remote for production).",
+  "migrate:down": "Roll back the last applied D1 migration (default local; --remote supported).",
   "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
   "migrate:seed": "Run migrations/seed.sql against local D1 only.",
   "migrate:status": "Show applied and pending migrations without changing anything.",
@@ -279,6 +282,35 @@ function resolveD1Arguments(rest) {
   return { target, sql: sql[0] };
 }
 
+// Arguments are validated before this boundary loads the config once; runners
+// reuse that snapshot rather than importing the application config again.
+async function runDatabaseCommand(command, options) {
+  const projectRoot = process.cwd();
+  const appConfig = await loadApplicationConfig({ projectRoot });
+  const shared = { projectRoot, ...options, loadConfig: async () => appConfig };
+  if (appConfig.database?.type === "postgres") {
+    if (command === "migrate:down") {
+      throw new Error("[Goribu] `goribu migrate:down` is not available for Postgres yet. Write a new forward migration instead.");
+    }
+    if (command === "migrate:seed") {
+      throw new Error('[Goribu] `goribu migrate:seed` is D1-only. For Postgres, run `psql "$POSTGRES_URL" -f migrations/seed.sql`.');
+    }
+    if (command === "d1") {
+      throw new Error('[Goribu] `goribu d1` is D1-only. For Postgres, run `psql "$POSTGRES_URL"`.');
+    }
+    const run = command === "migrate" ? runPostgresMigrate : runPostgresMigrateStatus;
+    return run(shared);
+  }
+  const runners = {
+    migrate: runMigrate,
+    "migrate:down": runMigrateDown,
+    "migrate:status": runMigrateStatus,
+    "migrate:seed": runMigrateSeed,
+    d1: runD1,
+  };
+  return runners[command](shared);
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
 
@@ -345,27 +377,21 @@ function main(argv) {
   if (command === "migrate" || command === "migrate:down" || command === "migrate:status") {
     const target = resolveTarget(command, rest);
     if (target === null) return;
-    const run =
-      command === "migrate"
-        ? runMigrate
-        : command === "migrate:down"
-          ? runMigrateDown
-          : runMigrateStatus;
-    run({ projectRoot: process.cwd(), target }).catch(fail);
+    runDatabaseCommand(command, { target }).catch(fail);
     return;
   }
 
   if (command === "migrate:seed") {
     const target = resolveSeedTarget(rest);
     if (target === null) return;
-    runMigrateSeed({ projectRoot: process.cwd(), target }).catch(fail);
+    runDatabaseCommand(command, { target }).catch(fail);
     return;
   }
 
   if (command === "d1") {
     const d1 = resolveD1Arguments(rest);
     if (d1 === null) return;
-    runD1({ projectRoot: process.cwd(), ...d1 }).catch(fail);
+    runDatabaseCommand(command, d1).catch(fail);
     return;
   }
 
