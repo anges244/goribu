@@ -79,7 +79,7 @@ importers:
         specifier: ^0.30.21
         version: 0.30.21
       postgres:
-        specifier: ^3.4.9
+        specifier: 3.4.9
         version: 3.4.9
       react:
         specifier: ^19.2.8
