@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -17,6 +18,11 @@ const APPLICATION_CONFIG_URL = new URL(
 ).href;
 
 const created = [];
+const hyperdriveVariables = [
+  "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_POSTGRES",
+  "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_POSTGRES_CACHED",
+];
+const previousHyperdriveEnv = Object.fromEntries(hyperdriveVariables.map((key) => [key, process.env[key]]));
 
 function makeProject() {
   const root = mkdtempSync(join(tmpdir(), "goribu-plugin-"));
@@ -50,12 +56,41 @@ function writeMinimalProject(root) {
 }
 
 afterEach(() => {
+  for (const [key, value] of Object.entries(previousHyperdriveEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   for (const root of created.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 describe("goribu()", () => {
+  it("injects the local Postgres URL only for serve and never writes it to generated files", async () => {
+    const root = makeProject();
+    writeMinimalProject(root);
+    const configFile = join(root, "goribu.config.js");
+    writeFileSync(configFile, readFileSync(configFile, "utf8").replace("defineConfig({", 'defineConfig({ database: { type: "postgres" },'));
+    const url = "postgres://app:private-test-password@localhost:5432/app";
+    writeFileSync(join(root, ".env"), `POSTGRES_URL=${url}\n`);
+    for (const key of hyperdriveVariables) process.env[key] = "shell-value-must-be-overwritten";
+    const plugin = goribuPlugin();
+    await plugin.config({ root }, { command: "serve" });
+    for (const key of hyperdriveVariables) expect(process.env[key]).toBe(url);
+    expect(readFileSync(join(root, "goribu.wrangler.jsonc"), "utf8")).not.toContain(url);
+    const generated = join(root, ".goribu");
+    for (const file of readdirSync(generated, { recursive: true, withFileTypes: true })) {
+      if (file.isFile()) expect(readFileSync(join(file.parentPath, file.name), "utf8")).not.toContain(url);
+    }
+    for (const key of hyperdriveVariables) delete process.env[key];
+    await plugin.config({ root }, { command: "build" });
+    for (const key of hyperdriveVariables) expect(process.env[key]).toBeUndefined();
+    rmSync(join(root, ".env"));
+    await expect(plugin.config({ root }, { command: "serve" })).rejects.toThrow(
+      "[Goribu] POSTGRES_URL is missing from .env and .env.local. Add it to .env (create that file if needed), or set it in .env.local to override .env. Goribu reads these files only when .dev.vars does not exist.",
+    );
+  });
+
   it("generates a dev secret only for serve with R2, never in Wrangler's config file", async () => {
     const root = makeProject();
     writeMinimalProject(root);

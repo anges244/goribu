@@ -4,6 +4,13 @@ import { defineConfig } from "goribu/server";
 const base = { name: "app", compatibilityDate: "2026-09-03" };
 
 describe("defineConfig database", () => {
+  it("requires Node.js compatibility v2 for Postgres", () => {
+    expect(() => defineConfig({ ...base, database: { type: "postgres" }, compatibilityDate: "2024-09-22" })).toThrow(
+      new TypeError('[Goribu] database: { type: "postgres" } requires compatibilityDate "2024-09-23" or later, because Postgres.js needs Node.js compatibility v2. Set compatibilityDate in goribu.config.js to today\'s date.'),
+    );
+    expect(defineConfig({ ...base, database: { type: "postgres" }, compatibilityDate: "2024-09-23" }).compatibilityDate).toBe("2024-09-23");
+  });
+
   it("accepts and freezes one D1 database declaration", () => {
     const source = { type: "d1", name: "my-app_db" };
     const config = defineConfig({ ...base, database: source });

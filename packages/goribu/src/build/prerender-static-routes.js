@@ -244,12 +244,14 @@ export async function startPrerenderWorker({ configPath, frontDoor = false }) {
   // Keep the harness's own informational logging out of the build output, without
   // hiding its errors, unless the developer set a level themselves. Restored when
   // the Worker stops so the process is left as it was found.
-  const previousLogLevel = process.env.WRANGLER_LOG;
-  process.env.WRANGLER_LOG = previousLogLevel ?? "error";
-  const restoreLogLevel = () => {
-    if (previousLogLevel === undefined) delete process.env.WRANGLER_LOG;
-    else process.env.WRANGLER_LOG = previousLogLevel;
-  };
+  // Static candidates have no handlers, so they cannot query. Never use the
+  // developer's database; Miniflare requires credentials even for a placeholder.
+  const placeholder = "postgres://goribu:goribu@prerender.invalid:5432/goribu";
+  const restoreEnvironment = overrideEnvironment({
+    WRANGLER_LOG: process.env.WRANGLER_LOG ?? "error",
+    CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_POSTGRES: placeholder,
+    CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_POSTGRES_CACHED: placeholder,
+  });
 
   let harness;
   let url;
@@ -257,7 +259,7 @@ export async function startPrerenderWorker({ configPath, frontDoor = false }) {
     harness = createTestHarness({ workers: [{ configPath, ...(frontDoor ? {} : { vars: { __GORIBU_PRERENDER: true } }) }] });
     ({ url } = await harness.listen());
   } catch (error) {
-    restoreLogLevel();
+    restoreEnvironment();
     throw error;
   }
   const worker = harness.getWorker();
@@ -276,9 +278,20 @@ export async function startPrerenderWorker({ configPath, frontDoor = false }) {
       try {
         await harness.close();
       } finally {
-        restoreLogLevel();
+        restoreEnvironment();
       }
     },
+  };
+}
+
+function overrideEnvironment(values) {
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  return () => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   };
 }
 

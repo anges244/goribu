@@ -92,6 +92,12 @@ export function defineConfig(config) {
     );
   }
 
+  if (normalized.compatibilityDate < "2024-09-23" && normalized.database?.type === "postgres") {
+    throw new TypeError(
+      '[Goribu] database: { type: "postgres" } requires compatibilityDate "2024-09-23" or later, because Postgres.js needs Node.js compatibility v2. Set compatibilityDate in goribu.config.js to today\'s date.',
+    );
+  }
+
   normalized.compatibilityFlags = assertCompatibilityFlags(normalized.compatibilityFlags);
   if (normalized.domain !== undefined) {
     normalized.domain = assertHostname(normalized.domain, "domain", "app.example.com");

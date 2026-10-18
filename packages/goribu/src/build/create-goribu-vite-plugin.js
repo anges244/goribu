@@ -16,6 +16,7 @@ import { assertNoDuplicateD1Declaration } from "./assert-no-duplicate-d1.js";
 import { assertNoDuplicateKVDeclaration } from "./assert-no-duplicate-kv.js";
 import { assertNoDuplicateR2Declaration } from "./assert-no-duplicate-r2.js";
 import { assertNoDuplicateHyperdriveDeclaration } from "./postgres/assert-no-duplicate-hyperdrive.js";
+import { readPostgresEnv } from "./postgres/read-postgres-env.js";
 import { writeWorkerEntry } from "./generate-worker-entry.js";
 import { GENERATED_WRANGLER_CONFIG, writeWranglerConfig } from "./generate-wrangler-config.js";
 import { APPLICATION_CONFIG_FILENAME, loadApplicationConfig } from "./load-application-config.js";
@@ -141,6 +142,13 @@ function createGoribuPlugin(navigationBuildId, development) {
       await assertNoDuplicateR2Declaration({ projectRoot: root, appConfig });
       await assertNoDuplicateHyperdriveDeclaration({ projectRoot: root, appConfig });
       writeWranglerConfig({ projectRoot: root, appConfig });
+      // The Cloudflare plugin's config hook runs after this one and reads these
+      // variables for the local Hyperdrive bindings. They stay in memory only.
+      if (environment.command === "serve" && appConfig.database?.type === "postgres") {
+        const { url } = readPostgresEnv({ projectRoot: root, target: "local" });
+        process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_POSTGRES = url.value;
+        process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_POSTGRES_CACHED = url.value;
+      }
       if (environment.command === "serve" && appConfig.r2 !== undefined) {
         development.secret = getDevelopmentSecret(root);
       }
