@@ -197,6 +197,12 @@ When `.env.production` exists, a Wrangler dry run validates it before
 provisioning or migrations, then deployment uploads it as secrets. Otherwise,
 existing platform secrets are used. Local `.env` is never uploaded as fallback.
 
+For a [Postgres](./postgres.md) app, deploy reads `POSTGRES_URL` from
+`.env.production` before authenticating, removes `POSTGRES_URL` and
+`POSTGRES_MIGRATE_URL` from the secrets upload, creates or updates the two
+Hyperdrive configs, and applies pending migrations directly to the database
+before uploading the Worker. See [what deploy does](./postgres.md#what-deploy-does).
+
 The unreleased [R2 feature](./r2.md) also inspects both declared buckets and
 creates missing ones and connects the declared public domain before D1/KV
 provisioning. After migrations, it creates `GORIBU_SECRET` through Wrangler if
@@ -281,22 +287,29 @@ goribu check
 
 `goribu check` takes no arguments. Its migration section states whether deploy
 will create the database and which pending files it will apply before uploading
-the Worker.
+the Worker. Postgres apps are not inspected yet: check prints one line saying so
+and describing what deploy will do.
 
 ## Migration commands
 
-Migration commands target local D1 unless `--remote` is passed:
+Migration commands target the local database unless `--remote` is passed. They
+work for D1 and Postgres apps alike, except where noted:
 
 ```sh
 goribu migrate                         # apply pending locally
 goribu migrate --remote                # apply pending in production
 goribu migrate:status                  # inspect local status
 goribu migrate:status --remote         # inspect production status
-goribu migrate:down                    # roll back one local migration
-goribu migrate:down --remote           # roll back one production migration
+goribu migrate:down                    # roll back one local migration (D1)
+goribu migrate:down --remote           # roll back one production migration (D1)
 goribu migrate:new create posts        # scaffold the next migration
-goribu migrate:seed                    # run migrations/seed.sql locally
+goribu migrate:seed                    # run migrations/seed.sql locally (D1)
 ```
+
+For Postgres, local means the database in `POSTGRES_URL` from `.dev.vars` or
+`.env`, and `--remote` means the one in `.env.production`. `migrate:down` and
+`migrate:seed` refuse Postgres apps with the alternative to use; see
+[Postgres migrations](./migrations.md#postgres).
 
 To inspect or change data directly, use [`goribu d1`](#goribu-d1).
 
@@ -307,8 +320,9 @@ migration should land before the corresponding Worker deploy.
 
 ## `goribu d1`
 
-Run SQL against the declared D1 database and print the result. Pass the SQL as
-one quoted argument:
+Run SQL against the declared D1 database and print the result. Postgres apps use
+`psql "$POSTGRES_URL"` instead, and `goribu d1` says so. Pass the SQL as one
+quoted argument:
 
 ```sh
 goribu d1 "SELECT * FROM posts LIMIT 5"           # local D1

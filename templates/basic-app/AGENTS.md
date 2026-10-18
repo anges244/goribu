@@ -105,6 +105,21 @@ accessing their fields.
   to read production; change production data with a migration.
 - Run Wrangler commands as `pnpm exec goribu wrangler <args>`; Wrangler is not on
   this app's PATH.
+- With `database: { type: "postgres" }`, connection strings go only in `.env`
+  and `.env.production` as `POSTGRES_URL` (plus optional `POSTGRES_MIGRATE_URL`),
+  never in `goribu.config.js`. Query through `req.postgres` and
+  `req.postgresCached`, which are plain Postgres.js clients. Follow these rules:
+  1. Use `req.postgres` unless the read is public or a listing and may be a minute stale.
+  2. Never write or open a transaction on `req.postgresCached`.
+  3. Build SQL only with tagged templates. `sql.unsafe` is for trusted, static SQL only.
+  4. In cached queries, avoid `NOW()`, `CURRENT_DATE` and `RANDOM()`. Compute the value in JS and pass it as a parameter; otherwise the query is never cached.
+  5. Never call `.end()`.
+  6. Change schema only by adding a migration. Never edit an applied one.
+  7. Renames, type changes and drops use expand and contract across two deploys.
+  8. Keep no session state: `SET` only inside a transaction; no `LISTEN`/`NOTIFY` or temp tables.
+  9. Handle constraint violations by `err.code`, not by message text.
+- Postgres has no `migrate:down`, `migrate:seed` or `goribu d1`; use a new
+  forward migration and `psql "$POSTGRES_URL"`.
 - KV is eventually consistent, including cached misses. Use D1 when correctness
   requires fresh reads; never promise KV read-your-writes.
 - Test the actual affected behavior. Before handing off, run the relevant checks
@@ -114,4 +129,5 @@ accessing their fields.
 
 For deeper topics, consult the matching page in the
 [Goribu guides](https://goribu.dev/docs): routing,
-handlers, rendering, navigation/forms, metadata, D1/migrations, KV, or deployment.
+handlers, rendering, navigation/forms, metadata, D1/migrations, Postgres, KV, or
+deployment.

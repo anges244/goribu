@@ -9,6 +9,40 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Postgres through Cloudflare Hyperdrive. Declare `database: { type: "postgres" }`
+  and put `POSTGRES_URL` in `.env` and `.env.production`; connection strings
+  never go in `goribu.config.js`. Handlers get two plain Postgres.js clients:
+  `req.postgres` (caching disabled) for writes and fresh reads, and
+  `req.postgresCached` for reads that may be about a minute stale. Built-in
+  array types parse and serialize without a per-request type lookup. Requires
+  `compatibilityDate` 2024-09-23 or later; Goribu adds `nodejs_compat`. See
+  [Postgres](docs/postgres.md).
+- `goribu migrate`, `goribu migrate:status` and `goribu migrate:new` work for
+  Postgres with the same files and commands as D1. Migrations connect directly
+  with `POSTGRES_MIGRATE_URL` or `POSTGRES_URL`, run each file in a transaction
+  under a per-database advisory lock, and accept a first-line
+  `-- goribu:no-transaction` directive for statements such as
+  `CREATE INDEX CONCURRENTLY`. See [Migrations](docs/migrations.md#postgres).
+- `goribu deploy` creates or updates the `<name>-postgres` and
+  `<name>-postgres-cached` Hyperdrive configs from `POSTGRES_URL` on every
+  deploy, or validates your own configs named with `hyperdriveId` and
+  `hyperdriveCachedId`, then applies pending Postgres migrations before
+  uploading the Worker. It warns about pooler connection strings and about
+  connection strings left as Worker secrets by earlier deploys.
+
+### Changed
+
+- `goribu deploy` removes `POSTGRES_URL` and `POSTGRES_MIGRATE_URL` from the
+  `.env.production` secrets upload in Postgres apps; other entries upload as
+  before.
+- A migration file containing a line that starts with `-- goribu:` other than a
+  first-line `-- goribu:no-transaction` now fails to parse, and D1 refuses that
+  directive.
+- `goribu migrate:down`, `goribu migrate:seed` and `goribu d1` refuse Postgres
+  apps with the alternative to use.
+
 ## [0.9.3] - 2026-10-16
 
 ### Added

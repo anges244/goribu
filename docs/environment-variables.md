@@ -62,6 +62,12 @@ the corresponding Cloudflare secret.
 If the file is absent, deploy reports that it will use existing platform secrets.
 It never falls back to `.env`, `.env.local`, or `.dev.vars` for this upload.
 
+In a [Postgres](./postgres.md) app, `POSTGRES_URL` and `POSTGRES_MIGRATE_URL`
+are removed before the upload: Goribu passes Wrangler a temporary copy with the
+remaining entries and deletes it afterwards. Neither connection string becomes
+a Worker secret; the Worker reaches the database through its Hyperdrive
+bindings. If those were the only entries, deploy uses existing platform secrets.
+
 After building and before resource provisioning or migrations, Goribu runs a
 Wrangler dry run with the production secrets file. Wrangler validates the built
 Worker and parses the file with its own rules. An unreadable file or input
@@ -148,4 +154,6 @@ appearing in `req.env`. Production server secrets come only from the separate
 Goribu also no longer loads env files into `process.env` before evaluating
 `goribu.config.js`. The config can read variables already supplied by the shell;
 there is no implicit dotenv loader for config evaluation. The former loader
-served Postgres/Hyperdrive configuration, which this version does not provide.
+served Postgres configuration; connection strings now never go in the config.
+Goribu reads only `POSTGRES_URL` and `POSTGRES_MIGRATE_URL` from these env files,
+as described in [Postgres](./postgres.md#where-connection-strings-live).

@@ -1,10 +1,12 @@
 # Migrations
 
-Goribu keeps D1 schema history in SQL files under `migrations/`. Migration
-commands run against the local development database by default. Add `--remote`
-only when you deliberately intend to inspect or change production. `goribu
-deploy` applies pending production migrations after provisioning D1 and before
-uploading the new Worker.
+Goribu keeps D1 and Postgres schema history in SQL files under `migrations/`.
+Migration commands run against the local development database by default. Add
+`--remote` only when you deliberately intend to inspect or change production.
+`goribu deploy` applies pending production migrations after preparing the
+database and before uploading the new Worker. The examples below use D1; the
+file format and history rules are the same for Postgres, with the differences
+listed under [Postgres](#postgres).
 
 ## Create a migration
 
@@ -167,3 +169,75 @@ full timing control, run `goribu migrate --remote` first; deploy still verifies
 history before uploading and reports that it is already up to date. A bypass
 would allow code to go live with known pending schema and would weaken the safe
 default without enabling a workflow the explicit command cannot express.
+
+## Postgres
+
+Postgres apps use the same files, commands, tracking table, drift rules and
+output. Write Postgres SQL in the up section:
+
+```sql
+-- create-posts
+
+-- migrate:up
+CREATE TABLE posts (
+  id BIGSERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- migrate:down
+```
+
+`goribu migrate` and `goribu migrate:status` read `POSTGRES_MIGRATE_URL`, or
+`POSTGRES_URL` when it is absent: from `.dev.vars`, or `.env` and `.env.local`,
+locally, and from `.env.production` only with `--remote` and during deploy. See
+[where connection strings live](./postgres.md#where-connection-strings-live).
+
+### Direct connection and lock
+
+Migrations connect straight to the database, never through Hyperdrive. A
+migration run holds one connection for its whole duration and takes a Postgres
+advisory lock on it, so two runs against the same database, such as two
+deploys started together, apply migrations one after the other. The second run
+prints that it is waiting, then finds nothing left to apply. Hyperdrive's
+60-second statement limit does not apply, so a long index build or backfill can
+run.
+
+Each file and its tracking row commit in one transaction. If any statement
+fails, Postgres rolls back the whole file and the error names the file and
+Postgres's error code. Files applied earlier in the same run stay applied.
+`migrate:status` never takes the lock and never creates the tracking table.
+
+### Statements that cannot run in a transaction
+
+Some statements, such as `CREATE INDEX CONCURRENTLY`, refuse to run inside a
+transaction. Put such a statement alone in its own migration whose **first
+line** is the directive:
+
+```sql
+-- goribu:no-transaction
+-- add-posts-title-index
+
+-- migrate:up
+CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_title_idx ON posts (title);
+
+-- migrate:down
+```
+
+A no-transaction migration holds exactly one statement: Postgres runs several
+statements sent together as one transaction, so a second statement fails with
+error `25001`. The statement and its tracking row are separate steps, so write
+it to be safe to repeat, for example with `IF NOT EXISTS`. A failed
+`CREATE INDEX CONCURRENTLY` can leave an `INVALID` index that `IF NOT EXISTS`
+would then skip; drop it with `DROP INDEX CONCURRENTLY IF EXISTS` before
+retrying.
+
+The directive is valid only on the first line and only for Postgres. Any other
+line starting with `-- goribu:` is an error, and D1 refuses the directive.
+
+### Not available for Postgres yet
+
+`goribu migrate:down` and `goribu migrate:seed` refuse to run on a Postgres app.
+Fix a mistake with a new forward migration. Load development data with
+`psql "$POSTGRES_URL" -f migrations/seed.sql`.

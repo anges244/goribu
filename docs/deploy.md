@@ -51,7 +51,9 @@ Worker secrets through Wrangler. Omitted secrets are preserved. If absent,
 existing platform secrets are used; local `.env` is never an upload fallback.
 A Wrangler dry run validates the file and built Worker before provisioning or
 migrations. See [Environment variables](./environment-variables.md) for local
-loading, public browser values, and migration from the older loader.
+loading, public browser values, and migration from the older loader. A Postgres
+app's `POSTGRES_URL` and `POSTGRES_MIGRATE_URL` are removed from that upload; see
+[Deploying with Postgres](#deploying-with-postgres).
 
 ## Custom domain
 
@@ -230,6 +232,27 @@ finds nothing pending. A Worker deployment and D1 migration still cannot share
 one transaction. The previously deployed Worker continues serving while schema
 changes and upload run, so pending migrations must be compatible with it. See
 [Migrations](./migrations.md) for the complete expand-and-contract sequence.
+
+## Deploying with Postgres
+
+Declare `database: { type: "postgres" }` and put the production connection
+string in `.env.production` as `POSTGRES_URL`. Deploy then:
+
+1. reads `POSTGRES_URL` before authenticating, and stops if it is missing;
+2. builds and validates the production secrets without `POSTGRES_URL` and
+   `POSTGRES_MIGRATE_URL`, which never become Worker secrets;
+3. creates or updates the `<name>-postgres` and `<name>-postgres-cached`
+   Hyperdrive configs from the current `POSTGRES_URL`, or checks the configs you
+   named with `hyperdriveId` and `hyperdriveCachedId`;
+4. applies pending migrations directly to the database;
+5. uploads the Worker.
+
+A failure before the upload leaves the previous Worker serving, and rerunning
+deploy is safe. Changing the database password is an edit to `.env.production`
+followed by a deploy; requests fail between the password change and that
+deploy. If an earlier deploy left either key as a Worker secret, deploy prints
+the command that deletes it. See [Postgres](./postgres.md) for the handles,
+provider recipes and limits.
 
 ## What to expect
 
