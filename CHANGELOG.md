@@ -9,6 +9,8 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-19
+
 ### Added
 
 - Postgres through Cloudflare Hyperdrive. Declare `database: { type: "postgres" }`
@@ -35,13 +37,12 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as Workers AI, service bindings, Vectorize, queue producers, Analytics Engine,
   browser rendering, external Durable Objects and Workflows, `vars`,
   observability settings, and Worker `placement`, into the generated Wrangler
-  config. Goribu rejects
-  values JSON cannot represent, fields and binding names it owns, and fields
-  Wrangler's schema does not know, each with the path to fix. Builds stay
-  credential-free: prerendering runs without the block's bindings other than
-  `vars`. `goribu dev` needs a Cloudflare login when a binding such as AI always
-  runs on Cloudflare, and uses the same account as deploy. `goribu check` lists
-  these bindings as not inspected or managed. See
+  config. Goribu rejects values JSON cannot represent, fields and binding names
+  it owns, and fields Wrangler's schema does not know, each with the path to
+  fix. Builds stay credential-free: prerendering runs without the block's
+  bindings other than `vars`. `goribu dev` needs a Cloudflare login when a
+  binding such as AI always runs on Cloudflare, and uses the same account as
+  deploy. `goribu check` lists these bindings as not inspected or managed. See
   [Wrangler configuration](docs/wrangler.md).
 - `goribu local:clear <r2|kv> [--prefix <prefix>]` deletes local development
   objects or keys, such as test uploads, from the stores `goribu dev` uses. It

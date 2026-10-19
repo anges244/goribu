@@ -3,9 +3,10 @@
 A React framework for Cloudflare Workers. File-based routes stream server-rendered
 HTML and hydrate in the browser. Pages that need no request-time work build to
 HTML served by Cloudflare Static Assets. Goribu also provides route handlers,
-forms, client navigation, app-configured D1 databases, migrations, KV, and R2
-storage and uploads. Request caching needs no binding setup; an optional
-application domain connects during deployment.
+forms, client navigation, D1 or Postgres (through Hyperdrive) databases,
+migrations, KV, and R2 storage and uploads. Other Cloudflare features, such as
+Workers AI, pass through a `wrangler` block. Request caching needs no binding
+setup; an optional application domain connects during deployment.
 
 The starter uses TypeScript and Tailwind; add `--js` for JavaScript.
 The framework itself is JavaScript ESM, with public TypeScript declarations.

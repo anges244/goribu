@@ -2,10 +2,12 @@
 
 A React framework for Cloudflare Workers. File-based routes stream server-rendered
 HTML and hydrate in the browser. Routes that need no request-time work build to
-plain HTML served by Cloudflare Static Assets. D1 databases, migrations, KV
-namespaces, and R2 buckets are configured in the app and provisioned during
-deployment. R2 includes signed downloads and browser uploads. Request caching
-needs no binding setup; an optional application domain connects during deployment.
+plain HTML served by Cloudflare Static Assets. D1 databases, KV namespaces, and
+R2 buckets are configured in the app and provisioned during deployment; Postgres
+connects through Hyperdrive, and migrations run for both databases. R2 includes
+signed downloads and browser uploads. Other Cloudflare features, such as Workers
+AI, pass through a `wrangler` block. Request caching needs no binding setup; an
+optional application domain connects during deployment.
 
 Goribu requires Node.js 22+ for tooling, React 19, and Vite 8. The current starter
 uses TypeScript and Tailwind; add `--js` for JavaScript. Public declarations
@@ -39,6 +41,7 @@ Run these from the generated app directory:
 | `pnpm exec goribu tail` | Stream live production Worker logs. |
 | `pnpm exec goribu d1 "<sql>"` | Run SQL against local D1; `--remote` reads production. |
 | `pnpm exec goribu wrangler <args>` | Run Goribu's Wrangler with the deploy account. |
+| `pnpm exec goribu local:clear <r2\|kv>` | Delete local R2 objects or KV keys used by `pnpm dev`. |
 | `pnpm run deploy` | Check credentials, build, provision resources, apply migrations, and deploy. |
 
 Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.

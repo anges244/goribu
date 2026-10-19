@@ -2,11 +2,36 @@
 
 `goribu` and `create-goribu` share one release version and one npm channel,
 `latest`. The first release from this rebuild was `0.7.0`. The examples below
-prepare `0.9.3`, adding selective Worker routing, static-render fixes,
-isolated contributor tests, and an explicit GitHub Release stage;
+prepare `0.9.4`, adding Postgres through Hyperdrive, the `wrangler`
+passthrough block, forward-only migrations, and `goribu local:clear`;
 substitute the next shared version for later releases.
 Preparation does not mean publication: verify the saved archives before
 publishing them.
+
+## Upgrading apps from 0.9.3 to 0.9.4
+
+After both packages are verified on npm, update an existing app with
+`pnpm add --save-exact goribu@0.9.4`, then rebuild and deploy. New features are
+opt-in. Check these changes before rebuilding:
+
+- `goribu migrate:down` is removed. Undo a schema change with a new forward
+  migration, and update scripts or CI that call it. See
+  [Undo a change](migrations.md#undo-a-change).
+- `goribu migrate:new` now writes plain SQL files without markers, which 0.9.3
+  cannot read. Upgrade every machine and CI runner that runs migrations at the
+  same time. Leave existing files with `-- migrate:up` markers unchanged; they
+  keep working and keep their checksums.
+- A migration line starting with `-- goribu:` is now refused, except a
+  first-line `-- goribu:no-transaction` in Postgres apps.
+- `req.body()` returns `{}` for `text/*` bodies instead of a string. Read them
+  with `new TextDecoder().decode(await req.rawBody())`. Its TypeScript type no
+  longer includes `string`, so `typeof body === "string"` branches can go, and
+  casts such as `as Record<string, unknown>` are no longer needed.
+- `<Form reset>` also clears the form after a redirect to the form's own path.
+  See [Forms](forms.md).
+- Goribu now pins Wrangler 4.127.1 and `@cloudflare/vite-plugin` 1.54.2
+  exactly. 0.9.3 accepted newer versions, so this can move an app to an older
+  Wrangler than its lockfile had.
 
 ## Upgrading apps from 0.9.2 to 0.9.3
 
@@ -143,6 +168,11 @@ fixes and minor increments for features or breaking changes, recording breaking
 changes explicitly in the changelog. Reaching `1.0.0` is a separate decision
 about API stability.
 
+At the maintainer's request, `0.9.4` uses a patch increment although it adds
+Postgres, the `wrangler` block, and `goribu local:clear`, and removes
+`migrate:down` and string `req.body()` results, documented above and in the
+changelog.
+
 At the maintainer's request, `0.9.3` uses a patch increment although it adds
 selective Worker routing and new build restrictions, documented above and in
 the changelog.
@@ -198,7 +228,7 @@ site. Only the explicit `github` stage creates a GitHub tag and release;
 ### 1. Prepare the version
 
 ```sh
-pnpm release prepare 0.9.3
+pnpm release prepare 0.9.4
 ```
 
 For later releases, supply the new version once. This updates both package
@@ -214,7 +244,7 @@ provide. Keep publication claims tied to verified registry state.
 ### 2. Test and pack
 
 ```sh
-VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.3
+VITEST_MAX_WORKERS=1 pnpm release pack ../goribu-release-0.9.4
 ```
 
 Choose a new directory outside the repository, in an existing parent. The command
@@ -233,8 +263,8 @@ framework dependencies must match the release.
 
 A successful run writes three files:
 
-- `goribu-0.9.3.tgz`
-- `create-goribu-0.9.3.tgz`
+- `goribu-0.9.4.tgz`
+- `create-goribu-0.9.4.tgz`
 - `release.json`, recording the source commit, version, and SHA-512 archive hashes
 
 The receipt is written last, only after all checks pass and the checkout is
@@ -261,7 +291,7 @@ npm login --registry=https://registry.npmjs.org/
 Then one command publishes both packages:
 
 ```sh
-pnpm release publish ../goribu-release-0.9.3
+pnpm release publish ../goribu-release-0.9.4
 ```
 
 The checkout must remain clean at the commit recorded by `pack`. The command
@@ -315,7 +345,7 @@ authenticate with permission to create repository tags and releases:
 
 ```sh
 gh auth login --hostname github.com
-pnpm release github ../goribu-release-0.9.3
+pnpm release github ../goribu-release-0.9.4
 ```
 
 Use the same saved release directory as `publish`. This is an optional,
