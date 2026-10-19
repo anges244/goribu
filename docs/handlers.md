@@ -283,6 +283,43 @@ Given handlers, Goribu still fills in the mechanical methods:
 - **OPTIONS** → `204` with an `Allow` header listing the route's methods.
 - An unsupported method → `405` with an `Allow` header.
 
+## CORS
+
+Goribu has no CORS helper and sets no CORS headers. Use the two header paths
+that already exist.
+
+For the whole app, return CORS headers from `responseHeaders` in
+`goribu.config.js` (see [metadata.md](./metadata.md#csp-nonces-and-response-headers)). They
+reach every Worker response, including the automatic `OPTIONS` answer, so
+preflight requests work without an `OPTIONS` export:
+
+```js
+const ALLOWED = new Set(["https://app.example.com"]);
+
+export default defineConfig({
+  name: "my-app",
+  compatibilityDate: "2026-09-04",
+  responseHeaders({ request }) {
+    const origin = request.headers.get("origin");
+    if (!ALLOWED.has(origin)) return {};
+    return {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "GET, POST",
+      "Access-Control-Allow-Headers": "content-type",
+      "Vary": "Origin",
+    };
+  },
+});
+```
+
+For one route, export `OPTIONS` to answer the preflight and set the same headers
+with `res.headers()` in the route's other handlers.
+
+- **Not middleware:** a `_middleware` header reaches normal responses but not the
+  automatic `OPTIONS` answer, so a folder-wide CORS middleware fails preflight.
+- **Not static pages:** prerendered routes are served from Static Assets and
+  receive no `responseHeaders`. Keep a cross-origin endpoint in a handler.
+
 ## See also
 
 - [middleware.md](./middleware.md) — code that runs before a route's handler or

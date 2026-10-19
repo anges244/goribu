@@ -380,6 +380,29 @@ describe("createApp().fetch", () => {
     expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
   });
 
+  it("applies responseHeaders to a CORS preflight answered by automatic OPTIONS", async () => {
+    const applicationConfig = defineConfig({
+      name: "test-app",
+      compatibilityDate: "2026-08-31",
+      responseHeaders({ request }) {
+        if (request.headers.get("origin") !== "https://app.example") return {};
+        return {
+          "access-control-allow-origin": "https://app.example",
+          "access-control-allow-methods": "GET, POST",
+          vary: "Origin",
+        };
+      },
+    });
+    const response = await dispatch(build({ applicationConfig }), new Request("https://example.com/", {
+      method: "OPTIONS",
+      headers: { origin: "https://app.example", "access-control-request-method": "POST" },
+    }));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://app.example");
+    expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST");
+    expect(response.headers.get("vary")).toBe("Origin");
+  });
+
   it("answers an unsupported method with 405 and an Allow header", async () => {
     const response = await dispatch(build(), new Request("https://example.com/", { method: "POST" }));
     expect(response.status).toBe(405);

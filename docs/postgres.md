@@ -176,8 +176,8 @@ from application code.
 ## Migrations
 
 Postgres uses the same migration files and commands as D1: numbered
-`migrations/0001_name.sql` files with `-- migrate:up` and `-- migrate:down`
-sections, and `goribu migrate`, `goribu migrate:status` and
+`migrations/0001_name.sql` files of forward-only SQL, and `goribu migrate`,
+`goribu migrate:status` and
 `goribu migrate:new`. Each runs locally by default and against production with
 `--remote`.
 
@@ -187,10 +187,10 @@ same database at once. A file that starts with `-- goribu:no-transaction` runs
 outside a transaction, for statements such as `CREATE INDEX CONCURRENTLY`.
 See [Migrations](./migrations.md#postgres) for the details.
 
-`migrate:down` and `migrate:seed` are not available for Postgres yet. Fix a
-mistake with a new forward migration, and load development data with
+`migrate:seed` is not available for Postgres yet; load development data with
 `psql "$POSTGRES_URL" -f migrations/seed.sql`. Use `psql "$POSTGRES_URL"` where
-D1 apps use `goribu d1`.
+D1 apps use `goribu d1`. To start your local database over, recreate it with
+`dropdb` and `createdb`, then run `goribu migrate`.
 
 ## Where connection strings live
 
@@ -348,7 +348,7 @@ the second enabled, and stops otherwise. It never changes their origins.
 
 These are deliberate omissions, not oversights:
 
-- `migrate:down` and `migrate:seed` for Postgres;
+- `migrate:seed` for Postgres;
 - a Postgres version of `goribu d1` (use `psql "$POSTGRES_URL"`);
 - Postgres inspection in `goribu check`;
 - Worker `placement` near the database;

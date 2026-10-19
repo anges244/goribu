@@ -20,7 +20,7 @@ describe("goribu CLI", () => {
   it("lists Cloudflare login, tail, and migration commands in help", () => {
     const { status, stdout } = runCli(["--help"]);
     expect(status).toBe(0);
-    expect(stdout).toContain("migrate:down");
+    expect(stdout).not.toContain("migrate:down");
     expect(stdout).toContain("migrate:seed");
     expect(stdout).toMatch(/cloudflare-login\s+Log in to Cloudflare through Wrangler\./);
     expect(stdout).toMatch(/tail\s+.*logs/);
@@ -177,10 +177,10 @@ describe("goribu CLI", () => {
     expect(stderr).toMatch(/accepts only --local \(default\) or --remote/);
   });
 
-  it("dispatches migrate:down through migration target validation", () => {
-    const { status, stderr } = runCli(["migrate:down", "--bogus"]);
+  it.each([[], ["--local"], ["--remote"], ["--bogus"]])("rejects the removed rollback command before config loading (%#)", (...args) => {
+    const { status, stderr } = runCli(["migrate:down", ...args]);
     expect(status).toBe(1);
-    expect(stderr).toMatch(/`goribu migrate:down` accepts only --local/);
+    expect(stderr.trim()).toBe("[Goribu] `goribu migrate:down` was removed in 0.9.4. Write a new forward migration to undo a change.");
   });
 
   it("rejects migrate:seed --remote at the CLI safety boundary", () => {
@@ -213,7 +213,6 @@ describe("goribu CLI", () => {
   });
 
   it.each([
-    [["migrate:down"], "[Goribu] `goribu migrate:down` is not available for Postgres yet. Write a new forward migration instead."],
     [["migrate:seed"], '[Goribu] `goribu migrate:seed` is D1-only. For Postgres, run `psql "$POSTGRES_URL" -f migrations/seed.sql`.'],
     [["d1", "SELECT 1"], '[Goribu] `goribu d1` is D1-only. For Postgres, run `psql "$POSTGRES_URL"`.'],
   ])("refuses %j on Postgres with the canonical alternative", (args, message) => {

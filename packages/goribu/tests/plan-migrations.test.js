@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { describeDrift, planMigrations } from "../src/build/migrations/plan-migrations.js";
+import { assertNoEmptyMigrations, describeDrift, planMigrations } from "../src/build/migrations/plan-migrations.js";
 
 const file = (sequence, checksum) => ({
   name: `${String(sequence).padStart(4, "0")}_m${sequence}`,
   sequence,
   checksum,
+});
+
+it("refuses comment-only SQL without stripping SQL strings or changing the source", () => {
+  for (const upSql of ["", " \n\t", "-- TODO", "/* add schema */\n-- later\n", "/* outer /* nested */ comment */"]) {
+    expect(() => assertNoEmptyMigrations([{ name: "0001_empty", upSql }])).toThrow(/has no forward SQL/);
+  }
+  for (const upSql of ["-- heading\nSELECT '-- text';", "/* heading */ SELECT '/* text */';", "SELECT $$-- text$$;"]) {
+    expect(() => assertNoEmptyMigrations([{ name: "0001_sql", upSql }])).not.toThrow();
+  }
 });
 
 describe("planMigrations", () => {

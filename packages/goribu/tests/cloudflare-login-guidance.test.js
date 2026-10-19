@@ -58,7 +58,6 @@ it("uses Goribu login guidance for deploy, resource checks, and remote migration
     ["database", ["check"]],
     ["kv", ["check"]],
     ["database", ["migrate", "--remote"]],
-    ["database", ["migrate:down", "--remote"]],
     ["database", ["migrate:status", "--remote"]],
     ["database", ["cloudflare-login"]],
   ]) {

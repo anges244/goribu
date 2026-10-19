@@ -54,13 +54,7 @@ export function runMigrateNew(options) {
 function template(slug) {
   return (
     `-- ${slug}\n` +
-    "-- Write the forward SQL under migrate:up. The migrate:down section is optional;\n" +
-    "-- leave it empty when the change cannot be honestly reversed.\n" +
-    "\n" +
-    "-- migrate:up\n" +
-    "\n" +
-    "\n" +
-    "-- migrate:down\n"
+    "-- Migrations are forward-only; undo a change with a new migration.\n\n"
   );
 }
 

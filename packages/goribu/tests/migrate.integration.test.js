@@ -1,10 +1,10 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
-import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
 import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
 import { runMigrateSeed } from "../src/build/migrations/run-migrate-seed.js";
 import { runMigrateStatus } from "../src/build/migrations/run-migrate-status.js";
@@ -13,8 +13,8 @@ import { resolveMigrationContext } from "../src/build/migrations/migration-conte
 import { executeD1, lastResultRows } from "../src/build/migrations/wrangler-d1.js";
 
 // A real end-to-end exercise of `goribu migrate` against a local D1 through the pinned
-// Wrangler. It proves the scaffold/apply/status/down/seed path, atomic ledger changes,
-// idempotency, and rollback of both forward and down batches when their SQL fails.
+// Wrangler. It proves scaffold/apply/status/seed, legacy checksums, atomic ledger
+// changes, idempotency, and rollback of a forward batch when its SQL fails.
 let root;
 let context;
 const loadConfig = async () =>
@@ -25,10 +25,10 @@ const loadConfig = async () =>
   });
 const capture = () => ({ text: "", write(t) { this.text += t; } });
 
-function migration(name, up, down = "") {
+function migration(name, up) {
   writeFileSync(
     join(root, "migrations", `${name}.sql`),
-    `-- migrate:up\n${up}\n-- migrate:down\n${down}\n`,
+    `${up}\n`,
   );
 }
 
@@ -59,21 +59,13 @@ async function applyWidgetMigrations() {
     name: "create widgets",
     stdout: capture(),
   });
-  writeFileSync(
-    firstMigration.file,
-    "-- migrate:up\nCREATE TABLE widgets (name TEXT);\n" +
-      "-- migrate:down\nDROP TABLE widgets;\n",
-  );
+  appendFileSync(firstMigration.file, "CREATE TABLE widgets (name TEXT);\n");
   const secondMigration = runMigrateNew({
     projectRoot: root,
     name: "seed widgets",
     stdout: capture(),
   });
-  writeFileSync(
-    secondMigration.file,
-    "-- migrate:up\nINSERT INTO widgets (name) VALUES ('gizmo');\n" +
-      "-- migrate:down\nDELETE FROM widgets WHERE name = 'gizmo';\n",
-  );
+  appendFileSync(secondMigration.file, "INSERT INTO widgets (name) VALUES ('gizmo');\n");
 
   const applied = capture();
   await runMigrate({ projectRoot: root, loadConfig, stdout: applied });
@@ -98,20 +90,12 @@ describe("goribu migrate (local, real Wrangler)", () => {
     expect(lastResultRows(await query("SELECT count(*) AS n FROM widgets"))).toEqual([{ n: 1 }]);
   });
 
-  it("rolls back one migration atomically, then seeds without changing the ledger", { timeout: 120000 }, async () => {
+  it("reports status, then seeds without changing the ledger", { timeout: 120000 }, async () => {
     await applyWidgetMigrations();
     const status = capture();
     await runMigrateStatus({ projectRoot: root, loadConfig, stdout: status });
     expect(status.text).toContain("Applied (2):");
     expect(status.text).toContain("Pending (0):");
-
-    const down = capture();
-    await runMigrateDown({ projectRoot: root, loadConfig, stdout: down });
-    expect(down.text).toContain("✓ Rolled back 0002_seed-widgets from local");
-    expect(lastResultRows(await query("SELECT name FROM widgets"))).toEqual([]);
-    expect(
-      lastResultRows(await query("SELECT name FROM _goribu_migrations ORDER BY name")),
-    ).toEqual([{ name: "0001_create-widgets" }]);
 
     writeFileSync(
       join(root, "migrations", "seed.sql"),
@@ -121,11 +105,12 @@ describe("goribu migrate (local, real Wrangler)", () => {
     await runMigrateSeed({ projectRoot: root, loadConfig, stdout: seed });
     expect(seed.text).toContain("✓ Ran migrations/seed.sql on local");
     expect(lastResultRows(await query("SELECT name FROM widgets"))).toEqual([
+      { name: "gizmo" },
       { name: "local-seed" },
     ]);
     expect(
       lastResultRows(await query("SELECT name FROM _goribu_migrations ORDER BY name")),
-    ).toEqual([{ name: "0001_create-widgets" }]);
+    ).toEqual([{ name: "0001_create-widgets" }, { name: "0002_seed-widgets" }]);
   });
 
   it("rolls back a partially-successful migration and records nothing", { timeout: 120000 }, async () => {
@@ -154,26 +139,43 @@ describe("goribu migrate (local, real Wrangler)", () => {
     ).toEqual([]);
   });
 
-  it("keeps the schema and ledger row when rollback SQL fails", { timeout: 120000 }, async () => {
-    migration(
-      "0003_broken",
-      "CREATE TABLE rollback_probe (x);",
-      "DROP TABLE rollback_probe;\nINSERT INTO missing_table (x) VALUES (1);",
-    );
+  it("preserves the legacy whole-file checksum and never executes its down section", { timeout: 120000 }, async () => {
+    // The scaffold layout 0.9.3 generated: header, up marker, down marker.
+    const original =
+      "-- create-feedback\n" +
+      "-- Write the forward SQL under migrate:up. The migrate:down section is optional;\n" +
+      "-- leave it empty when the change cannot be honestly reversed.\n\n" +
+      "-- migrate:up\n" +
+      "CREATE TABLE feedback (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  message TEXT NOT NULL,\n  created_at TEXT NOT NULL\n);\n\n" +
+      "-- migrate:down\n";
+    const legacy = original + "DROP TABLE feedback;\n";
+    const file = join(root, "migrations/0001_create-feedback.sql");
+    writeFileSync(file, legacy.replace(/\n/g, "\r\n"));
+    const checksum = createHash("sha256").update(legacy).digest("hex");
     await runMigrate({ projectRoot: root, loadConfig, stdout: capture() });
+    expect(lastResultRows(await query("SELECT name, checksum FROM _goribu_migrations"))).toEqual([
+      { name: "0001_create-feedback", checksum },
+    ]);
+    await query("INSERT INTO feedback (message, created_at) VALUES ('kept', 'today')");
+    const repeated = capture();
+    await runMigrate({ projectRoot: root, loadConfig, stdout: repeated });
+    expect(repeated.text).toContain("Already up to date on local (1 applied)");
+    expect(lastResultRows(await query("SELECT message FROM feedback"))).toEqual([{ message: "kept" }]);
+    // Even the ignored legacy down section remains part of the historical checksum.
+    writeFileSync(file, original);
+    await expect(runMigrate({ projectRoot: root, loadConfig, stdout: capture() })).rejects.toThrow(/history has drifted/);
+  });
 
-    await expect(
-      runMigrateDown({ projectRoot: root, loadConfig, stdout: capture() }),
-    ).rejects.toThrow(/Wrangler could not run the local D1 SQL/);
-
-    expect(
-      lastResultRows(
-        await query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'rollback_probe'"),
-      ),
-    ).toEqual([{ name: "rollback_probe" }]);
-    expect(
-      lastResultRows(await query("SELECT name FROM _goribu_migrations WHERE name = '0003_broken'")),
-    ).toEqual([{ name: "0003_broken" }]);
+  it("refuses a fresh scaffold before creating a ledger, then applies added SQL", { timeout: 120000 }, async () => {
+    const { file } = runMigrateNew({ projectRoot: root, name: "widgets", stdout: capture() });
+    await expect(runMigrate({ projectRoot: root, loadConfig, stdout: capture() })).rejects.toThrow(/has no forward SQL/);
+    expect(lastResultRows(await query("SELECT name FROM sqlite_master WHERE name = '_goribu_migrations'"))).toEqual([]);
+    appendFileSync(file, "CREATE TABLE widgets (name TEXT);\nINSERT INTO widgets VALUES ('new');\n");
+    await runMigrate({ projectRoot: root, loadConfig, stdout: capture() });
+    expect(lastResultRows(await query("SELECT name FROM widgets"))).toEqual([{ name: "new" }]);
+    expect(lastResultRows(await query("SELECT name, checksum FROM _goribu_migrations"))).toEqual([
+      { name: "0001_widgets", checksum: createHash("sha256").update(readFileSync(file)).digest("hex") },
+    ]);
   });
 
   it("runs `goribu d1` SQL against the same local database", { timeout: 120000 }, async () => {

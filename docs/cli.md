@@ -311,21 +311,23 @@ goribu migrate                         # apply pending locally
 goribu migrate --remote                # apply pending in production
 goribu migrate:status                  # inspect local status
 goribu migrate:status --remote         # inspect production status
-goribu migrate:down                    # roll back one local migration (D1)
-goribu migrate:down --remote           # roll back one production migration (D1)
 goribu migrate:new create posts        # scaffold the next migration
 goribu migrate:seed                    # run migrations/seed.sql locally (D1)
 ```
 
 For Postgres, local means the database in `POSTGRES_URL` from `.dev.vars` or
-`.env`, and `--remote` means the one in `.env.production`. `migrate:down` and
-`migrate:seed` refuse Postgres apps with the alternative to use; see
+`.env`, and `--remote` means the one in `.env.production`. `migrate:seed`
+refuses Postgres apps with the alternative to use; see
 [Postgres migrations](./migrations.md#postgres).
+
+Migrations are forward-only. `goribu migrate:down` was removed in 0.9.4; undo a
+change with a new migration, as described in
+[Undo a change](./migrations.md#undo-a-change).
 
 To inspect or change data directly, use [`goribu d1`](#goribu-d1).
 
 `migrate:seed` is local-only and rejects `--remote` before SQL runs. See
-[migrations.md](./migrations.md) for file naming, drift, rollback safety, and
+[migrations.md](./migrations.md) for file naming, drift, undoing changes, and
 deploy ordering. `goribu migrate --remote` remains useful when an expand
 migration should land before the corresponding Worker deploy.
 

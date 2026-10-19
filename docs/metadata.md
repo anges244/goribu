@@ -207,7 +207,8 @@ Blanket `Content-Length`, `Content-Range`, `Content-Encoding`, `Content-Type`,
 `Location`, `Set-Cookie`, `Trailer`, and `Transfer-Encoding` are rejected. Set
 those through the response or cookie API that owns them.
 
-Goribu defines no default CSP, CORS, or HSTS policy. If the callback itself
+Goribu defines no default CSP, CORS, or HSTS policy; see
+[handlers.md](./handlers.md#cors) for a CORS example. If the callback itself
 fails, the ordinary error boundary responds without invoking the broken policy
 again, so that emergency response may lack application headers.
 

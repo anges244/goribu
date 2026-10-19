@@ -51,13 +51,27 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A migration file containing a line that starts with `-- goribu:` other than a
   first-line `-- goribu:no-transaction` now fails to parse, and D1 refuses that
   directive.
-- `goribu migrate:down`, `goribu migrate:seed` and `goribu d1` refuse Postgres
-  apps with the alternative to use.
+- `goribu migrate:seed` and `goribu d1` refuse Postgres apps with the
+  alternative to use.
+- Migrations are forward-only, and a new migration file is plain SQL with no
+  markers. `goribu migrate:new` writes a two-line comment header, and a file
+  with only comments is refused as empty. Files with `-- migrate:up` and
+  `-- migrate:down` markers keep working with unchanged checksums: Goribu runs
+  only the SQL between the markers and never runs the down section. Leave
+  applied files as they are. See [Migrations](docs/migrations.md).
 - `goribu` now depends on exact versions of Wrangler (4.127.1) and
   `@cloudflare/vite-plugin` (1.54.2), the pair the plugin itself pins, so every
   install runs the Wrangler Goribu was tested with.
 - A static route that fails to prerender with a non-200 response now reports
   the Worker's logged error, such as a `TypeError`, after the status.
+
+### Removed
+
+- `goribu migrate:down`. Running it now fails with a message to write a new
+  forward migration instead. To undo a schema change, add a migration such as
+  `DROP TABLE` or `ALTER TABLE … DROP COLUMN`. To start a local D1 database over,
+  stop `goribu dev`, delete `.wrangler/state/v3/d1`, and run `goribu migrate`.
+  See [Undo a change](docs/migrations.md#undo-a-change).
 
 ## [0.9.3] - 2026-10-16
 

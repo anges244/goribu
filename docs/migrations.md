@@ -16,32 +16,36 @@ Scaffold the next numbered file from the application directory:
 goribu migrate:new create posts
 ```
 
-This creates `migrations/0001_create-posts.sql`:
+This creates `migrations/0001_create-posts.sql` with a two-line comment header.
+Write the SQL below it:
 
 ```sql
 -- create-posts
--- Write the forward SQL under migrate:up. The migrate:down section is optional;
--- leave it empty when the change cannot be honestly reversed.
+-- Migrations are forward-only; undo a change with a new migration.
 
--- migrate:up
 CREATE TABLE posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
-
--- migrate:down
-DROP TABLE posts;
 ```
 
 A filename is a four-digit sequence, an underscore, and a lowercase
-hyphen-separated slug. Every file needs exactly one `-- migrate:up` marker
-followed by exactly one `-- migrate:down` marker. The down section may be empty;
-the marker may not be omitted.
+hyphen-separated slug. The whole file is the migration's SQL. Migrations are
+forward-only: there is no rollback section and no rollback command. See
+[Undo a change](#undo-a-change).
 
 Migration files are ordered history. Once a migration has run anywhere, do not
 edit, delete, or insert an earlier-numbered file. Create a new forward migration
 for the correction.
+
+### Files from before 0.9.4
+
+Older files have `-- migrate:up` and `-- migrate:down` markers. They keep
+working unchanged: Goribu runs only the SQL between the two markers and never
+runs the down section. Leave these files as they are, down section included.
+The checksum covers the whole file, so editing any part of an applied file
+reports it as modified.
 
 ## Apply migrations
 
@@ -59,14 +63,14 @@ goribu migrate --remote
 ```
 
 Goribu creates one `_goribu_migrations` tracking table and records each applied
-filename with its checksum. A migration's up SQL and tracking row run in one D1
+filename with its checksum. A migration's SQL and tracking row run in one D1
 batch: if any statement fails, its schema changes and ledger insert are rolled
 back together. Each migration is its own batch; a later migration failing does
 not undo earlier migrations that completed successfully.
 
-An empty up section is refused before D1 is touched. Filling in an already
-recorded empty scaffold later would change its checksum and make history
-untrustworthy.
+A file that contains only comments, such as a fresh scaffold, is refused before
+D1 is touched. Filling in an already recorded empty scaffold later would change
+its checksum and make history untrustworthy.
 
 ## Inspect status
 
@@ -97,26 +101,55 @@ Drift means the files can no longer prove the history D1 recorded:
 - **missing** — a recorded migration file was deleted;
 - **out-of-order** — a pending file is sequenced before an applied file.
 
-Status and check report drift as information. `migrate` and `migrate:down` refuse
-to mutate until the original files are restored from version control or a new
-forward migration is used instead.
+Status and check report drift as information. `migrate` refuses to mutate until
+the original files are restored from version control or a new forward migration
+is used instead.
 
-## Roll back one migration
+## Undo a change
 
-Roll back exactly the last applied local migration:
+Goribu has no rollback. Removing a schema change is itself a change, so it gets
+its own migration, which runs locally and in production like any other:
 
 ```sh
-goribu migrate:down
+goribu migrate:new drop posts-subtitle
 ```
 
-Use `goribu migrate:down --remote` only for a deliberate production rollback.
-The down SQL and ledger deletion run in one D1 batch, so a failed rollback leaves
-both the schema and tracking row intact.
+```sql
+-- drop-posts-subtitle
+-- Migrations are forward-only; undo a change with a new migration.
 
-`down` does not mean a change is reversible. If the last migration has an empty
-down section, Goribu refuses to delete its ledger row and tells you to write a
-new forward migration. Even when down SQL exists, it may discard data. Read it
-before running it; Goribu does not infer whether a rollback is safe.
+DROP INDEX IF EXISTS posts_subtitle_idx;
+ALTER TABLE posts DROP COLUMN subtitle;
+```
+
+- **Tables:** `DROP TABLE posts;` removes a table and its rows.
+- **Columns on D1:** SQLite refuses to drop a column that is indexed, unique,
+  part of the primary key, or used by a foreign key, view, or trigger. Drop the
+  index or view first, as above, or rebuild the table.
+- **Data you still need:** a drop destroys rows. On a live database, use
+  [expand and contract](#deploy-ordering-is-not-a-transaction) so the deployed
+  Worker stops using a column before a migration removes it.
+
+To delete rows rather than schema, run SQL directly: `goribu d1 "DELETE FROM
+posts WHERE …"` locally, or with `--remote`, which asks you to type the
+database name first. For Postgres, use `psql`.
+
+### Start the local database over
+
+While you are still shaping a migration that has only run on your machine, you
+can discard the local database and apply everything again. For D1, stop
+`goribu dev`, then:
+
+```sh
+rm -rf .wrangler/state/v3/d1
+goribu migrate
+goribu migrate:seed   # if you have migrations/seed.sql
+```
+
+This deletes only local D1 data; local KV and R2 data are kept. For Postgres,
+recreate your local database with `dropdb` and `createdb`, then run
+`goribu migrate`. Never rewrite a migration that has run in production; add a
+new one.
 
 ## Seed local data
 
@@ -173,20 +206,18 @@ default without enabling a workflow the explicit command cannot express.
 ## Postgres
 
 Postgres apps use the same files, commands, tracking table, drift rules and
-output. Write Postgres SQL in the up section:
+output. Write Postgres SQL:
 
 ```sql
 -- create-posts
+-- Migrations are forward-only; undo a change with a new migration.
 
--- migrate:up
 CREATE TABLE posts (
   id BIGSERIAL PRIMARY KEY,
   title TEXT NOT NULL,
   tags TEXT[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- migrate:down
 ```
 
 `goribu migrate` and `goribu migrate:status` read `POSTGRES_MIGRATE_URL`, or
@@ -219,10 +250,7 @@ line** is the directive:
 -- goribu:no-transaction
 -- add-posts-title-index
 
--- migrate:up
 CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_title_idx ON posts (title);
-
--- migrate:down
 ```
 
 A no-transaction migration holds exactly one statement: Postgres runs several
@@ -238,6 +266,5 @@ line starting with `-- goribu:` is an error, and D1 refuses the directive.
 
 ### Not available for Postgres yet
 
-`goribu migrate:down` and `goribu migrate:seed` refuse to run on a Postgres app.
-Fix a mistake with a new forward migration. Load development data with
-`psql "$POSTGRES_URL" -f migrations/seed.sql`.
+`goribu migrate:seed` refuses to run on a Postgres app. Load development data
+with `psql "$POSTGRES_URL" -f migrations/seed.sql`.

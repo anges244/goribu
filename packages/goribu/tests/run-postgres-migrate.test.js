@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import { runPostgresMigrate } from "../src/build/postgres/run-postgres-migrate.js";
+import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
 import * as migrationDatabase from "../src/build/postgres/connect-migration-database.js";
 
 const config = defineConfig({ name: "app", compatibilityDate: "2026-09-03", database: { type: "postgres" } });
@@ -24,8 +25,8 @@ describe("runPostgresMigrate preflight", () => {
 
   it("refuses an empty scaffold before connecting", async () => {
     writeFileSync(join(root, ".env"), "POSTGRES_URL=postgres://u:p@127.0.0.1:1/db\n");
-    writeFileSync(join(root, "migrations/0001_empty.sql"), "-- migrate:up\n-- migrate:down\n");
-    await expect(runPostgresMigrate({ projectRoot: root, loadConfig })).rejects.toThrow(/has no SQL under -- migrate:up/);
+    runMigrateNew({ projectRoot: root, name: "empty", stdout: { write() {} } });
+    await expect(runPostgresMigrate({ projectRoot: root, loadConfig })).rejects.toThrow(/has no forward SQL/);
   });
 
   it("does not label a transport failure as a Postgres error", async () => {

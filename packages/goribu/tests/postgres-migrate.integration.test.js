@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres from "postgres";
@@ -61,7 +61,7 @@ describe.skipIf(!process.env.GORIBU_TEST_POSTGRES_URL)(
     }
     function migration(name, up, directive = false) {
       writeFileSync(join(root, "migrations", `${name}.sql`),
-        `${directive ? "-- goribu:no-transaction\n" : ""}-- migrate:up\n${up}\n-- migrate:down\n`);
+        `${directive ? "-- goribu:no-transaction\n" : ""}${up}\n`);
     }
     function migrate(stdout = capture()) {
       return runPostgresMigrate({ projectRoot: root, loadConfig, stdout });
@@ -76,8 +76,11 @@ describe.skipIf(!process.env.GORIBU_TEST_POSTGRES_URL)(
       const stdout = capture();
       await migrate(stdout);
       expect(stdout.text).toBe("✓ Applied 0001_tables to local\n✓ Applied 0002_title to local\n");
-      const rows = await sql`SELECT name, applied_at, pg_typeof(applied_at)::text AS type FROM _goribu_migrations ORDER BY name`;
+      const rows = await sql`SELECT name, checksum, applied_at, pg_typeof(applied_at)::text AS type FROM _goribu_migrations ORDER BY name`;
       expect(rows.map((row) => row.name)).toEqual(["0001_tables", "0002_title"]);
+      for (const row of rows) {
+        expect(row.checksum).toBe(createHash("sha256").update(readFileSync(join(root, "migrations", `${row.name}.sql`))).digest("hex"));
+      }
       expect(rows.every((row) => row.applied_at instanceof Date && row.type === "timestamp with time zone")).toBe(true);
       const again = capture();
       await migrate(again);
@@ -85,6 +88,32 @@ describe.skipIf(!process.env.GORIBU_TEST_POSTGRES_URL)(
       const report = capture();
       await status(report);
       expect(report.text).toBe("Goribu migrations — local\n\nApplied (2):\n  - 0001_tables\n  - 0002_title\n\nPending (0):\n  none\n");
+    });
+
+    it("preserves the legacy checksum, excludes down SQL, and accepts the recorded history", async () => {
+      // The scaffold layout 0.9.3 generated: header, up marker, down marker.
+      const original =
+        "-- create-feedback\n" +
+        "-- Write the forward SQL under migrate:up. The migrate:down section is optional;\n" +
+        "-- leave it empty when the change cannot be honestly reversed.\n\n" +
+        "-- migrate:up\n" +
+        "CREATE TABLE feedback (\n  id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  message text NOT NULL,\n  created_at text NOT NULL\n);\n\n" +
+        "-- migrate:down\n";
+      const legacy = original + "DROP TABLE feedback;\n";
+      const file = join(root, "migrations/0001_create-feedback.sql");
+      writeFileSync(file, legacy.replace(/\n/g, "\r\n"));
+      const checksum = createHash("sha256").update(legacy).digest("hex");
+      await migrate();
+      expect(await sql`SELECT name, checksum FROM _goribu_migrations`).toEqual([
+        { name: "0001_create-feedback", checksum },
+      ]);
+      await sql`INSERT INTO feedback (message, created_at) VALUES ('kept', 'today')`;
+      const repeated = capture();
+      await migrate(repeated);
+      expect(repeated.text).toBe("Already up to date on local (1 applied).\n");
+      expect(await sql`SELECT message FROM feedback`).toEqual([{ message: "kept" }]);
+      writeFileSync(file, original);
+      await expect(migrate()).rejects.toThrow(/history has drifted/);
     });
 
     it("rolls back a failed file and applies it after repair", async () => {

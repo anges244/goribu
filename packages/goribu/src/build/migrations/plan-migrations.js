@@ -83,14 +83,39 @@ export function describeDrift(drift) {
 // An empty scaffold must never be recorded as applied, because filling it in
 // afterwards would drift its checksum.
 export function assertNoEmptyMigrations(migrations) {
-  const empty = migrations.find((migration) => migration.upSql.length === 0);
+  const empty = migrations.find((migration) => !hasSql(migration.upSql));
   if (empty !== undefined) {
     throw new Error(
-      `[Goribu] Migration ${empty.name} has no SQL under -- migrate:up. ` +
+      `[Goribu] Migration ${empty.name} has no forward SQL. ` +
         "Add its forward SQL before migrating, or delete the file. Applying an empty scaffold " +
         "now and writing its SQL later would drift the recorded checksum.",
     );
   }
+}
+
+// Skip only leading whitespace and comments. Stop at the first SQL token, so
+// comment-like text inside SQL strings is never stripped or interpreted here.
+function hasSql(sql) {
+  let index = 0;
+  while (index < sql.length) {
+    if (/\s/.test(sql[index])) {
+      index += 1;
+    } else if (sql.startsWith("--", index)) {
+      const end = sql.indexOf("\n", index + 2);
+      index = end === -1 ? sql.length : end + 1;
+    } else if (sql.startsWith("/*", index)) {
+      let depth = 1;
+      index += 2;
+      while (index < sql.length && depth > 0) {
+        if (sql.startsWith("/*", index)) { depth += 1; index += 2; }
+        else if (sql.startsWith("*/", index)) { depth -= 1; index += 2; }
+        else index += 1;
+      }
+    } else {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function formatMigrationStatus(target, plan) {

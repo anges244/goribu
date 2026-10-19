@@ -21,7 +21,6 @@ import { listPrerenderWithheld } from "../src/build/wrangler-passthrough.js";
 import { runPostgresMigrate } from "../src/build/postgres/run-postgres-migrate.js";
 import { runPostgresMigrateStatus } from "../src/build/postgres/run-postgres-migrate-status.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
-import { runMigrateDown } from "../src/build/migrations/run-migrate-down.js";
 import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
 import { runMigrateSeed } from "../src/build/migrations/run-migrate-seed.js";
 import { runMigrateStatus } from "../src/build/migrations/run-migrate-status.js";
@@ -35,7 +34,6 @@ const COMMANDS = {
   "cloudflare-login": "Log in to Cloudflare through Wrangler.",
   wrangler: "Run Goribu's Wrangler with the deploy account: goribu wrangler <args>.",
   migrate: "Apply pending D1 or Postgres migrations (default local; --remote for production).",
-  "migrate:down": "Roll back the last applied D1 migration (default local; --remote supported).",
   "migrate:new": "Scaffold the next migration file: goribu migrate:new <name>.",
   "migrate:seed": "Run migrations/seed.sql against local D1 only.",
   "migrate:status": "Show applied and pending migrations without changing anything.",
@@ -294,9 +292,6 @@ async function runDatabaseCommand(command, options) {
   const appConfig = await loadApplicationConfig({ projectRoot });
   const shared = { projectRoot, ...options, loadConfig: async () => appConfig };
   if (appConfig.database?.type === "postgres") {
-    if (command === "migrate:down") {
-      throw new Error("[Goribu] `goribu migrate:down` is not available for Postgres yet. Write a new forward migration instead.");
-    }
     if (command === "migrate:seed") {
       throw new Error('[Goribu] `goribu migrate:seed` is D1-only. For Postgres, run `psql "$POSTGRES_URL" -f migrations/seed.sql`.');
     }
@@ -308,7 +303,6 @@ async function runDatabaseCommand(command, options) {
   }
   const runners = {
     migrate: runMigrate,
-    "migrate:down": runMigrateDown,
     "migrate:status": runMigrateStatus,
     "migrate:seed": runMigrateSeed,
     d1: runD1,
@@ -379,7 +373,12 @@ function main(argv) {
     return;
   }
 
-  if (command === "migrate" || command === "migrate:down" || command === "migrate:status") {
+  if (command === "migrate:down") {
+    fail(new Error("[Goribu] `goribu migrate:down` was removed in 0.9.4. Write a new forward migration to undo a change."));
+    return;
+  }
+
+  if (command === "migrate" || command === "migrate:status") {
     const target = resolveTarget(command, rest);
     if (target === null) return;
     runDatabaseCommand(command, { target }).catch(fail);

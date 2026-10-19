@@ -99,8 +99,23 @@ accessing their fields.
 
 - Declare D1/KV only in `goribu.config.js`; Goribu generates their bindings.
   Use request-scoped `req.d1` and `req.kv` in server handlers.
+- For Cloudflare bindings Goribu does not manage, such as Workers AI, service
+  bindings, Vectorize, or queue producers, add Wrangler's exact fields under
+  `wrangler` in `goribu.config.js` and read them from `req.env`. Never write a
+  separate Wrangler file. Durable Objects and Workflows need `script_name` naming
+  another Worker. The build rejects fields Goribu owns, such as its own
+  bindings, `routes`, `env`, build settings, `triggers`, and queue consumers;
+  follow its message instead of working around it. Keep secrets out of
+  `wrangler.vars`.
+- AI and other remote-only bindings reach Cloudflare even in `pnpm dev`, which
+  then needs `pnpm exec goribu cloudflare-login`, and their calls are billed.
+  Prerendering runs without `wrangler` bindings other than vars, so a page that
+  calls them while rendering stays on the Worker.
 - Use migrations for D1 schema and compatible expand/contract changes for live
   apps. Never imply a schema migration and Worker deployment are atomic.
+- Migrations are forward-only plain SQL; there is no rollback command. Undo a
+  change with a new migration (for example `DROP TABLE`), and never edit an
+  applied file, including an older file's `-- migrate:down` section.
 - Inspect local D1 with `pnpm exec goribu d1 "SELECT …"`. Use `--remote` only
   to read production; change production data with a migration.
 - Run Wrangler commands as `pnpm exec goribu wrangler <args>`; Wrangler is not on
@@ -122,8 +137,7 @@ accessing their fields.
   7. Renames, type changes and drops use expand and contract across two deploys.
   8. Keep no session state: `SET` only inside a transaction; no `LISTEN`/`NOTIFY` or temp tables.
   9. Handle constraint violations by `err.code`, not by message text.
-- Postgres has no `migrate:down`, `migrate:seed` or `goribu d1`; use a new
-  forward migration and `psql "$POSTGRES_URL"`.
+- Postgres has no `migrate:seed` or `goribu d1`; use `psql "$POSTGRES_URL"`.
 - KV is eventually consistent, including cached misses. Use D1 or `req.postgres`
   when correctness requires fresh reads; never promise KV read-your-writes.
 - Test the actual affected behavior. Before handing off, run the relevant checks
@@ -133,5 +147,5 @@ accessing their fields.
 
 For deeper topics, consult the matching page in the
 [Goribu guides](https://goribu.dev/docs): routing,
-handlers, rendering, navigation/forms, metadata, D1/migrations, Postgres, KV, or
-deployment.
+handlers, rendering, navigation/forms, metadata, D1/migrations, Postgres, KV,
+Wrangler bindings, or deployment.

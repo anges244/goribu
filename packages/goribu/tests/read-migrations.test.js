@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -59,10 +60,21 @@ describe("readMigrations", () => {
     expect(migrations[0]).toMatchObject({
       sequence: 1,
       upSql: "CREATE TABLE t (a);",
-      downSql: "DROP TABLE t;",
     });
     expect(migrations[0].checksum).toMatch(/^[a-f0-9]{64}$/);
-    expect(migrations[1].downSql).toBe("");
+    expect(migrations[1].upSql).toBe("SELECT 2;");
+  });
+
+  it.each([
+    "-- plain SQL\nCREATE TABLE t (a);\n",
+    "-- goribu:no-transaction\nCREATE INDEX CONCURRENTLY idx ON t (a);\n",
+    "-- legacy header\n-- migrate:up\nCREATE TABLE t (a);\n",
+  ])("accepts plain SQL and legacy up-only files (%#)", (contents) => {
+    write("0001_first.sql", contents);
+    const [migration] = readMigrations({ migrationsDir: dir });
+    expect(migration.upSql).toBe(contents.includes("migrate:up") ? "CREATE TABLE t (a);" : contents.trim());
+    expect(migration.transaction).toBe(!contents.startsWith("-- goribu:no-transaction"));
+    expect(migration.checksum).toBe(createHash("sha256").update(contents).digest("hex"));
   });
 
   it("makes the checksum ignore CRLF but not content", () => {
@@ -75,6 +87,8 @@ describe("readMigrations", () => {
 
     expect(crlf).toBe(lf);
     expect(changed).not.toBe(lf);
+    write("0001_first.sql", BODY.replace("DROP TABLE t;", "-- deliberately empty"));
+    expect(readMigrations({ migrationsDir: dir })[0].checksum).not.toBe(lf);
   });
 
   it("rejects a filename that is not a four-digit sequence and slug", () => {
@@ -93,10 +107,11 @@ describe("readMigrations", () => {
   });
 
   it.each([
-    ["-- migrate:down\nDROP TABLE t;\n-- migrate:up\nCREATE TABLE t (a);\n", /down before -- migrate:up/],
-    ["-- migrate:up\nCREATE TABLE t (a);\n", /no "-- migrate:down" marker/],
-    ["CREATE TABLE t (a);\n-- migrate:down\n", /no "-- migrate:up" marker/],
-    ["-- migrate:up\n-- migrate:up\n-- migrate:down\n", /more than once "-- migrate:up"/],
+    ["-- migrate:down\nDROP TABLE t;\n-- migrate:up\nCREATE TABLE t (a);\n", /down marker before the up marker/],
+    ["CREATE TABLE t (a);\n-- migrate:down\nDROP TABLE t;\n", /down section without an up marker.*Delete the down section/],
+    ["-- migrate:down\n-- migrate:down\n", /Delete the down section/],
+    ["-- migrate:up\n-- migrate:up\n-- migrate:down\n", /more than one up marker/],
+    ["-- migrate:up\n-- migrate:down\n-- migrate:down\n", /more than one down marker/],
   ])("rejects malformed section markers (%#)", (contents, message) => {
     write("0001_first.sql", contents);
     expect(() => readMigrations({ migrationsDir: dir })).toThrow(message);

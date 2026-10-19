@@ -193,8 +193,6 @@ goribu migrate
 goribu migrate --remote
 goribu migrate:status
 goribu migrate:status --remote
-goribu migrate:down
-goribu migrate:down --remote
 goribu migrate:new create posts
 goribu migrate:seed
 ```

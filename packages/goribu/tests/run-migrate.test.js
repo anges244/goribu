@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defineConfig } from "../src/runtime/application-config.js";
 import { runMigrate } from "../src/build/migrations/run-migrate.js";
+import { runMigrateNew } from "../src/build/migrations/run-migrate-new.js";
 import { readMigrations } from "../src/build/migrations/read-migrations.js";
 
 let root;
@@ -118,12 +119,12 @@ describe("runMigrate", () => {
   });
 
   it("refuses an empty scaffold before any database call", async () => {
-    writeFileSync(join(root, "migrations", "0001_empty.sql"), "-- migrate:up\n-- migrate:down\n");
+    runMigrateNew({ projectRoot: root, name: "empty", stdout: capture() });
     const execute = fakeExecute();
 
     await expect(
       runMigrate({ projectRoot: root, loadConfig, execute, stdout: capture() }),
-    ).rejects.toThrow(/0001_empty has no SQL under -- migrate:up/);
+    ).rejects.toThrow(/0001_empty has no forward SQL/);
     expect(execute.calls).toHaveLength(0);
   });
 
@@ -138,11 +139,11 @@ describe("runMigrate", () => {
     ));
     expect(execute.calls).toHaveLength(0);
 
-    // An empty scaffold still gets the empty-up error before the directive error.
+    // An empty scaffold still gets the empty-file error before the directive error.
     writeFileSync(file, "-- goribu:no-transaction\n-- migrate:up\n-- migrate:down\n");
     await expect(
       runMigrate({ projectRoot: root, loadConfig, execute, stdout: capture() }),
-    ).rejects.toThrow(/0003_add-index has no SQL under -- migrate:up/);
+    ).rejects.toThrow(/0003_add-index has no forward SQL/);
     expect(execute.calls).toHaveLength(0);
   });
 

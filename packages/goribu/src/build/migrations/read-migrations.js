@@ -18,12 +18,12 @@ const DIRECTIVE_PREFIX = /^\s*--\s*goribu:/i;
 /**
  * Read, validate, and parse the application's migration files.
  *
- * Returns migrations ordered by sequence, each carrying its up and down SQL and a
+ * Returns migrations ordered by sequence, each carrying its forward SQL and a
  * whole-file checksum. A missing `migrations/` directory is not an error: it means
  * no migrations exist yet. `seed.sql` is reserved and never treated as a migration.
  *
  * @param {{ migrationsDir: string }} options
- * @returns {ReadonlyArray<{ name: string, sequence: number, upSql: string, downSql: string, checksum: string, transaction: boolean }>}
+ * @returns {ReadonlyArray<{ name: string, sequence: number, upSql: string, checksum: string, transaction: boolean }>}
  */
 export function readMigrations({ migrationsDir } = {}) {
   if (typeof migrationsDir !== "string" || migrationsDir.length === 0) {
@@ -69,13 +69,12 @@ export function readMigrations({ migrationsDir } = {}) {
     const raw = normalizeNewlines(
       readFileSync(join(migrationsDir, entry.name), "utf8"),
     );
-    const { upSql, downSql, transaction } = parseSections(entry.name, raw);
+    const { upSql, transaction } = parseSections(entry.name, raw);
     migrations.push(
       Object.freeze({
         name: entry.name.slice(0, -".sql".length),
         sequence,
         upSql,
-        downSql,
         checksum: createHash("sha256").update(raw, "utf8").digest("hex"),
         transaction,
       }),
@@ -86,11 +85,11 @@ export function readMigrations({ migrationsDir } = {}) {
   return Object.freeze(migrations);
 }
 
-/** Split a normalized migration file into its up and down sections. */
+/** Read plain SQL or the forward section of a legacy marked file. */
 function parseSections(filename, raw) {
   const lines = raw.split("\n");
-  let upLine = -1;
-  let downLine = -1;
+  const upLines = [];
+  const downLines = [];
   let transaction = true;
   for (let index = 0; index < lines.length; index += 1) {
     if (index === 0 && NO_TRANSACTION_DIRECTIVE.test(lines[index])) {
@@ -102,35 +101,39 @@ function parseSections(filename, raw) {
       );
     }
     if (UP_MARKER.test(lines[index])) {
-      if (upLine !== -1) throw markerError(filename, "-- migrate:up", "more than once");
-      upLine = index;
+      upLines.push(index);
     } else if (DOWN_MARKER.test(lines[index])) {
-      if (downLine !== -1) throw markerError(filename, "-- migrate:down", "more than once");
-      downLine = index;
+      downLines.push(index);
     }
   }
 
-  if (upLine === -1) throw markerError(filename, "-- migrate:up", "no");
-  if (downLine === -1) throw markerError(filename, "-- migrate:down", "no");
-  if (downLine < upLine) {
+  if (upLines.length === 0 && downLines.length > 0) {
     throw new Error(
-      `[Goribu] Migration ${JSON.stringify(filename)} places -- migrate:down before -- migrate:up. ` +
-        "Order the sections up then down so forward SQL is never mistaken for rollback SQL.",
+      `[Goribu] Migration ${JSON.stringify(filename)} has a down section without an up marker. ` +
+        "Delete the down section, including its marker. Migrations are forward-only; undo a change with a new migration.",
+    );
+  }
+  if (upLines.length > 1) throw markerError(filename, "up");
+  if (downLines.length > 1) throw markerError(filename, "down");
+  const [upLine] = upLines;
+  const [downLine] = downLines;
+  if (downLine !== undefined && downLine < upLine) {
+    throw new Error(
+      `[Goribu] Migration ${JSON.stringify(filename)} places the down marker before the up marker. ` +
+        "Order the legacy sections up then down so rollback SQL cannot run as forward SQL.",
     );
   }
 
   return {
-    upSql: lines.slice(upLine + 1, downLine).join("\n").trim(),
-    downSql: lines.slice(downLine + 1).join("\n").trim(),
+    upSql: upLine === undefined ? raw.trim() : lines.slice(upLine + 1, downLine).join("\n").trim(),
     transaction,
   };
 }
 
-function markerError(filename, marker, quantity) {
+function markerError(filename, marker) {
   return new Error(
-    `[Goribu] Migration ${JSON.stringify(filename)} has ${quantity} ${JSON.stringify(marker)} marker. ` +
-      "Every migration needs exactly one `-- migrate:up` line followed by exactly one `-- migrate:down` line, " +
-      "so forward SQL and rollback SQL never blur together. The down section may be empty; the marker may not.",
+    `[Goribu] Migration ${JSON.stringify(filename)} has more than one ${marker} marker. ` +
+      "A legacy migration must have exactly one up marker and at most one down marker, in that order. Remove the duplicate marker.",
   );
 }
 

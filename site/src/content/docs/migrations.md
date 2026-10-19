@@ -14,23 +14,23 @@ Create the next migration:
 goribu migrate:new create posts
 ```
 
-Then write both marked sections in `migrations/0001_create-posts.sql`:
+Then write the SQL below the comment header in `migrations/0001_create-posts.sql`:
 
 ```sql
--- migrate:up
+-- create-posts
+-- Migrations are forward-only; undo a change with a new migration.
+
 CREATE TABLE posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
-
--- migrate:down
-DROP TABLE posts;
 ```
 
 Names use four digits, an underscore, and a lowercase hyphen-separated slug.
-Both markers are required. The down SQL may be empty when the change cannot be
-honestly reversed.
+The whole file is the migration. Files from before 0.9.4 with `-- migrate:up`
+and `-- migrate:down` markers keep working; only the SQL between the markers
+runs, and the down section never does.
 
 Once a file has run anywhere, never edit, delete, or insert history before it.
 Write a new forward migration instead.
@@ -53,18 +53,12 @@ file, or a pending file sequenced before applied history. Status and `goribu
 check` show drift as information; migration commands refuse to mutate until the
 original files are restored or a new forward migration carries the change.
 
-## One-step rollback
+## Undo a change
 
-```sh
-goribu migrate:down           # local
-goribu migrate:down --remote  # production
-```
-
-Down rolls back exactly the last applied migration. Its SQL and ledger deletion
-are one batch, so a failed rollback leaves both intact. An empty down section is
-an honest dead end: Goribu keeps the ledger row and tells you to write a new
-forward migration. Down SQL can still destroy data even when it succeeds; read
-it before running it.
+Migrations are forward-only. Undo a schema change with a new migration, such as
+`DROP TABLE posts;` or `ALTER TABLE posts DROP COLUMN subtitle;`. To start local
+D1 over, stop `goribu dev`, delete `.wrangler/state/v3/d1`, and run
+`goribu migrate` again.
 
 ## Local seeds
 

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ describe.skipIf(!process.env.GORIBU_TEST_POSTGRES_URL)(
       const database = `goribu_migrate_${randomBytes(8).toString("hex")}`;
       let created = false;
       let root;
+      let sql;
       try {
         await admin`CREATE DATABASE ${admin(database)}`;
         created = true;
@@ -31,6 +32,7 @@ describe.skipIf(!process.env.GORIBU_TEST_POSTGRES_URL)(
         writeFileSync(configPath, readFileSync(configPath, "utf8").replace("defineConfig({", 'defineConfig({\n  database: { type: "postgres" },'));
         const url = new URL(process.env.GORIBU_TEST_POSTGRES_URL);
         url.pathname = `/${database}`;
+        sql = postgres(url.href, { max: 1, onnotice() {} });
         writeFileSync(join(root, ".env"), `POSTGRES_URL=${JSON.stringify(url.href)}\n`);
 
         function run(...args) {
@@ -41,14 +43,21 @@ describe.skipIf(!process.env.GORIBU_TEST_POSTGRES_URL)(
         }
         expect(run("migrate:new", "create posts")).toBe("✓ Created migrations/0001_create-posts.sql\n");
         const migration = join(root, "migrations/0001_create-posts.sql");
-        writeFileSync(migration, readFileSync(migration, "utf8").replace("-- migrate:up\n", "-- migrate:up\nCREATE TABLE posts (id int primary key);\n"));
+        const empty = spawnSync(process.execPath, [cli, "migrate"], { cwd: root, encoding: "utf8", timeout: 30000 });
+        expect(empty.status).toBe(1);
+        expect(empty.stderr).toContain("[Goribu] Migration 0001_create-posts has no forward SQL.");
+        expect((await sql`SELECT to_regclass('_goribu_migrations') AS name`)[0].name).toBeNull();
+        appendFileSync(migration, "CREATE TABLE posts (id int primary key);\n");
         expect(run("migrate:status", "--local")).toContain("Pending (1):\n  - 0001_create-posts");
         expect(run("migrate")).toBe("✓ Applied 0001_create-posts to local\n");
+        expect((await sql`SELECT to_regclass('posts') AS name`)[0].name).toBe("posts");
+        expect(await sql`SELECT name FROM _goribu_migrations`).toEqual([{ name: "0001_create-posts" }]);
         expect(run("migrate:status")).toContain("Applied (1):\n  - 0001_create-posts\n\nPending (0):\n  none");
         expect(run("migrate", "--local")).toBe("Already up to date on local (1 applied).\n");
       } finally {
         const errors = [];
         for (const cleanup of [
+          () => sql?.end({ timeout: 5 }),
           () => { if (root) rmSync(root, { recursive: true, force: true }); },
           async () => { if (created) await admin`DROP DATABASE IF EXISTS ${admin(database)} WITH (FORCE)`; },
           () => admin.end({ timeout: 5 }),
