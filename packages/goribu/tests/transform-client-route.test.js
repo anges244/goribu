@@ -17,10 +17,11 @@ export { save as POST };
 export const uploads = policy, label = title;
 export const meta = () => ({ title });
 export const prerender = false;
+export const allowCrossOriginForms = Boolean(secret);
 export default function Page() { const secret = "local"; return title + secret; }
 `;
     const result = transformClientRoute(source, id);
-    expect(result.code).not.toMatch(/body\.server|makePolicy|recurse|save|uploads|prerender|meta/);
+    expect(result.code).not.toMatch(/body\.server|makePolicy|recurse|save|uploads|prerender|meta|allowCrossOriginForms/);
     const page = await import(`data:text/javascript,${encodeURIComponent(result.code)}`);
     expect(page.default()).toBe("sharedlocal");
     expect(page.label).toBe("shared");

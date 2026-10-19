@@ -29,6 +29,11 @@ import {
   resolveGlobalResponseHeaders,
 } from "./response-headers.js";
 import { copyProtocolResponseMark } from "./protocol-response.js";
+import {
+  collectCrossOriginFormRoutes,
+  createCrossOriginPostRejection,
+  isPreflightFreeCrossOriginPost,
+} from "./cross-origin-posts.js";
 import { createD1BindingResolver } from "../db/create-d1-binding-resolver.js";
 import { createD1RequestController } from "../db/create-d1-request-controller.js";
 import { createKV } from "./create-kv.js";
@@ -168,6 +173,7 @@ export function createApp(options) {
       ? null
       : loadDefaultExport(modules, serverErrorId, "_500 page");
   const middlewareRunners = createMiddlewareRunners(middlewareByRoute, modules);
+  const crossOriginFormRoutes = collectCrossOriginFormRoutes(manifest, modules);
 
   return Object.freeze({
     async fetch(request, env, ctx) {
@@ -401,6 +407,16 @@ export function createApp(options) {
         req, res, route: match.route, policies, config: applicationConfig.r2, mode,
       });
       return finalizeMatchedResult(result, match, "POST", url, false, false, nonce, url.href, readCfRay(request));
+    }
+    // Refuse a forged form post before any application code runs. The upload
+    // start above needs a custom header, so browsers always preflight it.
+    if (
+      match.kind === "handler" &&
+      match.method === "POST" &&
+      !crossOriginFormRoutes.has(match.route.id) &&
+      isPreflightFreeCrossOriginPost(request)
+    ) {
+      return createCrossOriginPostRejection(match.route);
     }
     // Static HTML is shared by every visitor, so prerendering omits the nonce. A
     // candidate the Worker serves at request time (dev, or downgraded at build)

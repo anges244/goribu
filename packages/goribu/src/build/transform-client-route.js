@@ -4,7 +4,7 @@ import MagicString from "magic-string";
 import { HANDLER_METHODS } from "../routing/handler-methods.js";
 
 const traverse = traverseModule.default ?? traverseModule;
-const SERVER_EXPORTS = new Set([...HANDLER_METHODS, "meta", "prerender", "uploads"]);
+const SERVER_EXPORTS = new Set([...HANDLER_METHODS, "meta", "prerender", "uploads", "allowCrossOriginForms"]);
 const SERVER_FILE = /\.server\.(?:[cm]?js|jsx|[cm]?ts|tsx)(?:[?#]|$)/i;
 
 /**

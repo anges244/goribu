@@ -143,6 +143,8 @@ put it on the subtree that needs it.
 Middleware runs for a **matched** route — a page or a handler. It does not run for
 the framework's own mechanical answers: the `_404` for an unmatched URL, an
 automatic `OPTIONS`, or a `405`. Those aren't a route's request to intercept.
+Nor does it run for a cross-origin form post Goribu refuses (see
+[forms.md](./forms.md#cross-site-request-forgery)).
 
 It also does not run for Goribu's file endpoints under `/_goribu/`: signed R2
 downloads at `/_goribu/r2/file` and, in development, public R2 files. A signed

@@ -2,7 +2,6 @@ packages:
   - packages/*
   - fixtures/*
   - templates/*
-  - site
 
 onlyBuiltDependencies:
   - esbuild

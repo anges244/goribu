@@ -228,5 +228,49 @@ GET/POST submissions to cross-origin or non-HTTP actions, or non-`_self` targets
 
 Malformed claimed protocol responses recover through a document GET; the mutation is never automatically repeated.
 
+## Cross-site request forgery
+
+Browsers attach your app's cookies to a form another site submits to it. Without
+a check, a page on `evil.example` could post a hidden form to your `POST`
+handler and act as the signed-in user. Goribu refuses these requests before the
+route's middleware or handler runs.
+
+Goribu answers `403` to a POST when both are true:
+
+- its `Content-Type` is missing, `application/x-www-form-urlencoded`,
+  `multipart/form-data` or `text/plain`, which a browser sends to another origin
+  without a CORS preflight;
+- the browser marks it as coming from elsewhere: `Sec-Fetch-Site` is
+  `cross-site` or `same-site`, or, in browsers that omit that header, `Origin`
+  differs from the request's origin (`null` included).
+
+Your own forms, native or enhanced, are same-origin and pass. So do webhooks,
+`curl` and server-to-server calls, which send neither header. JSON posts and
+every PUT, PATCH or DELETE from another origin are preflighted, so your CORS
+headers decide them (see [CORS](./handlers.md#cors)). Sibling subdomains count as
+another origin.
+
+A route that must receive form posts from another site, such as an OAuth
+`form_post` or SAML callback or a payment provider's return page, opts out:
+
+```js
+// src/routes/auth/callback.js
+export const allowCrossOriginForms = true;
+
+export async function POST(req, res) {
+  const { state, code } = await req.body();
+  // Verify the provider's state or signature here; Goribu no longer checks origin.
+  return res.redirect("/");
+}
+```
+
+The export accepts only `true`, on a route with a `POST` handler. Anything else
+fails the build with a repair instruction.
+
+The same-page `Referer` rule above is not a forgery defence: it runs after the
+handler. Set `sameSite: "Lax"` on session cookies as well (see
+[Cookies](./handlers.md#cookies)); it is browser-dependent, so it complements this
+check rather than replacing it.
+
 See [navigation.md](./navigation.md) for navigation behavior and
 [handlers.md](./handlers.md) for the request/response surface.

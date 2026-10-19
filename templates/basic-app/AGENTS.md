@@ -69,6 +69,9 @@ add routes and dependencies only for actual application needs.
   another pathname.
 - To clear a form after success, add `reset` to `<Form>`. A redirect to the
   current page keeps the page and its field values; it does not clear the form.
+- Goribu answers `403` to form posts from other sites. A route that must receive
+  them, such as an OAuth or SAML callback, exports `allowCrossOriginForms = true`
+  and verifies each request itself.
 - Render field errors and `errors.root`; `res.invalid("message")` sets the
   form-level error.
 - Global CSS is imported from `src/setup/client-entry.js`. Tailwind belongs to this

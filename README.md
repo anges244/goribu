@@ -52,7 +52,9 @@ Use `pnpm run deploy` explicitly: `pnpm deploy` is pnpm's own command.
 
 ## Working on Goribu
 
-Read [Contributing](CONTRIBUTING.md) for workspace setup, local development,
+Goribu is not accepting pull requests yet; bug reports are welcome as issues.
+For questions, ideas, or feedback, find me on X at
+[@anges244](https://x.com/anges244). Read [Contributing](CONTRIBUTING.md) for workspace setup, local development,
 and tests. The [documentation index](docs/README.md) lists the repository guides
 and contributor references. The [release guide](docs/releasing.md) covers the
 shared `goribu` and `create-goribu` version and publication process.
@@ -63,7 +65,6 @@ shared `goribu` and `create-goribu` version and publication process.
 | `packages/create-goribu/` | Dependency-free app scaffolder. |
 | `templates/basic-app/` | Canonical TypeScript/Tailwind starter. |
 | `fixtures/basic-app/` | Behavioral integration test app. |
-| `site/` | Legacy site retained for integration tests; the public website is maintained separately. |
 | `examples/` | Independent example app using a packed framework. |
 
 ## License

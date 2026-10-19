@@ -4,8 +4,6 @@ A minimal bill splitter generated with `create-goribu` for the second-app proof.
 Enter a euro amount and 1–100 people. The calculation uses whole cents, assigning
 any remainder one cent at a time so the shares add up exactly.
 
-Live: https://goribu-split.aggelos-gesoulis.workers.dev.
-
 Both routes are statically output: `/` contains the hydrated calculator and
 `/about` explains the calculation. There are no accounts, stored bills, D1/KV
 resources, API handlers, or added dependencies. Changing inputs requires

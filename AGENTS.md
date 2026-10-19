@@ -3,11 +3,9 @@
 Read this file before changing the repository.
 
 This file covers how to work in this repo and what the framework guarantees.
-It is self-contained; a fresh clone needs no private planning files. Read
-`CONTRIBUTING.md` for local setup and validation commands.
+Read `CONTRIBUTING.md` for local setup and validation commands.
 
-If the maintainer has supplied a local `START.md`, read it for the active task
-and handoff context. It is optional, untracked, and not required to contribute.
+If a local `START.md` exists, read it first.
 
 ## Sources of truth
 
@@ -18,9 +16,7 @@ and handoff context. It is optional, untracked, and not required to contribute.
 3. `CHANGELOG.md` records release changes, and the current guides under `docs/`
    describe the supported behavior.
 
-Historical block writeups and review notes are kept in a local, ignored archive.
-They are not required to work on the repository. Nothing is recorded as complete
-that has no source in the tree.
+Nothing is recorded as complete that has no source in the tree.
 
 ## Working cadence
 
@@ -72,7 +68,6 @@ that has no source in the tree.
 - Framework source: `packages/goribu/src/`
 - CLI entrypoint: `packages/goribu/bin/goribu.js`
 - Behavioral integration fixture: `fixtures/basic-app/`
-- Legacy site and integration test app: `site/`
 - Product documentation: `docs/`
 
 Framework runtime source is plain JavaScript ESM with no package build step.
@@ -91,8 +86,8 @@ The `goribu` package has four deliberate public entries:
 Do not blur these boundaries or introduce imports that can leak server or build
 code into browser bundles.
 
-The fixture and the in-repository site exercise framework behavior. The public
-website is maintained independently in a separate private repository.
+The fixture exercises framework behavior. The public website is maintained
+independently in a separate repository.
 
 ## Tests and validation
 
@@ -122,7 +117,3 @@ yet" stays visible instead of becoming invisible.
 
 Do not edit generated output or dependency state such as `node_modules/`,
 `dist/`, `.goribu/`, `.wrangler/`, coverage output, or package-manager caches.
-
-Private maintainer planning files are outside the contributor workflow. Do not
-read or modify them unless the maintainer's task or local handoff directs it,
-and do not add dependencies on them to tracked files.

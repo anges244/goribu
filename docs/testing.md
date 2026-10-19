@@ -38,7 +38,7 @@ command. The fast subset is an additional feedback loop, not a release gate.
 ## Keeping tests independent
 
 Build and serve temporary copies of application inputs. Do not clean or rebuild
-the checkout's `fixtures/basic-app` or `site` output from tests: `.wrangler` can
+the checkout's `fixtures/basic-app` output from tests: `.wrangler` can
 contain a developer's local databases. `tests/support/copy-test-app.js` copies
 the common application inputs and any explicitly supplied extra paths, sharing
 only the installed dependencies. The caller removes the temporary app during

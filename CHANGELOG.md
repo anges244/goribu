@@ -9,6 +9,18 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Goribu refuses cross-origin form posts with `403` before the
+  route's middleware or handler runs. This closes cross-site request forgery
+  against cookie sessions, through both native and enhanced `<Form>` posts. It
+  applies to a POST with a form, `text/plain` or missing `Content-Type` that
+  `Sec-Fetch-Site` (or, without it, `Origin`) marks as coming from another
+  origin. Same-origin forms, webhooks, `curl` and preflighted JSON are
+  unaffected. A route that must receive such posts, such as an OAuth or SAML
+  callback, exports `allowCrossOriginForms = true` and verifies the request
+  itself. See [Cross-site request forgery](docs/forms.md#cross-site-request-forgery).
+
 ## [0.9.4] - 2026-10-19
 
 ### Added
@@ -639,8 +651,7 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   page and a guided-tour docs set (getting started, the CLI, routing, rendering,
   static routes, the JavaScript position, and deploying). Markdown is compiled to
   React components at build time by the site's own Vite plugin; the framework
-  itself is unchanged. Live at
-  https://goribu-site.aggelos-gesoulis.workers.dev.
+  itself is unchanged.
 
 - `goribu` CLI, the framework's front door, with `dev`, `build`, and `deploy`
   commands.

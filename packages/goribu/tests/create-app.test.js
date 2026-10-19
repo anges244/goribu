@@ -1586,3 +1586,40 @@ describe("createApp().fetch — named handlers", () => {
     );
   });
 });
+
+describe("createApp — cross-origin form posts", () => {
+  const MIDDLEWARE = "src/routes/_middleware.js";
+
+  function crossOriginApp(helloModule, middleware = () => {}) {
+    return createApp({
+      manifest: [HELLO_HANDLER],
+      modules: new Map([[MIDDLEWARE, { default: middleware }], ["hello", helloModule]]),
+      errorPages: { notFound: null },
+      documentId: null,
+      middlewareByRoute: new Map([["hello", [{ id: MIDDLEWARE, relativePath: "_middleware.js" }]]]),
+    });
+  }
+
+  it("refuses a cross-site form post before middleware runs", async () => {
+    const middleware = vi.fn();
+    const handler = vi.fn((req, res) => res.text("ok"));
+    const response = await dispatch(crossOriginApp({ POST: handler }, middleware), new Request("https://example.com/hello", {
+      method: "POST",
+      headers: { "sec-fetch-site": "cross-site" },
+      body: new URLSearchParams({ a: "1" }),
+    }));
+    expect(response.status).toBe(403);
+    expect(middleware).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("fails Worker creation for an allowCrossOriginForms export that cannot take effect", () => {
+    const POST_HANDLER = (req, res) => res.text("ok");
+    expect(() => crossOriginApp({ POST: POST_HANDLER, allowCrossOriginForms: "true" })).toThrow(new TypeError(
+      '[Goribu] Route "hello" exports allowCrossOriginForms as "true". Export `allowCrossOriginForms = true` to accept cross-origin form posts, or remove the export.',
+    ));
+    expect(() => crossOriginApp({ GET: POST_HANDLER, allowCrossOriginForms: true })).toThrow(new TypeError(
+      '[Goribu] Route "hello" exports allowCrossOriginForms but has no POST handler, so the export has no effect. Move it to the route that receives the cross-origin POST.',
+    ));
+  });
+});

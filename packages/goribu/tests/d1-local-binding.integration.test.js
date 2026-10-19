@@ -38,7 +38,7 @@ beforeAll(async () => {
       pattern: "/runtime",
       segments: [{ type: "static", value: "runtime" }],
       hasDefaultExport: false,
-      methods: ["GET"],
+      methods: ["GET", "POST"],
     };
     const app = createApp({
       mode: "production",
@@ -48,9 +48,15 @@ beforeAll(async () => {
       modules: new Map([[route.id, {
         async GET(req, res) {
           await req.d1\`CREATE TABLE IF NOT EXISTS proof (value TEXT)\`.run();
-          await req.d1\`INSERT INTO proof (value) VALUES (\${"runtime"})\`.run();
+          if (!req.query.has("read")) await req.d1\`INSERT INTO proof (value) VALUES (\${"runtime"})\`.run();
           const value = await req.d1\`SELECT value FROM proof ORDER BY rowid DESC LIMIT 1\`.value();
           return res.json({ value });
+        },
+        async POST(req, res) {
+          const { value } = await req.body();
+          await req.d1\`CREATE TABLE IF NOT EXISTS proof (value TEXT)\`.run();
+          await req.d1\`INSERT INTO proof (value) VALUES (\${value})\`.run();
+          return res.redirect("/runtime?read");
         },
       }]]),
       applicationConfig: defineConfig({
@@ -103,5 +109,28 @@ describe("local D1 binding", () => {
     expect(second.status).toBe(200);
     await expect(second.json()).resolves.toEqual({ value: "runtime" });
     expect(second.headers.get("set-cookie")).toMatch(/^goribu_d1_bookmark=.+/);
+  });
+
+  it("carries the bookmark on a form redirect so the next page reads the write", async () => {
+    // Both the native 303 and the enhanced redirect envelope must flush the cookie.
+    for (const accept of ["text/html", "application/vnd.goribu.form+json"]) {
+      const value = `sent as ${accept}`;
+      const sent = await worker.fetch("https://goribu.test/runtime", {
+        method: "POST",
+        body: new URLSearchParams({ value }),
+        headers: { accept },
+        redirect: "manual",
+      });
+      expect(sent.status, accept).toBe(303);
+      const bookmark = sent.headers.get("set-cookie");
+      expect(bookmark, accept).toMatch(/^goribu_d1_bookmark=.+/);
+      const to = sent.headers.get("location") ?? (await sent.json()).to;
+      expect(to, accept).toBe("/runtime?read");
+
+      const after = await worker.fetch(`https://goribu.test${to}`, {
+        headers: { cookie: bookmark.split(";", 1)[0] },
+      });
+      await expect(after.json()).resolves.toEqual({ value });
+    }
   });
 });

@@ -1,7 +1,3 @@
-workspace/
-START.md
-/local-history/
-
 # Dependencies and build output
 node_modules/
 .pnpm-store/

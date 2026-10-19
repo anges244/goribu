@@ -204,7 +204,8 @@ export function POST(req, res) {
 
 Goribu adds no security defaults — `sameSite: "none"` does not imply `secure`;
 set what your cookie needs. Cookie values must be plain ASCII tokens; encode
-structured or Unicode data before setting.
+structured or Unicode data before setting. Forged cross-site form posts are
+refused separately; see [Cross-site request forgery](./forms.md#cross-site-request-forgery).
 
 ## Bindings and background work
 
@@ -327,6 +328,10 @@ with `res.headers()` in the route's other handlers.
   automatic `OPTIONS` answer, so a folder-wide CORS middleware fails preflight.
 - **Not static pages:** prerendered routes are served from Static Assets and
   receive no `responseHeaders`. Keep a cross-origin endpoint in a handler.
+- **Not form-encoded posts:** a cross-origin POST with a form, `text/plain` or
+  missing `Content-Type` skips the preflight, so Goribu refuses it even when
+  these headers allow the origin. Send JSON, or see
+  [`allowCrossOriginForms`](./forms.md#cross-site-request-forgery).
 
 ## See also
 

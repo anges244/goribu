@@ -85,11 +85,6 @@ links retain their behavior. For fixed image contents that may be cached
 privately until link expiry, pass `immutable: true` to `signedUrl`; replacing
 contents must create a new key. See [signed downloads](r2.md#signed-downloads).
 
-Release preparation is complete only after local validation; publication still
-requires live R2 verification of response cache/expiry overrides, backdated
-signatures and browser reuse. The pending checkpoint is recorded in
-[decisions](decisions.md).
-
 ## Upgrading apps from 0.8.1 to 0.9.0
 
 After both packages are verified on npm, update an existing app with
@@ -381,7 +376,7 @@ creation cannot roll back or republish the npm packages.
 After npm verification, create a fresh app through `pnpm create goribu@latest`
 and verify its registry dependency and behavior. Update the changelog, root
 README, and onboarding guide to reflect the verified public path. The maintainer
-then deploys the site; verify the live guide afterward.
+then deploys the website; verify the live guide afterward.
 
 There is no automatic publishing on commits, CI publishing workflow, separate
 prerelease channel, or independent scaffolder version schedule.
