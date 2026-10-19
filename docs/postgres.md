@@ -129,6 +129,10 @@ dynamic identifiers and bulk inserts.
 - **Pooling is per transaction.** Hyperdrive reuses database connections between
   queries, so `SET`, session advisory locks, temporary tables and
   `LISTEN`/`NOTIFY` do not survive from one query to the next.
+- **Placement.** Each uncached query is a round trip from the Worker's location
+  to the database. When a request runs several in sequence, running the Worker
+  near the database with [`placement`](wrangler.md#placement) shortens all of
+  them.
 
 ### Types
 
@@ -351,7 +355,6 @@ These are deliberate omissions, not oversights:
 - `migrate:seed` for Postgres;
 - a Postgres version of `goribu d1` (use `psql "$POSTGRES_URL"`);
 - Postgres inspection in `goribu check`;
-- Worker `placement` near the database;
 - D1 and Postgres in the same app (an app declares one `database`).
 
 Out of scope: an ORM or query builder, typed rows or code generation, read

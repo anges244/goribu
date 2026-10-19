@@ -70,7 +70,6 @@ These fields are rejected inside `wrangler`:
 | `routes`, `route`, `env`, `previews`, `compliance_region`, `pages_build_output_dir` | Goribu deploys one production Worker and attaches `domain` itself. |
 | `dev`, `build`, `alias`, `define`, `minify`, `rules`, `no_bundle`, `base_dir`, `find_additional_modules`, `preserve_file_names`, `site`, `tsconfig` | Vite and `goribu dev` own bundling and the dev server; configure Vite in `vite.config.js`. |
 | `triggers`, `migrations`, `exports`, `containers`, `cloudchamber`, and `queues.consumers` | They need Worker handlers or exported classes, which Goribu does not support yet. |
-| `placement` | Not supported yet; it will be a top-level option. |
 | `unsafe`, `unsafe_hello_world` | They bypass Wrangler's validation. |
 
 Durable Object and Workflow bindings must name the Worker that defines the class
@@ -96,6 +95,28 @@ deploy config and are part of the Worker bundle, because the Worker imports
 `goribu.config.js`. Keep secrets in `.env.production` instead; see
 [environment variables](environment-variables.md). In development, a matching
 key in `.env` or `.dev.vars` overrides a var.
+
+## Placement
+
+By default the Worker runs in the Cloudflare location nearest each visitor.
+When a request spends most of its time on round trips to one backend, such as a
+database, `placement` runs the Worker near that backend instead:
+
+```js
+wrangler: {
+  placement: { mode: "smart" },
+},
+```
+
+Smart Placement watches the Worker's traffic and moves it only once that shows a
+closer location is faster. To choose the location yourself, use
+`{ region: "aws:us-east-1" }` for a cloud region, `{ host: "db.example.com:5432" }`
+for a TCP service, or `{ hostname: "api.example.com" }` for an HTTP service. See
+Cloudflare's [placement documentation](https://developers.cloudflare.com/workers/configuration/placement/).
+
+Placement moves only requests that reach the Worker. Static pages are still
+served from Static Assets near the visitor. `goribu dev` runs locally, where
+placement has no effect.
 
 ## Development
 
@@ -142,6 +163,6 @@ uploads the fields exactly as written.
 
 Additional D1, KV, R2, or Hyperdrive resources, Worker handlers and class
 exports (cron triggers, queue consumers, local Durable Objects and Workflows,
-containers), placement, and Wrangler environments are deliberately not
+containers), and Wrangler environments are deliberately not
 supported yet. A later release that reserves a field allowed today is a breaking
 change and will include migration notes.

@@ -70,7 +70,7 @@ defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", domain: ["app
 defineConfig({ name: "typed-app", compatibilityDate: "2026-09-01", r2: { name: "typed-app-files" } });
 const wranglerConfig = defineConfig({
   name: "typed-app", compatibilityDate: "2026-09-01",
-  wrangler: { ai: { binding: "AI" }, services: [{ binding: "SEARCH", service: "search-worker" }], vars: { API_HOST: "example.com", LIMITS: { max: 3 } } },
+  wrangler: { ai: { binding: "AI" }, services: [{ binding: "SEARCH", service: "search-worker" }], vars: { API_HOST: "example.com", LIMITS: { max: 3 } }, placement: { mode: "smart" } },
 });
 if (wranglerConfig.wrangler !== undefined) {
   const wranglerVars = wranglerConfig.wrangler.vars;

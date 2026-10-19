@@ -10,7 +10,7 @@ type ReservedWranglerField =
   | "d1_databases" | "kv_namespaces" | "r2_buckets" | "hyperdrive"
   | "routes" | "route" | "env" | "previews" | "compliance_region" | "pages_build_output_dir"
   | "dev" | "alias" | "define" | "minify" | "base_dir" | "build" | "find_additional_modules" | "no_bundle" | "preserve_file_names" | "rules" | "site" | "tsconfig"
-  | "triggers" | "migrations" | "exports" | "containers" | "cloudchamber" | "placement" | "unsafe" | "unsafe_hello_world";
+  | "triggers" | "migrations" | "exports" | "containers" | "cloudchamber" | "unsafe" | "unsafe_hello_world";
 /** Native Wrangler configuration fields, as JSON, merged into the generated config. */
 type WranglerConfig = { readonly [key: string]: WranglerJson } & { readonly [Field in ReservedWranglerField]?: never };
 export interface ApplicationConfig<Env extends object = Record<string, unknown>> {

@@ -36,6 +36,7 @@ const documented = {
   vars: { API_HOST: "example.com", SERVICE_X_DATA: { URL: "service-x-api.dev.example", MY_ID: 123 } },
   observability: { enabled: true, head_sampling_rate: 0.1 },
   limits: { cpu_ms: 100, subrequests: 150 },
+  placement: { mode: "smart" },
 };
 
 describe("wrangler passthrough", () => {

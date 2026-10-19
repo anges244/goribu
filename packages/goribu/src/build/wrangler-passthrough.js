@@ -48,7 +48,6 @@ const RESERVED_FIELDS = new Map([
   ["exports", HANDLERS],
   ["containers", HANDLERS],
   ["cloudchamber", HANDLERS],
-  ["placement", "Worker placement is not supported yet; it will be a top-level option in goribu.config.js"],
   ["unsafe", "unsafe fields bypass Wrangler's validation, so Goribu cannot keep its guarantees"],
   ["unsafe_hello_world", "unsafe fields bypass Wrangler's validation, so Goribu cannot keep its guarantees"],
 ]);

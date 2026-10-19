@@ -33,8 +33,9 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   connection strings left as Worker secrets by earlier deploys.
 - A `wrangler` block in `goribu.config.js` passes native Wrangler fields, such
   as Workers AI, service bindings, Vectorize, queue producers, Analytics Engine,
-  browser rendering, external Durable Objects and Workflows, `vars`, and
-  observability settings, into the generated Wrangler config. Goribu rejects
+  browser rendering, external Durable Objects and Workflows, `vars`,
+  observability settings, and Worker `placement`, into the generated Wrangler
+  config. Goribu rejects
   values JSON cannot represent, fields and binding names it owns, and fields
   Wrangler's schema does not know, each with the path to fix. Builds stay
   credential-free: prerendering runs without the block's bindings other than

@@ -98,8 +98,8 @@ by concentrating more reads and mutations near the app's data. When those
 requests reach the same execution location, they share the same local cache and
 its updates. This is useful even though placement does not guarantee that every
 request reaches one location: other locations still rely on their own updates
-or TTL expiry. Configure it through Cloudflare's
-[Worker placement settings](https://developers.cloudflare.com/workers/configuration/placement/).
+or TTL expiry. Turn it on with `wrangler.placement`; see
+[placement](wrangler.md#placement).
 
 ## Background writes and failures
 
