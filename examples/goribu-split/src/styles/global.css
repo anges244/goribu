@@ -1,2 +1,0 @@
-/* Scan this app's src directory, including when run from a monorepo root. */
-@import "tailwindcss" source("../");

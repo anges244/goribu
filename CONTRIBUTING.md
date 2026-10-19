@@ -2,10 +2,9 @@
 
 Goribu is not accepting pull requests yet. Bug reports are welcome as GitHub
 issues: include the Goribu and Node.js versions, the smallest app or steps that
-reproduce the problem, and what you expected instead. For questions, ideas, or
-feedback, talk to me on X at [@anges244](https://x.com/anges244). Report
-security vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
-not as issues.
+reproduce the problem, and what you expected instead. Report security
+vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not as
+issues. You can reach me on X at [@anges244](https://x.com/anges244).
 
 The rest of this guide covers working in the repository. Read
 [AGENTS.md](AGENTS.md) for repository conventions and
@@ -76,8 +75,7 @@ git diff --check
 One test worker limits contention between compiler and Worker integration tests.
 The suite includes real builds, local servers, package archive checks, and public
 type fixtures. Some tests require Git, `tar`, and npm in addition to pnpm; the
-release tooling targets macOS/Linux. CI runs the same suite on Linux for every
-pull request and push to `main`.
+release tooling targets macOS/Linux.
 
 See [Testing the framework](docs/testing.md) for test selection, temporary app
 and cache isolation, and the distinction between test counts and coverage.
@@ -86,7 +84,7 @@ Keep changes focused. Add regression coverage for bugs and update the public
 declarations when runtime APIs change. Update the changelog and relevant guides.
 Record the commands you actually ran and any failures.
 
-## Starter and independent example
+## Starter
 
 Edit `templates/basic-app/`, then rebuild the scaffolder payload:
 
@@ -95,8 +93,6 @@ pnpm --dir packages/create-goribu run build
 ```
 
 Both language variants come from that source. Do not edit generated output.
-The [independent example](examples/README.md) uses a packed archive outside the
-workspace and has its own dependency installation.
 
 ## Documentation and releases
 

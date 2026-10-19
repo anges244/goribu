@@ -3,8 +3,8 @@
 These guides describe the source in this checkout, which may be ahead of npm.
 See the [changelog](../CHANGELOG.md) for version boundaries and the
 [release guide](releasing.md) for upgrade steps and publication status checks.
-The public documentation website is maintained independently in a separate
-repository.
+The documentation for the published release is at
+[goribu.dev/docs](https://goribu.dev/docs).
 
 ## Using Goribu
 
@@ -15,8 +15,8 @@ repository.
 - [Navigation](navigation.md), [forms](forms.md), and [metadata](metadata.md).
 - [TypeScript](typescript.md) and [environment variables](environment-variables.md).
 - [D1](d1.md), [Postgres](postgres.md), [migrations](migrations.md), [KV](kv.md), and [R2](r2.md).
-- [Cache](cache.md) — request-scoped JSON caching (unreleased).
-- [Wrangler configuration](wrangler.md) — native Wrangler fields for AI, services, and other unmanaged bindings (unreleased).
+- [Cache](cache.md) — request-scoped JSON caching.
+- [Wrangler configuration](wrangler.md) — native Wrangler fields for AI, services, and other unmanaged bindings.
 - [CLI](cli.md) and [deployment](deploy.md).
 
 ## Contributor references
