@@ -10,7 +10,11 @@ export async function provisionAppDomain(options) {
   const access = options.access ?? await (options.getAccess ?? getCloudflareAccess)({ projectRoot });
   const client = options.client ?? createAppDomainManagementClient({ access, fetch: options.fetch });
   const plan = await inspectAppDomain({ ...options, access, client });
-  if (plan.action === "none") return plan;
+  // Wrangler prints the workers.dev URL first; end every deploy on the app domain.
+  if (plan.action === "none") {
+    stdout.write(`✓ App domain https://${plan.name}\n`);
+    return plan;
+  }
   // Cloudflare also enforces the no-replacement flags when attaching, covering
   // conflicts that appear between this fresh inspection and the write.
   await client.attachDomain(plan);

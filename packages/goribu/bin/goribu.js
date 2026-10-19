@@ -10,6 +10,7 @@ import { relative } from "node:path";
 import { runCheck } from "../src/build/run-check.js";
 import { runCloudflareLogin } from "../src/build/run-cloudflare-login.js";
 import { runD1 } from "../src/build/run-d1.js";
+import { runLocalClear } from "../src/build/run-local-clear.js";
 import { runTail } from "../src/build/run-tail.js";
 import { runWrangler } from "../src/build/run-wrangler.js";
 import { endFailedSession, installDevLifecycle } from "../src/build/development-lifecycle.js";
@@ -38,6 +39,7 @@ const COMMANDS = {
   "migrate:seed": "Run migrations/seed.sql against local D1 only.",
   "migrate:status": "Show applied and pending migrations without changing anything.",
   d1: 'Run SQL against D1 (default local; --remote for production): goribu d1 "<sql>".',
+  "local:clear": "Delete local R2 objects or KV keys: goribu local:clear <r2|kv> [--prefix <prefix>].",
 };
 
 function readVersion() {
@@ -285,6 +287,50 @@ function resolveD1Arguments(rest) {
   return { target, sql: sql[0] };
 }
 
+// `goribu local:clear` names one local store and optionally a key prefix. It has
+// no remote mode, so a production flag is refused rather than ignored.
+function resolveLocalClearArguments(rest) {
+  const reject = (message) => {
+    console.error(`[Goribu] ${message}`);
+    process.exitCode = 1;
+    return null;
+  };
+  const usage = "Usage: `goribu local:clear <r2|kv> [--prefix <prefix>]`.";
+  let target;
+  let prefix;
+  for (let index = 0; index < rest.length; index += 1) {
+    const argument = rest[index];
+    if (argument === "--prefix" || argument.startsWith("--prefix=")) {
+      if (prefix !== undefined) return reject("`goribu local:clear` received --prefix more than once.");
+      prefix = argument === "--prefix" ? rest[++index] : argument.slice("--prefix=".length);
+      if (prefix === undefined || prefix.length === 0) {
+        return reject(`\`goribu local:clear --prefix\` needs a non-empty key prefix, such as \`--prefix avatars/\`. Omit --prefix to clear everything. ${usage}`);
+      }
+    } else if (argument === "--remote" || argument === "--local") {
+      return reject(
+        "`goribu local:clear` only ever deletes local development data and takes no target flag. " +
+          `Remove ${argument}. To delete production data, use the Cloudflare dashboard or \`goribu wrangler r2 object delete\` / \`goribu wrangler kv key delete\`.`,
+      );
+    } else if (argument.startsWith("-")) {
+      return reject(`\`goribu local:clear\` does not accept ${JSON.stringify(argument)}. ${usage}`);
+    } else if (target !== undefined) {
+      return reject(`\`goribu local:clear\` takes one store, but received ${JSON.stringify(target)} and ${JSON.stringify(argument)}. ${usage}`);
+    } else {
+      target = argument;
+    }
+  }
+  if (target === "d1") {
+    return reject(
+      "`goribu local:clear` does not clear D1. To start the local database over, stop `goribu dev`, delete `.wrangler/state/v3/d1`, and run `goribu migrate`; " +
+        'to delete rows, run `goribu d1 "DELETE FROM …"`.',
+    );
+  }
+  if (target !== "r2" && target !== "kv") {
+    return reject(`\`goribu local:clear\` needs the store to clear, r2 or kv${target === undefined ? "" : `, but received ${JSON.stringify(target)}`}. ${usage}`);
+  }
+  return { target, prefix };
+}
+
 // Arguments are validated before this boundary loads the config once; runners
 // reuse that snapshot rather than importing the application config again.
 async function runDatabaseCommand(command, options) {
@@ -396,6 +442,13 @@ function main(argv) {
     const d1 = resolveD1Arguments(rest);
     if (d1 === null) return;
     runDatabaseCommand(command, d1).catch(fail);
+    return;
+  }
+
+  if (command === "local:clear") {
+    const options = resolveLocalClearArguments(rest);
+    if (options === null) return;
+    runLocalClear({ projectRoot: process.cwd(), ...options }).catch(fail);
     return;
   }
 

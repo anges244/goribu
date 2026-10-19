@@ -743,6 +743,36 @@ describe("createNavigationController", () => {
       consoleError.mockRestore();
     }
   });
+
+  it("hands scroll restoration to the browser when the page unloads and restores a saved entry the browser left at the top", () => {
+    const browser = fakeBrowser("https://example.com/start");
+    const root = { render: vi.fn() };
+    const controller = createNavigationController({ root, pageLoaders: {}, browserWindow: browser.window, fetch: vi.fn() });
+    expect(browser.history.scrollRestoration).toBe("manual");
+    browser.window.scrollTo(0, 2000);
+    // Chrome drops a mode change made after replaceState during pagehide.
+    const save = browser.history.replaceState.getMockImplementation();
+    const modesAtSave = [];
+    browser.history.replaceState.mockImplementation(function (...args) {
+      modesAtSave.push(this.scrollRestoration);
+      return save.apply(this, args);
+    });
+    browser.dispatch("pagehide", {});
+    expect(modesAtSave).toEqual(["auto"]);
+    expect(browser.history.state.__goribu).toMatchObject({ x: 0, y: 2000 });
+    browser.dispatch("pageshow", { persisted: true });
+    expect(browser.history.scrollRestoration).toBe("manual");
+    controller.dispose();
+
+    const reloaded = fakeBrowser("https://example.com/start", { appState: { __goribu: { id: 3, x: 0, y: 1200 } } });
+    createNavigationController({ root, pageLoaders: {}, browserWindow: reloaded.window, fetch: vi.fn() }).dispose();
+    expect(reloaded.window.scrollTo).toHaveBeenCalledWith(0, 1200);
+
+    const restored = fakeBrowser("https://example.com/start", { appState: { __goribu: { id: 3, x: 0, y: 1200 } } });
+    restored.window.scrollY = 1200;
+    createNavigationController({ root, pageLoaders: {}, browserWindow: restored.window, fetch: vi.fn() }).dispose();
+    expect(restored.window.scrollTo).not.toHaveBeenCalled();
+  });
 });
 
 const staticBuildId = "1234567890abcdef1234567890abcdef";

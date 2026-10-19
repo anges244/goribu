@@ -149,7 +149,8 @@ goribu migrate
 goribu migrate:seed   # if you have migrations/seed.sql
 ```
 
-This deletes only local D1 data; local KV and R2 data are kept. For Postgres,
+This deletes only local D1 data; local KV and R2 data are kept. Clear those with
+`goribu local:clear kv` and `goribu local:clear r2`. For Postgres,
 recreate your local database with `dropdb` and `createdb`, then run
 `goribu migrate`. Never rewrite a migration that has run in production; add a
 new one.

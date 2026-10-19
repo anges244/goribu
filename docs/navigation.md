@@ -177,6 +177,13 @@ scroll data under a private key. New routes scroll to a matching fragment or the
 top; back and forward restore saved coordinates. Same-document hash links remain
 native so browser focus behavior is preserved.
 
+Reloading keeps the scroll position, including the reload `goribu dev` performs
+after an edit. Goribu switches off the browser's own restoration only while the
+page is open and hands it back when the page unloads, so the browser restores a
+reload or a return from another site before the page's scripts run. An older
+entry from an earlier visit that the browser leaves at the top is restored from
+Goribu's saved coordinates once the page hydrates.
+
 For a page transition, Goribu applies scrolling after React commits the
 destination and finishes synchronous layout updates, before the browser paints
 it. This prevents a frame of the new page at the old page's scroll position.

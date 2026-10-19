@@ -42,6 +42,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   runs on Cloudflare, and uses the same account as deploy. `goribu check` lists
   these bindings as not inspected or managed. See
   [Wrangler configuration](docs/wrangler.md).
+- `goribu local:clear <r2|kv> [--prefix <prefix>]` deletes local development
+  objects or keys, such as test uploads, from the stores `goribu dev` uses. It
+  works while dev is running and never reaches Cloudflare. See
+  [CLI](docs/cli.md#goribu-localclear).
 
 ### Changed
 
@@ -72,6 +76,17 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   other content types Goribu does not parse; decode `await req.rawBody()` to
   read it. In development, calling `req.body()` on a non-empty body it cannot
   parse logs a `[Goribu]` warning pointing to `req.rawBody()`.
+- `goribu deploy` ends with the app domain on every deploy with a `domain`, not
+  only the first, so the last URL printed is the domain rather than Wrangler's
+  workers.dev address.
+
+### Fixed
+
+- Reloading a hydrated page, including the reload `goribu dev` performs after an
+  edit, no longer jumps to the top. Following an external link and pressing
+  Back also returns to the same position, including a `#section` you had
+  jumped to and a page reached through client navigation. See
+  [History, scrolling, and concurrency](docs/navigation.md#history-scrolling-and-concurrency).
 
 ### Removed
 

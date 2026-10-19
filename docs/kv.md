@@ -23,6 +23,8 @@ lowercase letter or digit, contain only lowercase letters, digits, hyphens, or
 underscores, and are at most 63 characters. Use `goribu check` to inspect the
 production plan, then `goribu deploy` to create or reuse the namespace. Do not
 also declare `kv_namespaces` in a Wrangler file. See [Deploying](./deploy.md).
+To delete local keys, run `goribu local:clear kv`, optionally with `--prefix`; see
+[cli.md](./cli.md#goribu-localclear).
 
 ## Read and write from a handler
 

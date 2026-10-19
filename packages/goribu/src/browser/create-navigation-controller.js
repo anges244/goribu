@@ -67,7 +67,8 @@ export function createNavigationController(options) {
   browserWindow.addEventListener("popstate", handlePopState);
   browserWindow.addEventListener("hashchange", handleHashChange);
   browserWindow.addEventListener("scroll", scheduleScrollSave);
-  browserWindow.addEventListener("pagehide", saveCurrentScroll);
+  browserWindow.addEventListener("pagehide", handlePageHide);
+  browserWindow.addEventListener("pageshow", handlePageShow);
 
   const controller = Object.freeze({
     navigate,
@@ -484,7 +485,8 @@ export function createNavigationController(options) {
     browserWindow.removeEventListener("popstate", handlePopState);
     browserWindow.removeEventListener("hashchange", handleHashChange);
     browserWindow.removeEventListener("scroll", scheduleScrollSave);
-    browserWindow.removeEventListener("pagehide", saveCurrentScroll);
+    browserWindow.removeEventListener("pagehide", handlePageHide);
+    browserWindow.removeEventListener("pageshow", handlePageShow);
     browserWindow.history.scrollRestoration = previousScrollRestoration;
   }
 
@@ -595,8 +597,32 @@ export function createNavigationController(options) {
   }
 
   function installInitialHistoryState() {
+    // An entry still in manual mode, such as an older client-navigation entry
+    // reached by cross-document Back, loads at the top. Restore its saved
+    // position unless the browser or the reader has already moved the page.
+    const saved = readScrollState(browserWindow.history.state, scrollByHistoryEntry);
     activateHistoryEntry(browserWindow.history.state);
+    const current = currentScrollState();
+    if (saved !== null && current.x === 0 && current.y === 0) {
+      browserWindow.scrollTo(saved.x, saved.y);
+    }
     saveCurrentScroll();
+  }
+
+  function handlePageHide() {
+    // Manual restoration is for client navigation only, and the mode is stored
+    // on the history entry. Hand the leaving entry back to the browser so a
+    // reload (including Vite's) or cross-document Back/Forward restores scroll
+    // natively, before any script runs. Set it before the replaceState in
+    // saveCurrentScroll: Chrome (observed in 155) drops a mode change made
+    // after replaceState during pagehide.
+    browserWindow.history.scrollRestoration = "auto";
+    saveCurrentScroll();
+  }
+
+  function handlePageShow(event) {
+    // A page restored from the back/forward cache keeps this controller.
+    if (event?.persisted === true) browserWindow.history.scrollRestoration = "manual";
   }
 
   function activateHistoryEntry(state) {

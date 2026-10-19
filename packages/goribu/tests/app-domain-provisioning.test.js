@@ -89,6 +89,7 @@ describe("application domain planning and attachment", () => {
     expect(remote.calls.at(-1)).toMatchObject({ method: "GET", path: "/workers/domains" });
     const before = remote.calls.length;
     expect((await provisionAppDomain(remote.options)).action).toBe("none");
+    expect(remote.output().endsWith("✓ App domain https://app.example.com\n")).toBe(true);
     expect(remote.calls.slice(before).every((call) => call.method === "GET")).toBe(true);
     expect(remote.calls.some((call) => call.path.includes("/dns_records"))).toBe(false);
     expect(remote.calls.filter((call) => call.method === "PUT")).toHaveLength(1);

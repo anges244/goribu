@@ -358,6 +358,30 @@ Changes made this way are not recorded anywhere. Production data changes that
 should be repeatable or reviewed belong in a migration
 (`goribu migrate:new <name>`); see [migrations.md](./migrations.md).
 
+## `goribu local:clear`
+
+Delete local development data from R2 or KV, such as test uploads that pile up
+while you work:
+
+```sh
+goribu local:clear r2                    # every object in every declared bucket
+goribu local:clear r2 --prefix avatars/  # only keys that start with avatars/
+goribu local:clear kv                    # every key in the KV namespace
+```
+
+It clears the same local stores `goribu dev` uses, and it works while dev is
+running: the next request sees the change. It prints how many objects or keys it
+deleted from each bucket or namespace. Nothing asks for confirmation, because it
+never reaches Cloudflare and has no `--remote` mode. Production data is changed
+in the Cloudflare dashboard or with `goribu wrangler r2 object delete` and
+`goribu wrangler kv key delete`.
+
+For R2 it clears both the default bucket and the private bucket, if declared.
+`--prefix` applies to each. Signed links made before the clear stay valid until
+they expire but find nothing. D1 is not covered: to start the local database
+over, see [migrations.md](./migrations.md#start-the-local-database-over); to
+delete rows, use `goribu d1`.
+
 ## Exit codes
 
 Every command exits non-zero on failure. A deploy that is interrupted or killed

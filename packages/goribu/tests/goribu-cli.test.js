@@ -206,6 +206,14 @@ describe("goribu CLI", () => {
     expect(stderr).toMatch(/goribu\.config\.js.*is missing/);
   });
 
+  it("validates goribu local:clear arguments before loading config", () => {
+    expect(runCli(["local:clear"]).stderr).toMatch(/needs the store to clear, r2 or kv\. Usage/);
+    expect(runCli(["local:clear", "d1"]).stderr).toMatch(/does not clear D1\. .*delete `\.wrangler\/state\/v3\/d1`/);
+    expect(runCli(["local:clear", "r2", "--remote"]).stderr).toMatch(/only ever deletes local development data.*Remove --remote/);
+    expect(runCli(["local:clear", "kv", "--prefix="]).stderr).toMatch(/needs a non-empty key prefix/);
+    expect(runCli(["local:clear", "kv", "r2"]).status).toBe(1);
+  });
+
   it("requires a name for migrate:new", () => {
     const { status, stderr } = runCli(["migrate:new"]);
     expect(status).toBe(1);
