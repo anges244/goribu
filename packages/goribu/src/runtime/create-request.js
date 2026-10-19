@@ -15,11 +15,12 @@ const textDecoder = new TextDecoder();
  *
  * @param {Request} request
  * @param {Record<string, string>} params
- * @param {{ env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object, postgres?: { fresh(): Function, cached(): Function }, cache?: object }} [runtime]
+ * @param {{ mode?: "production"|"development", env?: object, waitUntil?: (promise: Promise<unknown>) => void, cookies?: object, d1?: Function, kv?: object, r2?: object, postgres?: { fresh(): Function, cached(): Function }, cache?: object }} [runtime]
  */
 export function createRequest(request, params, runtime) {
   assertInputs(request, params);
   const worker = assertRuntime(runtime);
+  const development = worker.mode === "development";
 
   const url = new URL(request.url);
   const safeParams = copyParams(params);
@@ -59,7 +60,7 @@ export function createRequest(request, params, runtime) {
     body() {
       if (!bodyPromise) {
         bodyPromise = readRawBodyOnce().then((bytes) =>
-          parseBody(bytes, request.headers.get("content-type")),
+          parseBody(bytes, request.headers.get("content-type"), development),
         ).then((body) => worker.verifyBody ? worker.verifyBody(body) : body);
       }
       return bodyPromise;
@@ -228,7 +229,7 @@ async function readRequestBytes(request) {
   }
 }
 
-async function parseBody(bytes, contentType) {
+async function parseBody(bytes, contentType, development) {
   // Empty payloads use the friendly object fallback before media-type parsing.
   // This deliberately means empty text and multipart bodies also resolve to {}.
   if (bytes.byteLength === 0) return {};
@@ -250,12 +251,17 @@ async function parseBody(bytes, contentType) {
     return parseMultipart(bytes, contentType);
   }
 
-  if (mediaType?.startsWith("text/")) {
-    return textDecoder.decode(bytes);
-  }
-
   // The locked friendly fallback for an absent or unsupported Content-Type.
   // Exact bytes remain available through rawBody().
+  if (development) {
+    try {
+      console.warn(
+        `[Goribu] req.body() cannot parse ${mediaType || "a body without a Content-Type"} as structured data and returned {}. Use req.rawBody() to read the original content.`,
+      );
+    } catch {
+      // A development warning must not replace the route response.
+    }
+  }
   return {};
 }
 

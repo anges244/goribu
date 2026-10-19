@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRequest } from "../src/runtime/create-request.js";
 import { createCookieJar } from "../src/runtime/cookies/create-cookie-jar.js";
 import { isHttpError } from "../src/runtime/http-error.js";
 
-const decoder = new TextDecoder();
+afterEach(() => vi.restoreAllMocks());
 
 describe("createRequest", () => {
   it("keeps unconfigured Postgres getters out of spreading and serialization", () => {
@@ -87,7 +87,7 @@ describe("createRequest", () => {
     expect(cookies.pending).toEqual(["theme=light; SameSite=Lax"]);
   });
 
-  it("parses JSON objects and text using Content-Type parameters", async () => {
+  it("parses JSON objects using Content-Type parameters", async () => {
     const json = createRequest(
       new Request("https://example.com/items", {
         method: "POST",
@@ -96,20 +96,10 @@ describe("createRequest", () => {
       }),
       {},
     );
-    const text = createRequest(
-      new Request("https://example.com/messages", {
-        method: "POST",
-        headers: { "content-type": "text/plain; charset=utf-8" },
-        body: "héllo Goribu",
-      }),
-      {},
-    );
-
     await expect(json.body()).resolves.toEqual({
       title: "Not found",
       status: 404,
     });
-    await expect(text.body()).resolves.toBe("héllo Goribu");
   });
 
   it.each(["urlencoded", "multipart"])("normalizes %s fields without coercion or prototype changes", async (encoding) => {
@@ -222,24 +212,29 @@ describe("createRequest", () => {
     await expect(wrapped.body()).resolves.toEqual({});
   });
 
-  it.each(["rawBody first", "body first"])(
-    "reads the Web Request body once when called repeatedly and mixed: %s",
-    async (order) => {
-      const source = JSON.stringify({ safe: true });
+  it.each([
+    ["application/json", '{"safe":true}', { safe: true }, "rawBody first"],
+    ["application/json", '{"safe":true}', { safe: true }, "body first"],
+    ["text/plain; charset=utf-8", "héllo Goribu\r\n", {}, "rawBody first"],
+    ["text/plain; charset=utf-8", "héllo Goribu\r\n", {}, "body first"],
+  ])(
+    "shares one exact byte read for %s (%s → %j), %s",
+    async (contentType, source, expected, order) => {
+      const bytes = new TextEncoder().encode(source);
       const request = new Request("https://example.com/cache", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: source,
+        headers: { "content-type": contentType },
+        body: bytes,
       });
       const arrayBuffer = vi.spyOn(request, "arrayBuffer");
       const wrapped = createRequest(request, {});
 
       if (order === "rawBody first") {
-        expect(decoder.decode(await wrapped.rawBody())).toBe(source);
-        await expect(wrapped.body()).resolves.toEqual({ safe: true });
+        await expect(wrapped.rawBody()).resolves.toEqual(bytes);
+        await expect(wrapped.body()).resolves.toEqual(expected);
       } else {
-        await expect(wrapped.body()).resolves.toEqual({ safe: true });
-        expect(decoder.decode(await wrapped.rawBody())).toBe(source);
+        await expect(wrapped.body()).resolves.toEqual(expected);
+        await expect(wrapped.rawBody()).resolves.toEqual(bytes);
       }
 
       await wrapped.rawBody();
@@ -247,6 +242,50 @@ describe("createRequest", () => {
       expect(arrayBuffer).toHaveBeenCalledTimes(1);
     },
   );
+
+  it.each([
+    ["Text/Plain; charset=utf-8", "text/plain"],
+    ["text/html", "text/html"],
+    ["application/octet-stream", "application/octet-stream"],
+    [null, "a body without a Content-Type"],
+  ])("warns once per request for unsupported %s bodies in development", async (contentType, label) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (let count = 1; count <= 2; count++) {
+      const wrapped = createRequest(new Request("https://example.com/body", {
+        method: "POST",
+        headers: contentType === null ? {} : { "content-type": contentType },
+        body: new TextEncoder().encode("original content"),
+      }), {}, { mode: "development" });
+
+      await expect(Promise.all([wrapped.body(), wrapped.body()])).resolves.toEqual([{}, {}]);
+      await wrapped.body();
+      await wrapped.rawBody();
+      expect(warn).toHaveBeenCalledTimes(count);
+      expect(warn).toHaveBeenLastCalledWith(
+        `[Goribu] req.body() cannot parse ${label} as structured data and returned {}. Use req.rawBody() to read the original content.`,
+      );
+    }
+  });
+
+  it("does not warn for production, empty, raw-only, or supported bodies", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const { mode, contentType, source, rawOnly } of [
+      { mode: "production", contentType: "text/plain", source: "content" },
+      { contentType: "text/plain", source: "content" },
+      { mode: "development", contentType: "text/plain", source: "" },
+      { mode: "development", source: "" },
+      { mode: "development", contentType: "text/plain", source: "content", rawOnly: true },
+      { mode: "development", contentType: "application/json", source: '{"name":"Ada"}' },
+    ]) {
+      const wrapped = createRequest(new Request("https://example.com/body", {
+        method: "POST",
+        headers: contentType ? { "content-type": contentType } : {},
+        body: new TextEncoder().encode(source),
+      }), {}, { mode });
+      await (rawOnly ? wrapped.rawBody() : wrapped.body());
+    }
+    expect(warn).not.toHaveBeenCalled();
+  });
 
   it("turns malformed supported bodies into branded 400 teaching errors", async () => {
     const invalidJson = createRequest(

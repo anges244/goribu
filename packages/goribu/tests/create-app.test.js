@@ -1387,6 +1387,34 @@ describe("createApp().fetch — named handlers", () => {
     expect(await response.json()).toEqual({ title: "hi" });
   });
 
+  it.each(["development", "production"])(
+    "passes %s mode to req.body() and preserves the response when warning throws",
+    async (mode) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+        throw new Error("logging unavailable");
+      });
+      try {
+        const app = handlerApp(new Map([["hello", {
+          POST: async (req, res) => {
+            await req.body();
+            return res.json(await req.body());
+          },
+        }]]), { mode });
+        const response = await dispatch(app, new Request("https://example.com/hello", {
+          method: "POST",
+          headers: { "content-type": "text/plain" },
+          body: "original content",
+        }));
+
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({});
+        expect(warn).toHaveBeenCalledTimes(mode === "development" ? 1 : 0);
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+
   it("answers automatic HEAD by running the GET handler and dropping the body", async () => {
     const app = handlerApp(
       new Map([["hello", { GET: (req, res) => res.json({ ok: true }) }]]),

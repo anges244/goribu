@@ -227,6 +227,7 @@ export function createApp(options) {
           : undefined,
       });
       const runtime = {
+        mode,
         env,
         waitUntil: ctx.waitUntil.bind(ctx),
         cookies: cookieJar,

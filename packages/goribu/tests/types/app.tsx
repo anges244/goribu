@@ -180,10 +180,10 @@ const GET: Handler<Props, Env, { id: string }> = async (req, res) => {
   // @ts-expect-error Native R2 keys are strings.
   req.r2.get([id]);
   const body = await req.body();
-  const parsedBody: Record<string, unknown> | string = body;
-  if (typeof body === "string") body.trim();
-  else if (typeof body.name === "string") body.name.trim();
-  if (typeof body === "object" && body.file instanceof File) {
+  const parsedBody: Record<string, unknown> = body;
+  const { name } = await req.body();
+  if (typeof name === "string") name.trim();
+  if (body.file instanceof File) {
     const filename: string = body.file.name;
   }
   const bytes: Uint8Array = await req.rawBody();

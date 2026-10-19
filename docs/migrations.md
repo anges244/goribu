@@ -47,6 +47,9 @@ runs the down section. Leave these files as they are, down section included.
 The checksum covers the whole file, so editing any part of an applied file
 reports it as modified.
 
+Goribu 0.9.3 requires both markers, so it refuses files created by 0.9.4.
+Upgrade every machine and CI runner that runs migrations together.
+
 ## Apply migrations
 
 Apply every pending migration to local D1:

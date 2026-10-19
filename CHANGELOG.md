@@ -58,12 +58,20 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with only comments is refused as empty. Files with `-- migrate:up` and
   `-- migrate:down` markers keep working with unchanged checksums: Goribu runs
   only the SQL between the markers and never runs the down section. Leave
-  applied files as they are. See [Migrations](docs/migrations.md).
+  applied files as they are. Goribu 0.9.3 cannot read files created by 0.9.4,
+  so upgrade every machine and CI runner that runs migrations together. See
+  [Migrations](docs/migrations.md).
 - `goribu` now depends on exact versions of Wrangler (4.127.1) and
   `@cloudflare/vite-plugin` (1.54.2), the pair the plugin itself pins, so every
   install runs the Wrangler Goribu was tested with.
 - A static route that fails to prerender with a non-200 response now reports
   the Worker's logged error, such as a `TypeError`, after the status.
+- `req.body()` always returns a plain object, and its type is now
+  `Promise<Record<string, unknown>>`, so `const { name } = await req.body()`
+  needs no cast. A `text/*` body now returns `{}` instead of a string, like
+  other content types Goribu does not parse; decode `await req.rawBody()` to
+  read it. In development, calling `req.body()` on a non-empty body it cannot
+  parse logs a `[Goribu]` warning pointing to `req.rawBody()`.
 
 ### Removed
 

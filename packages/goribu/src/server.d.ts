@@ -207,9 +207,9 @@ export interface GoribuRequest<Env extends object = Record<string, unknown>, Par
   /**
    * JSON and forms return objects. Declared upload fields become verified
    * R2Upload values or are absent. Other file inputs remain Files and repeated
-   * form fields remain arrays. Text returns a string. Narrow values before use.
+   * form fields remain arrays. Other content types return {}. Narrow values before use.
    */
-  body(): Promise<Record<string, unknown> | string>;
+  body(): Promise<Record<string, unknown>>;
   rawBody(): Promise<Uint8Array>;
 }
 declare const resultBrand: unique symbol;

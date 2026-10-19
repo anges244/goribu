@@ -76,7 +76,7 @@ read shared behind the scenes so it can't be consumed twice:
   fields become arrays, and field names can't pollute the prototype.
 - `multipart/form-data` → a plain **object** of fields, with uploads as `File`
   values; repeated names become arrays, including repeated files or mixed values.
-- `text/*` → the decoded **string**.
+- `text/*` → an empty object `{}`; decode `await req.rawBody()` to read text.
 - anything else, or an empty body → an empty object `{}`.
 
 Both form encodings use the same field shape: one value stays a string or

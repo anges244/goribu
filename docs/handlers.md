@@ -79,8 +79,9 @@ keys — a param literally named `__proto__` is an own property, not a mutation 
 
 ## Reading the body
 
-`req.body()` parses the request body according to its `Content-Type`, with one
-read shared behind the scenes so it can't be consumed twice:
+`req.body()` is for structured data and always returns a plain object. It
+parses the request body according to its `Content-Type`, with one read shared
+behind the scenes so it can't be consumed twice:
 
 - `application/json` → the parsed **object** (a non-object JSON body, like a bare
   array, is a `400`).
@@ -88,9 +89,16 @@ read shared behind the scenes so it can't be consumed twice:
   fields become arrays. Field names can't pollute the prototype.
 - `multipart/form-data` → a plain **object** of fields, with uploads as `File`
   values; repeated names become arrays, including repeated files or mixed values.
-- `text/*` → the decoded **string**.
-- anything else, or an empty body → an empty object `{}` (a friendly default, not
-  an error).
+- anything else, including `text/*`, or an empty body → an empty object `{}`
+  (a friendly default, not an error). In development, calling `req.body()` on a
+  non-empty body it cannot parse logs a `[Goribu]` warning that points to
+  `req.rawBody()`.
+
+To read a text body, decode the raw bytes:
+
+```js
+const text = new TextDecoder().decode(await req.rawBody());
+```
 
 Both form encodings use the same field shape: one value stays a string or
 `File`, repeated values become an array in submission order, and missing fields
@@ -101,8 +109,8 @@ field types and file size/content before using them.
 **Migrating multipart handlers:** `req.body()` no longer returns `FormData`.
 Replace `body.get("name")` with `body.name`; a missing field is now `undefined`
 rather than `null`. Where you used `body.getAll("tag")`, handle an absent field,
-a single value, or an array. Remove `instanceof FormData` branches. JSON and text
-parsing are unchanged; `rawBody()` still provides the original bytes.
+a single value, or an array. Remove `instanceof FormData` branches. JSON
+parsing is unchanged; `rawBody()` still provides the original bytes.
 
 A malformed body of a *supported* type — broken JSON, a multipart body with no
 boundary — is a client mistake, so `req.body()` rejects with a **`400`** carrying
