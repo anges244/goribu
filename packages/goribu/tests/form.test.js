@@ -404,7 +404,7 @@ describe("Form", () => {
     );
   });
 
-  it("resets before successful in-place callbacks but not before invalid or redirect outcomes", async () => {
+  it("resets before successful same-page callbacks but not before invalid or other-page redirect outcomes", async () => {
     installRuntime();
     const callbackValues = [];
     const fetch = vi
@@ -421,7 +421,8 @@ describe("Form", () => {
           meta: {},
         }),
       )
-      .mockResolvedValueOnce(formResponse({ type: "redirect", to: "/done" }));
+      .mockResolvedValueOnce(formResponse({ type: "redirect", to: "/done" }))
+      .mockResolvedValueOnce(formResponse({ type: "redirect", to: "/current?saved=1" }));
     vi.stubGlobal("fetch", fetch);
     let input;
 
@@ -458,6 +459,11 @@ describe("Form", () => {
     await submit(form, button);
     expect(input.value).toBe("redirect me");
     expect(callbackValues[3]).toBe("redirect me");
+
+    input.value = "same page";
+    await submit(form, button);
+    expect(input.value).toBe("initial");
+    expect(callbackValues[4]).toBe("initial");
   });
 
   it("blocks duplicate submits synchronously and reports a network failure once", async () => {

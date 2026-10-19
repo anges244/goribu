@@ -67,6 +67,8 @@ add routes and dependencies only for actual application needs.
   Use `res.render(props)` only for intentional rendering of the handler's own
   page; a separate action cannot use it to replace the submitting page at
   another pathname.
+- To clear a form after success, add `reset` to `<Form>`. A redirect to the
+  current page keeps the page and its field values; it does not clear the form.
 - Render field errors and `errors.root`; `res.invalid("message")` sets the
   form-level error.
 - Global CSS is imported from `src/setup/client-entry.js`. Tailwind belongs to this

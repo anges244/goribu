@@ -187,9 +187,13 @@ errors clear when a new submission starts; previous data remains during the
 request to avoid flicker, then the completed outcome makes `data` and `errors`
 describe that same submission.
 
-`reset` clears controls after a successful JSON or same-page render result, but
-not after invalid state or a redirect. A forwarded ref receives the underlying
-form when conditional reset behavior is needed.
+`reset` clears controls after a successful JSON result, a same-page render, or a
+redirect to the form's own path, but not after invalid state or a redirect to
+another path. A redirect does not clear a form by itself: navigation that keeps
+the path updates the page in place and keeps its DOM (see
+[page state across navigation](navigation.md#page-state-across-navigation)), so
+without `reset` the submitted values stay in the fields. A forwarded ref receives
+the underlying form when conditional reset behavior is needed.
 
 `onSubmit` runs before Goribu and may cancel enhancement with `preventDefault()`.
 `onResult` runs after local state and any in-place page render commit, but before

@@ -396,13 +396,17 @@ export const Form = forwardRef(function Form(props, forwardedRef) {
         return;
       }
 
+      // Navigation keeps the page mounted when the path stays the same, so
+      // this Form survives the redirect and reset applies as it does in place.
+      const samePage = destination.origin === currentUrl.origin &&
+        destination.pathname === currentUrl.pathname;
       settle({
         signal,
         navigationVersion,
         errors: null,
         data: null,
         invalidErrors: null,
-        shouldReset: false,
+        shouldReset: reset === true && samePage,
         action: actionUrl.href,
         result: { ok: true, response },
         afterResult: () => {

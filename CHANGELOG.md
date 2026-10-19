@@ -79,6 +79,10 @@ Goribu follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `goribu deploy` ends with the app domain on every deploy with a `domain`, not
   only the first, so the last URL printed is the domain rather than Wrangler's
   workers.dev address.
+- `<Form reset>` now also clears the form after a redirect to its own path, such
+  as `res.redirect("/contact?sent=1")` from `/contact`. That redirect keeps the
+  page mounted, so the submitted values used to stay in the fields. A redirect
+  to another path still does not reset. See [Forms](docs/forms.md).
 
 ### Fixed
 
