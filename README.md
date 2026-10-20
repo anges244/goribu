@@ -1,6 +1,6 @@
 # <img src="docs/assets/goribu.svg" alt="" width="32" height="32"> Goribu
 
-A full-stack React framework for Cloudflare Workers.
+The React framework for Cloudflare Workers.
 
 [![npm](https://img.shields.io/npm/v/goribu?color=f38020)](https://www.npmjs.com/package/goribu)
 [![license](https://img.shields.io/npm/l/goribu?color=blue)](LICENSE)
